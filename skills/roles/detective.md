@@ -2,7 +2,7 @@
 
 ## 1. Identité et objectif
 - **Nom du rôle :** Détective
-- **Camp :** Villageois
+- **Camp :** Villageois (gentil)
 - **Objectif principal :** Identifier les sbires du Diablotin grâce aux informations de la première nuit pour aider le village à les éliminer.
 
 ---

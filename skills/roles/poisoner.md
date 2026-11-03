@@ -2,7 +2,7 @@
 
 ## 1. Identité et objectif
 - **Nom du rôle :** Empoisonneur
-- **Camp :** Démons
+- **Camp :** Démons (méchant)
 - **Objectif principal :** Éliminer tous les villageois et outsiders pour remporter la partie en sabotant les informations du village, en protégeant le Diablotin et en servant de relais discret.
 
 ---
