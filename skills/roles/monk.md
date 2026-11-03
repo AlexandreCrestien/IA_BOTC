@@ -1,5 +1,3 @@
-# Rôle : Moine
-
 ## 1. Identité et objectif
 - **Nom du rôle :** Moine
 - **Camp :** Villageois (gentil)

@@ -1,5 +1,3 @@
-# Rôle : Voyante
-
 ## 1. Identité et objectif
 - **Nom du rôle :** Voyante
 - **Camp :** Villageois (gentil)

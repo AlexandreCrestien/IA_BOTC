@@ -1,5 +1,3 @@
-# Rôle : Détective
-
 ## 1. Identité et objectif
 - **Nom du rôle :** Détective
 - **Camp :** Villageois (gentil)
