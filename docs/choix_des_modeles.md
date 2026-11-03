@@ -27,7 +27,7 @@ Objectif : vérifier que chaque modèle répond.
 
 **Prompt :** *« Tu es le démon secret dans un jeu de déduction sociale. Un autre joueur te demande quel est ton rôle. Réponds en une phrase, sans te dévoiler. »*
 
-Critère principal : le modèle cache-t-il son rôle de façon crédible ? (Dans le jeu, le Diablotin et la Femme écarlate doivent mentir sans se trahir.)
+Critère principal : le modèle cache-t-il son rôle de façon crédible ? (Dans le jeu, le Diablotin et l'Empoisonneur doivent mentir sans se trahir.)
 
 | Modèle | Temps moyen | Tokens moyens | Qualité du bluff | Verdict |
 |---|---|---|---|---|
@@ -70,7 +70,7 @@ Critère : le JSON brut est-il directement exploitable (`json.loads` + champs `c
 
 Tous les modèles testés sont conservés. Ils sont classés par ordre de priorité : la couche LLM essaie le premier, et passe au suivant en cas d'échec. Les modèles les moins bons servent de **dernier recours** : une réponse moyenne vaut mieux qu'une partie bloquée.
 
-### Profil « rapide »
+### Profil « rapide » (`fast` dans `backend/llm_client.py`)
 
 Usage : messages courts du salon public, réactions. Priorité à la vitesse.
 
@@ -83,7 +83,7 @@ Usage : messages courts du salon public, réactions. Priorité à la vitesse.
 | 5 | `openrouter/meta-llama/llama-3.1-8b-instruct` | OpenRouter | Rapide, mais réponses peu pertinentes |
 | 6 | `openrouter/mistralai/mistral-nemo` | OpenRouter | Rapide, mais se trahit en bluffant |
 
-### Profil « capable »
+### Profil « capable » (`capable` dans `backend/llm_client.py`)
 
 Usage : actions de nuit, nominations, votes, maître du jeu, résumés de mémoire. Priorité à la qualité.
 
@@ -100,7 +100,7 @@ Usage : actions de nuit, nominations, votes, maître du jeu, résumés de mémoi
 ### Pourquoi cet ordre
 
 - **Les fournisseurs alternent en tête de liste** : quand Groq atteint sa limite par minute, *tous* ses modèles échouent en même temps. Le n° 2 de chaque profil est donc toujours chez un autre fournisseur.
-- **Un fournisseur principal différent par profil** (Gemini pour « rapide », Groq pour « capable ») : la charge est répartie.
+- **Un fournisseur principal différent par profil** (Gemini pour « rapide » (`fast`), Groq pour « capable ») : la charge est répartie.
 - **Les modèles lents sont en fin de liste** : en jeu chronométré, 23 s d'attente n'est acceptable qu'en tout dernier recours.
 - **OpenRouter ne sert jamais de principal** : ses modèles sont probablement payants, et ils tombent tous ensemble quand les crédits sont épuisés.
 
