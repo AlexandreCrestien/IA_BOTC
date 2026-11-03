@@ -2,7 +2,7 @@
 
 ## 1. Identité et objectif
 - **Nom du rôle :** Diablotin
-- **Camp :** Démons
+- **Camp :** Démons(méchant)
 - **Objectif principal :** Éliminer tous les villageois et outsiders pour remporter la partie. Tu dois survivre le plus longtemps possible tout en sabotant le village de l'intérieur.
 
 ---

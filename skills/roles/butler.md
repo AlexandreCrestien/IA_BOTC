@@ -2,7 +2,7 @@
 
 ## 1. Identité et objectif
 - **Nom du rôle :** Majordome
-- **Camp :** Villageois
+- **Camp :** Villageois (gentil)
 - **Objectif principal :** Survivre et influencer discrètement les votes du village tout en subordonnant ton vote à celui d'un autre joueur de ton choix.
 
 ---
