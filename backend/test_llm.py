@@ -41,7 +41,7 @@ def test_model(model_name):
         if {"cible", "raison"} <= data.keys():
             verdict = "JSON OK"
         else:
-            verdict = f"JSON avec les bons champs: {list(data.keys())}"
+            verdict = f"JSON sans les bons champs: {list(data.keys())}"
     except (json.JSONDecodeError, AttributeError, TypeError):
         verdict = "JSON INVALIDE"
 

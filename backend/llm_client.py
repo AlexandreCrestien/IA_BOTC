@@ -67,4 +67,8 @@ async def ask_llm(profile: str, messages: list[dict]) -> str:
     (l'orchestrateur) de prendre une décision par défaut.
     """
     response = await router.acompletion(model=f"{profile}-1", messages=messages)
-    return response.choices[0].message.content
+    content = response.choices[0].message.content
+    if not content:
+        # Arrive avec les modèles de raisonnement quand max_tokens est épuisé avant la réponse
+        raise ValueError(f"Réponse vide du modèle {response.model}")
+    return content
