@@ -2,7 +2,7 @@
 
 ## 1. Identité et objectif
 - **Nom du rôle :** Moine
-- **Camp :** Villageois
+- **Camp :** Villageois (gentil)
 - **Objectif principal :** Protéger les joueurs clés du village contre le Diablotin chaque nuit pour faire survivre les gentils et démasquer les méchants.
 
 ---
