@@ -6,11 +6,11 @@ from backend.rules import ROLES, get_role
 
 
 def monk() -> Role:
-    return get_role("Moine")
+    return get_role("monk")
 
 
 def test_monk_is_in_catalogue():
-    assert ROLES["Moine"] == monk()
+    assert ROLES["monk"] == monk()
 
 
 def test_unknown_role_refused():

@@ -38,7 +38,7 @@ def test_author_is_added_to_readers(memory):
 
 
 def test_game_master_is_never_added_to_readers(memory):
-    event = memory.add_personal(EventType.role_info, game_master, "Tu es le Moine", "ana")
+    event = memory.add_personal(EventType.role_info, game_master, "Tu es le monk", "ana")
     assert event.visible_to == {"ana"}
 
 
@@ -98,12 +98,12 @@ def test_two_games_do_not_share_events():
 
 
 def test_context_shows_channel_and_author(memory):
-    memory.add_personal(EventType.role_info, game_master, "Tu es le Moine.", "ana")
+    memory.add_personal(EventType.role_info, game_master, "Tu es le monk.", "ana")
     memory.add_private(EventType.private_summary, "ana", "On soupçonne carla.", {"bruno"})
     memory.add_public(EventType.public_message, "carla", "Bonjour !")
 
     assert memory.context_for("ana").splitlines() == [
-        "[Nuit 1] (personnel) Maître du Jeu : Tu es le Moine.",
+        "[Nuit 1] (personnel) Maître du Jeu : Tu es le monk.",
         "[Nuit 1] (privé avec bruno) Toi : On soupçonne carla.",
         "[Nuit 1] (public) carla : Bonjour !",
     ]

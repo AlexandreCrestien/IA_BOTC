@@ -6,14 +6,14 @@ from backend.rules import get_role
 
 
 def player(id: str, alive: bool = True) -> Player:
-    p = Player(id=id, name=id.capitalize(), role=get_role("Moine"))
+    p = Player(id=id, name=id.capitalize(), role=get_role("monk"))
     return p if alive else p.die()
 
 
 def night_2_protection() -> Effect:
     return Effect(
         type=TypeEffet.PROTEGE,
-        source="Moine",
+        source="monk",
         turn_start=2,
         phase_start=Phase.NUIT,
         turn_end=2,
@@ -125,7 +125,7 @@ def test_state_is_immutable():
 def test_str_summarizes_game():
     text = str(state().next_phase())
     assert text.startswith("Tour 1, discussion")
-    assert "Vivants (2) : Odette (Moine), Brutus (Moine)" in text
+    assert "Vivants (2) : Odette (monk), Brutus (monk)" in text
     assert "Morts : Gaspard" in text
 
 
@@ -143,3 +143,7 @@ def test_power_stays_used_during_the_day():
     used = player("odette").model_copy(update={"power_used": True})
     s = GameState(turn=1, phase=Phase.NUIT, players=(used,)).next_phase()
     assert s.player("odette").power_used
+
+def test_dead_players_lists_only_the_dead():
+    ids = [p.id for p in state().dead_players()]
+    assert ids == ["gaspard"]

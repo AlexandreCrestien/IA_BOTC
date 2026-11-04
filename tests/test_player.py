@@ -6,7 +6,7 @@ from backend.rules import get_role
 
 
 def player(**kwargs) -> Player:
-    base = dict(id="j1", name="Odette", role=get_role("Moine"))
+    base = dict(id="j1", name="Odette", role=get_role("monk"))
     base.update(kwargs)
     return Player(**base)
 
@@ -14,7 +14,7 @@ def player(**kwargs) -> Player:
 def protection() -> Effect:
     return Effect(
         type=TypeEffet.PROTEGE,
-        source="Moine",
+        source="monk",
         turn_start=2,
         phase_start=Phase.NUIT,
         turn_end=2,

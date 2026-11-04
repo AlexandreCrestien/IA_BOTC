@@ -42,6 +42,9 @@ class GameState(BaseModel):
     def alive_players(self) -> tuple[Player, ...]:
         return tuple(p for p in self.players if p.alive)
 
+    def dead_players(self) -> tuple[Player, ...]:
+        return tuple(p for p in self.players if not p.alive)
+
     def replace_player(self, player: Player) -> "GameState":
         self.player(player.id)  # erreur si le joueur n'existe pas
         return self.model_copy(

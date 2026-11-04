@@ -21,7 +21,7 @@ def choose_false_lead(roles: dict[str, Role], rng: random.Random) -> str:
     candidates = sorted(
         player_id
         for player_id, role in roles.items()
-        if role.alignment == Alignement.BON and role.name != "Voyante"
+        if role.alignment == Alignement.BON and role.name != "psychic"
     )
     if not candidates:
         raise ValueError("aucun joueur du bien éligible pour la fausse piste")

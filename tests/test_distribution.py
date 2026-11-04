@@ -20,7 +20,7 @@ def test_each_player_gets_a_role():
 
 def test_only_one_diablotin():
     roles = distribute_roles(IDS, random.Random(2))
-    assert sum(1 for r in roles.values() if r.name == "Diablotin") == 1
+    assert sum(1 for r in roles.values() if r.name == "imp") == 1
 
 
 def test_same_seed_same_distribution():
@@ -50,7 +50,7 @@ def test_false_lead_is_never_demon_or_seer(seed):
     roles = distribute_roles(IDS, random.Random(seed))
     lead = choose_false_lead(roles, random.Random(seed))
     assert lead in roles
-    assert roles[lead].name not in ("Diablotin", "Voyante")
+    assert roles[lead].name not in ("imp", "psychic")
 
 
 @pytest.mark.parametrize("seed", range(30))

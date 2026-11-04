@@ -5,18 +5,18 @@ from backend.rules import ROLES, get_role
 
 
 def test_six_roles_in_catalogue():
-    assert set(ROLES) == {"Diablotin", "Empoisonneur", "Moine", "Voyante", "Détective", "Majordome"}
+    assert set(ROLES) == {"imp", "poisoner", "monk", "psychic", "detective", "butler"}
 
 
 @pytest.mark.parametrize(
     "name, team, alignment",
     [
-        ("Diablotin", Equipe.DEMON, Alignement.MAUVAIS),
-        ("Empoisonneur", Equipe.SBIRE, Alignement.MAUVAIS),
-        ("Moine", Equipe.VILLAGEOIS, Alignement.BON),
-        ("Voyante", Equipe.VILLAGEOIS, Alignement.BON),
-        ("Détective", Equipe.VILLAGEOIS, Alignement.BON),
-        ("Majordome", Equipe.OUTSIDER, Alignement.BON),
+        ("imp", Equipe.DEMON, Alignement.MAUVAIS),
+        ("poisoner", Equipe.SBIRE, Alignement.MAUVAIS),
+        ("monk", Equipe.VILLAGEOIS, Alignement.BON),
+        ("psychic", Equipe.VILLAGEOIS, Alignement.BON),
+        ("detective", Equipe.VILLAGEOIS, Alignement.BON),
+        ("butler", Equipe.OUTSIDER, Alignement.BON),
     ],
 )
 def test_team_and_alignment(name, team, alignment):
@@ -26,27 +26,27 @@ def test_team_and_alignment(name, team, alignment):
 
 
 def test_diablotin_kills_every_night():
-    role = get_role("Diablotin")
+    role = get_role("imp")
     assert role.phase == Phase.NUIT and TypeEffet.TUE in role.effects
 
 
 def test_empoisonneur_poisons_every_night():
-    role = get_role("Empoisonneur")
+    role = get_role("poisoner")
     assert role.phase == Phase.NUIT and TypeEffet.EMPOISONNE in role.effects
 
 
 def test_voyante_probes_every_night():
-    role = get_role("Voyante")
+    role = get_role("psychic")
     assert role.phase == Phase.NUIT and TypeEffet.SONDE in role.effects
 
 
 def test_detective_does_not_act_at_night():
-    role = get_role("Détective")
+    role = get_role("detective")
     assert role.phase is None and TypeEffet.SONDE in role.effects
 
 
 def test_majordome_acts_at_night_without_direct_effect():
-    role = get_role("Majordome")
+    role = get_role("butler")
     assert role.phase == Phase.NUIT and role.effects == ()
 
 
@@ -54,7 +54,7 @@ def test_poison_lasts_until_end_of_next_day():
     # Posé la nuit 1 : actif pendant le jour 1, retiré au début de la nuit 2.
     poison = Effect(
         type=TypeEffet.EMPOISONNE,
-        source="Empoisonneur",
+        source="poisoner",
         turn_start=1,
         phase_start=Phase.NUIT,
         turn_end=2,
@@ -65,6 +65,6 @@ def test_poison_lasts_until_end_of_next_day():
 
 
 def test_allowed_links_per_role():
-    assert get_role("Majordome").allowed_links == ("maitre",)
-    assert get_role("Voyante").allowed_links == ("fausse_piste",)
-    assert get_role("Moine").allowed_links == ()
+    assert get_role("butler").allowed_links == ("maitre",)
+    assert get_role("psychic").allowed_links == ("fausse_piste",)
+    assert get_role("monk").allowed_links == ()

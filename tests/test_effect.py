@@ -8,7 +8,7 @@ def night_2_protection() -> Effect:
     """Protection posée la nuit 2, qui dure jusqu'au début du jour 2."""
     return Effect(
         type=TypeEffet.PROTEGE,
-        source="Moine",
+        source="monk",
         turn_start=2,
         phase_start=Phase.NUIT,
         turn_end=2,
@@ -36,14 +36,14 @@ def test_permanent_effect_never_expires():
 
 def test_end_without_phase_refused():
     with pytest.raises(ValidationError):
-        Effect(type=TypeEffet.PROTEGE, source="Moine", turn_start=2, phase_start=Phase.NUIT, turn_end=2)
+        Effect(type=TypeEffet.PROTEGE, source="monk", turn_start=2, phase_start=Phase.NUIT, turn_end=2)
 
 
 def test_end_before_start_refused():
     with pytest.raises(ValidationError):
         Effect(
             type=TypeEffet.PROTEGE,
-            source="Moine",
+            source="monk",
             turn_start=3,
             phase_start=Phase.DISCUSSION,
             turn_end=3,
