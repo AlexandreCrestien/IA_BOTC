@@ -78,7 +78,7 @@ class GameState(BaseModel):
         """Résumé lisible de la partie, pour le débogage et les tests."""
         def summary(p: Player) -> str:
             effects = ", ".join(e.type.value for e in p.effects)
-            return f"{p.name} ({p.role.name})" + (f" [{effects}]" if effects else "")
+            return f"{p.name} ({p.role.name_EN})" + (f" [{effects}]" if effects else "")
 
         alive = [summary(p) for p in self.players if p.alive]
         dead = [p.name for p in self.players if not p.alive]

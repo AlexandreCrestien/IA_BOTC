@@ -10,7 +10,7 @@ IDS = ["j1", "j2", "j3", "j4", "j5", "j6"]
 
 def test_each_role_exactly_once():
     roles = distribute_roles(IDS, random.Random(1))
-    assert sorted(r.name for r in roles.values()) == sorted(SIX_PLAYER_ROLES)
+    assert sorted(r.name_EN for r in roles.values()) == sorted(SIX_PLAYER_ROLES)
 
 
 def test_each_player_gets_a_role():
@@ -20,7 +20,7 @@ def test_each_player_gets_a_role():
 
 def test_only_one_diablotin():
     roles = distribute_roles(IDS, random.Random(2))
-    assert sum(1 for r in roles.values() if r.name == "imp") == 1
+    assert sum(1 for r in roles.values() if r.name_EN == "imp") == 1
 
 
 def test_same_seed_same_distribution():
@@ -29,7 +29,7 @@ def test_same_seed_same_distribution():
 
 def test_distribution_varies_with_seed():
     results = {
-        tuple(sorted((k, v.name) for k, v in distribute_roles(IDS, random.Random(g)).items()))
+        tuple(sorted((k, v.name_EN) for k, v in distribute_roles(IDS, random.Random(g)).items()))
         for g in range(20)
     }
     assert len(results) > 1
@@ -50,7 +50,7 @@ def test_false_lead_is_never_demon_or_seer(seed):
     roles = distribute_roles(IDS, random.Random(seed))
     lead = choose_false_lead(roles, random.Random(seed))
     assert lead in roles
-    assert roles[lead].name not in ("imp", "psychic")
+    assert roles[lead].name_EN not in ("imp", "psychic")
 
 
 @pytest.mark.parametrize("seed", range(30))
