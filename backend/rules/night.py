@@ -13,7 +13,7 @@ def night_steps(state: GameState) -> list[tuple[str, bool]]:
     steps = []
     for role_name in order:
         for player in state.players:
-            if player.role.name != role_name:
+            if player.role.name_EN != role_name:
                 continue
             if role_name == "detective":
                 steps.append((player.id, False))

@@ -21,7 +21,7 @@ def legal_actions(state: GameState, player_id: str) -> LegalAction:
     if state.phase != Phase.NUIT or not player.can_act:
         return LegalAction(targets=(), count=0)
 
-    role_name = player.role.name
+    role_name = player.role.name_EN
     targets = [
         other.id
         for other in state.players
