@@ -1,34 +1,8 @@
-from enum import StrEnum
-from pydantic import BaseModel, ConfigDict
+from backend.models import EventType, GameEvent, Phase
+
+Event = GameEvent  # le modèle d'événement vit maintenant dans backend.models
 
 game_master = "game_master"
-
-class Phase(StrEnum):
-    night = "night"
-    day = "day"
-
-class EventType(StrEnum):
-    announcement = "announcement"    # annonce du Maître du Jeu (public)
-    death = "death"            # mort ou exécution (public)
-    public_message = "public_message"   # message dans le salon public (public)
-    private_meeting ="private_meeting"  # "A et B ont discuté en privé", sans le contenu (public)
-    private_summary = "private_summary"  # contenu / résumé d'une conversation privée (participants)
-    nomination = "nomination"       # un joueur en désigne un autre (public)
-    vote = "vote"             # vote d'un joueur (public, à confirmer avec l'équipe)
-    night_action = "night_action"     # cible choisie par un joueur la nuit (lui seul)
-    night_info = "night_info"       # information reçue la nuit : Voyante, Détective... (lui seul)
-    role_info = "role_info"        # rôle et éventuels alliés donnés au début (lui seul ou les démons)
-
-
-class Event(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    day: int
-    phase: Phase
-    type: EventType
-    author: str                          # id d'un joueur ou game master
-    content: str
-    visible_to: frozenset[str] | None    # None = tout le monde
 
 
 class MemoryManager:
@@ -42,14 +16,16 @@ class MemoryManager:
         self._events: list[Event] = []
         # Moment actuel de la partie : la partie commence par la nuit 1
         self.day = 1
-        self.phase = Phase.night
+        self.phase = Phase.NUIT
 
     def advance_phase(self) -> None:
         """Nuit N -> Jour N -> Nuit N+1. Appelé par l'orchestrateur à chaque changement de phase."""
-        if self.phase == Phase.night:
-            self.phase = Phase.day
+        if self.phase == Phase.NUIT:
+            self.phase = Phase.DISCUSSION
+        elif self.phase == Phase.DISCUSSION:
+            self.phase = Phase.VOTE
         else:
-            self.phase = Phase.night
+            self.phase = Phase.NUIT
             self.day += 1
 
     def _check_readers(self, visible_to: frozenset[str] | None) -> None:
@@ -76,7 +52,8 @@ class MemoryManager:
             self._check_readers(visible_to)
             if author != game_master:
                 visible_to = visible_to | {author}
-        event = Event(day=self.day, phase=self.phase, type=type, author=author,
+        event = Event(turn=self.day, phase=self.phase, type=type,
+                      author_id=None if author == game_master else author,
                       content=content, visible_to=visible_to)
         self._events.append(event)
         return event
@@ -103,7 +80,7 @@ class MemoryManager:
         """Texte à injecter dans le prompt de l'agent : tout ce que ce joueur sait, en français."""
         lines = []
         for e in self.events_for(player):
-            moment = f"{'Nuit' if e.phase == Phase.night else 'Jour'} {e.day}"
+            moment = f"{'Nuit' if e.phase == Phase.NUIT else 'Jour'} {e.turn}"
 
             if e.visible_to is None:
                 channel = "public"
@@ -113,12 +90,12 @@ class MemoryManager:
                 others = sorted(e.visible_to - {player})
                 channel = f"privé avec {', '.join(others)}"
 
-            if e.author == game_master:
+            if e.author_id is None:
                 author = "Maître du Jeu"
-            elif e.author == player:
+            elif e.author_id == player:
                 author = "Toi"
             else:
-                author = e.author
+                author = e.author_id
 
             lines.append(f"[{moment}] ({channel}) {author} : {e.content}")
 
