@@ -1,2 +1,4 @@
-pydantic>=2.0
-pytest>=8.0
+litellm
+python-dotenv
+pydantic
+pytest
