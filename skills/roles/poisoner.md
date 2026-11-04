@@ -1,5 +1,3 @@
-# Rôle : Empoisonneur
-
 ## 1. Identité et objectif
 - **Nom du rôle :** Empoisonneur
 - **Camp :** Démons (méchant)

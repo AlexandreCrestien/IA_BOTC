@@ -1,5 +1,3 @@
-# Rôle : Majordome
-
 ## 1. Identité et objectif
 - **Nom du rôle :** Majordome
 - **Camp :** Villageois (gentil)
