@@ -17,6 +17,8 @@ Les dépendances vont dans un seul sens :
 ```
 agent_factory ──► memory_manager
       │
+      ├────────► prompt_loader ──► skills/*.md
+      │
       └────────► llm_client ──► LiteLLM (Groq, Gemini, OpenRouter)
 ```
 
@@ -133,14 +135,11 @@ Le canal (`public` / `personnel` / `privé avec …`) aide l'agent à ne pas ré
 
 Construit une fois, à la création de l'agent :
 
-1. `GAME_RULES` : règles générales, rappel qu'il s'agit d'un jeu (évite les refus), première nuit sans mort, secret des alliés démons, style (3 phrases max, pas de hashtags) ;
-2. nom de l'agent et joueurs présents ;
-3. skill de rôle (`skills/roles/<role>.md`) ;
-4. skill de personnalité (`skills/personalities/<personnalité>.md`).
+1. **Base assemblée par `PromptLoader`** (`backend/prompt_loader.py`) : contexte du jeu, skill de rôle (`skills/roles/<role>.md`), skill de personnalité (`skills/personalities/<personnalité>.md`) et règles générales (`skills/general_rules.md`, dont la concision : 2 phrases maximum) ;
+2. **`AGENT_RULES`** : règles propres aux agents IA, absentes de `general_rules.md` (première nuit sans mort, morts toujours présents, ne rien inventer, secret du privé, secret de l'allié démon, français, pas de hashtags) ;
+3. la liste des joueurs présents.
 
 À chaque appel, on ajoute un message avec **ce que l'agent sait** (`memory.context_for`) et **l'instruction du moment**.
-
-> ⚠️ **TEMPORAIRE** : les skills sont lus par `_load_skill_temporary`, en attendant le `skill_loader`. Chercher `TODO(skill_loader)` pour le remplacer.
 
 ### Méthodes de `Agent(player_id, role, personality, memory)`
 
@@ -221,7 +220,7 @@ memory.add_personal(EventType.night_action, "ana", f"J'ai choisi {targets[0]}.",
 | Qui peut agir, choix légaux, effets des pouvoirs, vote fantôme, victoire | `rules_engine` |
 | État de la partie (vivants / morts, rôles réels) | `models` |
 | Boucle de jeu, timer, enregistrement dans la mémoire, tirage des rôles et personnalités, filet de sécurité | `game_engine` |
-| Chargement des skills | `skill_loader` |
+| Chargement des skills | `prompt_loader` |
 | Lien avec le front | `server` |
 
 ## 6. Limites connues / à faire
