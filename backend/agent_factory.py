@@ -41,8 +41,8 @@ class AgentFactory:
             role=role_obj
         )
 
-        # !! Ajouter l'attribut role_name_EN au modèle + transmettre un dict personality_data avec noms FR et EN 
-        role_file = role_obj.role_name_EN
+        # !! Ajouter l'attribut nom_EN au modèle + transmettre un dict personality_data avec noms FR et EN 
+        role_file = role_obj.nom_EN
         personality_file = personality_data["personality_name_EN"]
         personality_display_name = personality_data.get("personality_name_FR", personality_file)
 
@@ -54,6 +54,6 @@ class AgentFactory:
 
         return LLMAgent(
             player=player_obj,
-            personality_display_name=personality_display_name,
+            personality=personality_display_name,
             system_prompt=system_prompt
         )
