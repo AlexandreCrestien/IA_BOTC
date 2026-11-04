@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from backend.models import Channel, Effect, GameEvent, GameState, Phase, Player, TypeEffet
+from backend.models import Channel, Effect, EventType, GameEvent, GameState, Phase, Player, TypeEffet
 from backend.rules import get_role
 
 
@@ -84,27 +84,27 @@ def test_alive_players_excludes_dead():
 
 
 def test_add_event():
-    s = state().add_event(GameEvent(type="mort", turn=1, phase=Phase.NUIT))
-    assert len(s.log) == 1
+    event = GameEvent(type=EventType.death, turn=1, phase=Phase.NUIT, content="Gaspard est mort.")
+    assert len(state().add_event(event).log) == 1
 
 
 def test_public_log_visible_to_everyone():
-    s = state().add_event(GameEvent(type="vote", turn=1, phase=Phase.DISCUSSION))
-    assert len(s.log_visible_to("gaspard")) == 1
+    event = GameEvent(type=EventType.vote, turn=1, phase=Phase.DISCUSSION, content="Vote ouvert.")
+    assert len(state().add_event(event).log_visible_to("gaspard")) == 1
 
 
-def test_private_log_visible_only_to_recipients():
-    event = GameEvent(type="sonde", turn=1, phase=Phase.NUIT, public=False, recipients=("odette",))
+def test_private_log_visible_only_to_readers():
+    event = GameEvent(type=EventType.night_info, turn=1, phase=Phase.NUIT,
+                      content="Info privée.", visible_to=frozenset({"odette"}))
     s = state().add_event(event)
     assert len(s.log_visible_to("odette")) == 1
     assert s.log_visible_to("brutus") == ()
 
 
 def test_engine_only_log_invisible_to_players():
-    event = GameEvent(type="interne", turn=1, phase=Phase.NUIT, public=False)
-    s = state().add_event(event)
-    assert s.log_visible_to("odette") == ()
-
+    event = GameEvent(type=EventType.role_info, turn=1, phase=Phase.NUIT,
+                      content="Information interne.", visible_to=frozenset())
+    assert state().add_event(event).log_visible_to("odette") == ()
 
 def test_replace_channel():
     s = state()

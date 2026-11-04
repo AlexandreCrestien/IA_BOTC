@@ -24,3 +24,15 @@ class TypeEffet(str, Enum):
     EMPOISONNE = "empoisonne"
     SONDE = "sonde"
     TUE = "tue"
+
+class EventType(str, Enum):
+    announcement = "announcement"
+    death = "death"
+    public_message = "public_message"
+    private_meeting = "private_meeting"
+    private_summary = "private_summary"
+    nomination = "nomination"
+    vote = "vote"
+    night_action = "night_action"
+    night_info = "night_info"
+    role_info = "role_info"
