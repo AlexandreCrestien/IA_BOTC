@@ -1,5 +1,3 @@
-# Rôle : Diablotin
-
 ## 1. Identité et objectif
 - **Nom du rôle :** Diablotin
 - **Camp :** Démons(méchant)
