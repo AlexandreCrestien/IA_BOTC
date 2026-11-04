@@ -98,3 +98,28 @@ class MemoryManager:
         if player not in self.player_ids:
             raise ValueError(f"Joueur inconnu : {player}")
         return [e for e in self._events if e.visible_to is None or player in e.visible_to]
+
+    def context_for(self, player: str) -> str:
+        """Texte à injecter dans le prompt de l'agent : tout ce que ce joueur sait, en français."""
+        lines = []
+        for e in self.events_for(player):
+            moment = f"{'Nuit' if e.phase == Phase.night else 'Jour'} {e.day}"
+
+            if e.visible_to is None:
+                channel = "public"
+            elif e.visible_to == {player}:
+                channel = "personnel"
+            else:
+                others = sorted(e.visible_to - {player})
+                channel = f"privé avec {', '.join(others)}"
+
+            if e.author == game_master:
+                author = "Maître du Jeu"
+            elif e.author == player:
+                author = "Toi"
+            else:
+                author = e.author
+
+            lines.append(f"[{moment}] ({channel}) {author} : {e.content}")
+
+        return "\n".join(lines) if lines else "Aucun événement pour l'instant."
