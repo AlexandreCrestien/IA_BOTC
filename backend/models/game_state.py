@@ -62,13 +62,15 @@ class GameState(BaseModel):
 
     def next_phase(self) -> "GameState":
         """Nuit -> discussion -> vote dans le même tour ; vote -> nuit au tour suivant.
-        Retire au passage les effets arrivés à leur fin, pour chaque joueur."""
+        Au passage à la nuit : retire les effets arrivés à leur fin et remet les pouvoirs à zéro."""
         following = {Phase.NUIT: Phase.DISCUSSION, Phase.DISCUSSION: Phase.VOTE, Phase.VOTE: Phase.NUIT}
         new_phase = following[self.phase]
         new_turn = self.turn + 1 if new_phase == Phase.NUIT else self.turn
         players = tuple(p.remove_expired_effects(new_turn, new_phase) for p in self.players)
+        if new_phase == Phase.NUIT:
+            players = tuple(p.reset_power() for p in players)
         return self.model_copy(update={"turn": new_turn, "phase": new_phase, "players": players})
-
+    
     def __str__(self) -> str:
         """Résumé lisible de la partie, pour le débogage et les tests."""
         def summary(p: Player) -> str:

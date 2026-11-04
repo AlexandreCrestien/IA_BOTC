@@ -132,3 +132,14 @@ def test_str_summarizes_game():
 def test_str_shows_effects():
     s = GameState(players=(player("odette").add_effect(night_2_protection()),))
     assert "[protege]" in str(s)
+
+def test_power_is_reset_at_night():
+    used = player("odette").model_copy(update={"power_used": True})
+    s = GameState(turn=1, phase=Phase.VOTE, players=(used,)).next_phase()
+    assert s.phase == Phase.NUIT and not s.player("odette").power_used
+
+
+def test_power_stays_used_during_the_day():
+    used = player("odette").model_copy(update={"power_used": True})
+    s = GameState(turn=1, phase=Phase.NUIT, players=(used,)).next_phase()
+    assert s.player("odette").power_used

@@ -53,6 +53,9 @@ class Player(BaseModel):
         if self.alive or not self.ghost_vote:
             raise ValueError(f"{self.name} n'a pas de vote fantôme à utiliser")
         return self.model_copy(update={"ghost_vote": False})
+    
+    def reset_power(self) -> "Player":
+        return self.model_copy(update={"power_used": False})
 
     def link(self, key: str) -> Optional[str]:
         return self.links.get(key)
