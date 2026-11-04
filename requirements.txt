@@ -2,3 +2,5 @@ litellm
 python-dotenv
 pydantic
 pytest
+fastapi
+uvicorn
