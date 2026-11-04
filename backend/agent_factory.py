@@ -1,110 +1,92 @@
 import logging
-
+from typing import Optional
 from pydantic import BaseModel, ValidationInfo, field_validator
 
 from backend.llm_client import ask_llm, ask_llm_json
 from backend.memory_manager import MemoryManager
 from backend.prompt_loader import PromptLoader
+from backend.models import Joueur, Role
 
 logger = logging.getLogger(__name__)
 
-prompt_loader = PromptLoader()
-
-# Règles propres aux agents IA, absentes de skills/general_rules.md.
-# Le contexte du jeu, l'objectif, le respect et la concision (2 phrases) viennent de general_rules.md.
-AGENT_RULES = """# RÈGLES COMPLÉMENTAIRES
-- La première nuit, personne ne meurt jamais : c'est la règle, ce n'est pas un indice.
-- Les morts restent dans la partie : ils perdent leur pouvoir mais continuent à discuter.
-- Tu ne connais que ce qui figure dans ton historique. N'invente jamais d'événements, de tentatives ou d'informations.
-- Ce que tu as appris en privé est secret : ne le répète en public que si c'est un choix stratégique.
-- Si tu es un Démon, tu connais ton allié, mais tu ne dois jamais le montrer : pas d'allusion à son rôle, pas de « nous » qui trahirait votre camp. En public, traite-le comme n'importe quel autre joueur.
-- Ne répète jamais un message que tu as déjà dit : chaque intervention doit apporter quelque chose de nouveau.
-- Réponds toujours en français, à la première personne, comme un joueur autour de la table.
-- Pas de hashtags, d'emojis, de titres ni de mise en forme : seulement ce que tu dirais à voix haute."""
-
 
 class Agent:
-    def __init__(self, player_id: str, role: str, personality: str, memory: MemoryManager):
-        self.player_id = player_id
-        self.role = role
+    """
+    Représente un agent IA complet pour le jeu, combinant :
+    - L'état de jeu officiel (le Joueur et son Role de models.py)
+    - La couche IA et comportementale (le system_prompt généré par le PromptLoader, la mémoire et les actions)
+    """
+    def __init__(self, player: Joueur, personality: str, memory: MemoryManager, system_prompt: str):
+        self.player = player
         self.personality = personality
         self.memory = memory
-        self.system_prompt = self._build_system_prompt()
+        self.system_prompt = system_prompt
+
+    @property
+    def player_id(self) -> str:
+        return self.player.id
+
+    @property
+    def name(self) -> str:
+        return self.player.nom
+
+    @property
+    def role_name(self) -> str:
+        return self.player.role.nom
 
     def _build_system_prompt(self) -> str:
+        """Injecte dynamiquement la liste des joueurs vivants/présents sans dupliquer le general_rules."""
         players = ", ".join(sorted(self.memory.player_ids))
-        base = prompt_loader.assemble_system_prompt(self.role, self.personality, agent_name=self.player_id)
-        return "\n\n".join([base.strip(), AGENT_RULES, f"Joueurs présents dans la partie : {players}."])
+        return f"{self.system_prompt.strip()}\n\n# CONTEXTE DE LA PARTIE\nJoueurs présents dans la partie : {players}."
 
     def _messages(self, instruction: str) -> list[dict]:
         context = self.memory.context_for(self.player_id)
+        current_system_prompt = self._build_system_prompt()
         return [
-            {"role": "system", "content": self.system_prompt},
+            {"role": "system", "content": current_system_prompt},
             {"role": "user", "content": f"# CE QUE TU SAIS\n{context}\n\n# À TOI\n{instruction}"},
         ]
 
     async def speak_public(self) -> str:
-        """Message pour le salon public. L'orchestrateur l'enregistre ensuite dans la mémoire."""
+        """Message pour le salon public."""
         instruction = (
-            "C'est ton tour de parler dans le salon public. "
-            "Écris un seul message court (2 phrases maximum), sans préfixe ni guillemets."
+            "C'est ton tour de parler dans le salon public. Écris un seul message court (2 phrases maximum), sans préfixe ni guillemets."
         )
         return await ask_llm("fast", self._messages(instruction))
 
     async def speak_private(self, partners: list[str]) -> str:
-        """Réponse dans une conversation privée. Les messages de la conversation doivent déjà
-        être dans la mémoire (événements privés enregistrés par l'orchestrateur)."""
+        """Réponse dans une conversation privée."""
         instruction = (
-            f"Tu es en conversation privée avec {', '.join(partners)}. "
-            "Réponds-leur par un seul message court (2 phrases maximum), sans préfixe ni guillemets."
+            f"Tu es en conversation privée avec {', '.join(partners)}. Réponds-leur par un seul message court (2 phrases maximum), sans préfixe ni guillemets."
         )
         return await ask_llm("fast", self._messages(instruction))
 
     async def night_action(self, options: list[str], number_of_targets: int = 1) -> list[str]:
-        """Choix de nuit selon le pouvoir du rôle (décrit dans son skill).
-
-        options : les cibles légales, fournies par le moteur de règles.
-        number_of_targets : 2 pour la Voyante, 1 pour les autres.
-        """
+        """Choix de nuit selon le pouvoir du rôle."""
         if not options:
             raise ValueError("Aucune option légale fournie")
         instruction = (
-            f"C'est la nuit. Utilise ton pouvoir : choisis {number_of_targets} joueur(s) parmi : {', '.join(options)}. "
-            'Réponds uniquement en JSON : {"cibles": ["nom", ...], "raison": "pourquoi, en une phrase"}.'
+            f"C'est la nuit. Utilise ton pouvoir : choisis {number_of_targets} joueur(s) parmi : {', '.join(options)}. Réponds uniquement en JSON : {'cibles': ['nom', ...], 'raison': 'pourquoi, en 5 mots maximum'}."
         )
         result = await ask_llm_json("capable", self._messages(instruction), NightAction,
-                                    context={"options": options, "number_of_targets": number_of_targets})
+                                     context={"options": options, "number_of_targets": number_of_targets})
         logger.info("%s (nuit) -> %s : %s", self.player_id, result.cibles, result.raison)
         return result.cibles
 
-    async def nominate(self, options: list[str]) -> str | None:
-        """Désigne un joueur à exécuter, ou None pour ne désigner personne."""
+    async def vote(self, options: list[str]) -> str | None:
+        """Vote pour un joueur à exécuter, ou None."""
         instruction = (
-            f"Phase de jour. Veux-tu désigner un joueur pour qu'il soit exécuté ? Choix possibles : {', '.join(options)}, "
-            f"ou \"{NOBODY}\" si tu ne veux désigner personne pour l'instant. "
-            'Réponds uniquement en JSON : {"cible": "nom", "raison": "pourquoi, en une phrase"}.'
+            f"Phase de jour. Veux-tu voter pour qu'un joueur soit exécuté ? Choix possibles : {', '.join(options)}, ou \"{NOBODY}\" si tu ne veux désigner personne pour l'instant. Réponds uniquement en JSON : {'cible': 'nom', 'raison': 'pourquoi, en 5 mots maximum'}."
         )
-        result = await ask_llm_json("capable", self._messages(instruction), Nomination,
-                                    context={"options": options + [NOBODY]})
+        result = await ask_llm_json("capable", self._messages(instruction), Vote,
+                                     context={"options": options + [NOBODY]})
         logger.info("%s (nomination) -> %s : %s", self.player_id, result.cible, result.raison)
         return None if result.cible == NOBODY else result.cible
 
-    async def vote(self, nominee: str) -> bool:
-        """Vote pour (True) ou contre (False) l'exécution du joueur désigné."""
-        instruction = (
-            f"{nominee} a été désigné pour être exécuté. Votes-tu pour son exécution ? "
-            'Réponds uniquement en JSON : {"vote": true ou false, "raison": "pourquoi, en une phrase"}.'
-        )
-        result = await ask_llm_json("capable", self._messages(instruction), Vote)
-        logger.info("%s (vote contre %s) -> %s : %s", self.player_id, nominee, result.vote, result.raison)
-        return result.vote
-
-
-NOBODY = "personne"
+NOBODY = "Personne"
 
 
 def _check_in_options(name: str, info: ValidationInfo) -> str:
-    """Refuse un nom qui n'est pas dans les options légales (passées via context)."""
     options = (info.context or {})["options"]
     if name not in options:
         raise ValueError(f"{name!r} n'est pas un choix possible. Choix possibles : {', '.join(options)}")
@@ -124,7 +106,7 @@ class NightAction(BaseModel):
         return [_check_in_options(c, info) for c in cibles]
 
 
-class Nomination(BaseModel):
+class Vote(BaseModel):
     cible: str
     raison: str
 
@@ -134,20 +116,68 @@ class Nomination(BaseModel):
         return _check_in_options(cible, info)
 
 
-class Vote(BaseModel):
-    vote: bool
-    raison: str
+class AgentFactory:
+    """
+    Fabrique qui assemble l'Agent, le PromptLoader et les modèles Pydantic officiels.
+    """
+    def __init__(self, prompt_loader: Optional[PromptLoader] = None):
+        self.prompt_loader = prompt_loader or PromptLoader()
+
+    def create_agent(self, agent_id: str, agent_name: str, role_data: dict, personality_data: dict, memory: MemoryManager) -> Agent:
+        """
+        Crée un agent prêt à jouer en combinant le rôle, le joueur, les assets markdown et la mémoire de partie.
+        """
+        role_obj = Role(**role_data)
+
+        player_obj = Joueur(
+            id=agent_id,
+            nom=agent_name,
+            role=role_obj
+        )
+
+        role_file = role_obj.nom_EN
+        personality_file = personality_data["personality_name_EN"]
+        personality_display_name = personality_data.get("personality_name_FR", personality_file)
+
+        system_prompt = self.prompt_loader.assemble_system_prompt(
+            role_name=role_file,
+            personality_name=personality_file,
+            agent_name=agent_name
+        )
+
+        return Agent(
+            player=player_obj,
+            personality=personality_display_name,
+            memory=memory,
+            system_prompt=system_prompt
+        )
 
 
-def create_agents(assignments: dict[str, tuple[str, str]], memory: MemoryManager, human_id: str) -> dict[str, Agent]:
-    """Crée un agent par joueur IA. assignments : {id_joueur: (rôle, personnalité)}, humain compris.
+# !! A déplacer dans un fichier qui gère le déroulement du jeu
 
-    L'humain n'a pas d'agent : il reçoit seulement son rôle.
+def create_all_agents(assignments: dict[str, tuple[str, dict, dict]], memory: MemoryManager, human_id: str, prompt_loader: Optional[PromptLoader] = None) -> dict[str, Agent]:
+    """
+    Initialise tous les agents IA de la partie à partir d'un dictionnaire d'affectations.
+    assignments : {id_joueur: (nom_du_joueur, role_data, personality_data)}
+    L'humain (human_id) est exclu des agents IA générés.
     """
     if human_id not in assignments:
         raise ValueError(f"Le joueur humain {human_id} n'est pas dans la répartition")
-    return {
-        player_id: Agent(player_id, role, personality, memory)
-        for player_id, (role, personality) in assignments.items()
-        if player_id != human_id
-    }
+        
+    factory = AgentFactory(prompt_loader=prompt_loader)
+    agents = {}
+    
+    for player_id, (agent_name, role_data, personality_data) in assignments.items():
+        if player_id == human_id:
+            continue
+            
+        agent = factory.create_agent(
+            agent_id=player_id,
+            agent_name=agent_name,
+            role_data=role_data,
+            personality_data=personality_data,
+            memory=memory
+        )
+        agents[player_id] = agent
+        
+    return agents
