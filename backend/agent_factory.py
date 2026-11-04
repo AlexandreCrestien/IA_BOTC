@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 SKILLS_DIR = Path(__file__).resolve().parent.parent / "skills"
 
 
-# TODO(Flora) : TEMPORAIRE. À remplacer par le skill_loader quand il sera prêt.
+# TODO(skil_loader) : TEMPORAIRE. À remplacer par le skill_loader quand il sera prêt.
 # Lecture directe des fichiers .md en attendant.
 def _load_skill_temporary(folder: str, name: str) -> str:
     return (SKILLS_DIR / folder / f"{name}.md").read_text(encoding="utf-8")
