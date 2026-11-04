@@ -92,3 +92,9 @@ class MemoryManager:
     def add_personal(self, type: EventType, author: str, content: str, player: str) -> Event:
         """Visible par un seul joueur : action de nuit, information de nuit, rôle."""
         return self.add_event(type, author, content, visible_to={player})
+
+    def events_for(self, player: str) -> list[Event]:
+        """Seule façon de lire la mémoire : les événements que ce joueur a le droit de voir, dans l'ordre."""
+        if player not in self.player_ids:
+            raise ValueError(f"Joueur inconnu : {player}")
+        return [e for e in self._events if e.visible_to is None or player in e.visible_to]
