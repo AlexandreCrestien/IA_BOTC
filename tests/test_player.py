@@ -36,7 +36,7 @@ def test_dead_player_cannot_act():
 
 
 def test_role_without_phase_cannot_act():
-    assert not player(role=Role(name="Recluse", team=Equipe.OUTSIDER)).can_act
+    assert not player(role=Role(name_FR="Recluse", name_EN="hermit", team=Equipe.OUTSIDER)).can_act
 
 
 def test_used_power_blocks_action():

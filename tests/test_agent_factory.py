@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock
 import pytest
 
-from backend.models import Role, Joueur, Equipe, Phase
+from backend.models import Role, Player, Equipe, Phase
 from backend.prompt_loader import PromptLoader
 from backend.agent_factory import Agent, AgentFactory, create_all_agents
 from backend.memory_manager import MemoryManager
@@ -39,9 +39,9 @@ def mock_memory():
 def sample_role_data():
     """Données valides pour un rôle."""
     return {
-        "nom": "Moine",
-        "nom_EN": "monk",
-        "camp": Equipe.VILLAGEOIS,
+        "name_FR": "Moine",
+        "name_EN": "monk",
+        "team": Equipe.VILLAGEOIS,
         "phase": Phase.NUIT,
         "description": "Un protecteur nocturne."
     }
@@ -58,7 +58,7 @@ def sample_personality_data():
 def test_agent_properties(sample_role_data, mock_memory):
     """Vérifie que les propriétés de l'Agent restituent correctement les infos."""
     role = Role(**sample_role_data)
-    player = Joueur(id="j1", nom="mAIsie", role=role)
+    player = Player(id="j1", name="mAIsie", role=role)
     
     agent = Agent(
         player=player,
@@ -151,9 +151,9 @@ def test_agent_factory_real_integration(mock_memory):
     factory = AgentFactory()
 
     role_data = {
-        "nom": "Moine",
-        "nom_EN": "monk",
-        "camp": Equipe.VILLAGEOIS,
+        "name_FR": "Moine",
+        "name_EN": "monk",
+        "team": Equipe.VILLAGEOIS,
         "phase": Phase.NUIT,
         "description": "Protection nocturne."
     }
@@ -178,5 +178,5 @@ def test_agent_factory_real_integration(mock_memory):
     assert agent.personality == "Paranoïaque"
 
     assert len(agent.system_prompt) > 0
-    assert "Alice" in agent.system_prompt
+    assert "dIAna" in agent.system_prompt
     assert "moine" in agent.system_prompt.lower() or "monk" in agent.system_prompt.lower()

@@ -18,5 +18,5 @@ Pendant la journée, tu recoupes tes informations nocturnes pour orienter les d�
 - **Recoupe méthodiquement :** Ne te fie pas à une seule vision "Oui". Change un des deux noms la nuit suivante pour isoler le suspect potentiel et éliminer la piste du faux positif.
 - **Gestion du dévoilement :** Tu es une des cibles prioritaires des démons. Choisis judicieusement quand et à qui révéler tes visions.
 - **Gestion des chuchotements :** 
-  - **Avec le joueur humain :** Si tu échanges en privé avec l'humain, teste tes théories et partage éventuellement certaines visions pour vérifier sa réaction, mais **reste prudent** : l'humain peut être le Diablotin ou un sbire et cherchera soit à te faire éliminer, soit à te désorienter.
+  - **Avec le joueur humain :** Si tu échanges en privé avec l'humain, teste tes théories et partage éventuellement certaines visions pour vérifier sa réaction, mais **reste prudent** : l'humain peut être un Démon et cherchera soit à te faire éliminer, soit à te désorienter.
   - **En arrière-plan :** Ton historique inclura les résumés de tes chuchotements simulés. Utilise-les pour croiser tes résultats nocturnes avec les déclarations des autres joueurs.
