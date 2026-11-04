@@ -1,6 +1,6 @@
 # Architecture IA : `llm_client`, `memory_manager` et `agent_factory`
 
-*Partie « AI & Memory Architect » (Edilene). Ce document décrit les trois modules, ce que chacun fait, et comment ils s'enchaînent.*
+*Partie « AI & Memory Architect ». Ce document décrit les trois modules, ce que chacun fait, et comment ils s'enchaînent.*
 
 ## Vue d'ensemble
 
@@ -140,7 +140,7 @@ Construit une fois, à la création de l'agent :
 
 À chaque appel, on ajoute un message avec **ce que l'agent sait** (`memory.context_for`) et **l'instruction du moment**.
 
-> ⚠️ **TEMPORAIRE** : les skills sont lus par `_load_skill_temporary`, en attendant le `skill_loader` de Flora. Chercher `TODO(Flora)` pour le remplacer.
+> ⚠️ **TEMPORAIRE** : les skills sont lus par `_load_skill_temporary`, en attendant le `skill_loader`. Chercher `TODO(skill_loader)` pour le remplacer.
 
 ### Méthodes de `Agent(player_id, role, personality, memory)`
 
@@ -204,7 +204,7 @@ memory.add_public(EventType.public_message, "ana", text)
 Pour une action de nuit :
 
 ```python
-options = ...  # fourni par le rules_engine (Alex)
+options = ...  # fourni par le rules_engine
 try:
     targets = await agents["ana"].night_action(options)
 except Exception:
@@ -218,11 +218,11 @@ memory.add_personal(EventType.night_action, "ana", f"J'ai choisi {targets[0]}.",
 
 | Sujet | Où |
 |---|---|
-| Qui peut agir, choix légaux, effets des pouvoirs, vote fantôme, victoire | `rules_engine` (Alex) |
-| État de la partie (vivants / morts, rôles réels) | `models` (Alex) |
-| Boucle de jeu, timer, enregistrement dans la mémoire, tirage des rôles et personnalités, filet de sécurité | `game_engine` (Edilene) |
-| Chargement des skills | `skill_loader` (Flora) |
-| Lien avec le front | `server` (Flora) |
+| Qui peut agir, choix légaux, effets des pouvoirs, vote fantôme, victoire | `rules_engine` |
+| État de la partie (vivants / morts, rôles réels) | `models` |
+| Boucle de jeu, timer, enregistrement dans la mémoire, tirage des rôles et personnalités, filet de sécurité | `game_engine` |
+| Chargement des skills | `skill_loader` |
+| Lien avec le front | `server` |
 
 ## 6. Limites connues / à faire
 
