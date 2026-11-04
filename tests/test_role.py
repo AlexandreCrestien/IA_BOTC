@@ -23,29 +23,29 @@ def test_monk_is_good():
 
 
 def test_outsider_is_good():
-    recluse = Role(name="Recluse", team=Equipe.OUTSIDER)
+    recluse = Role(name_FR="Recluse", name_EN="hermit", team=Equipe.OUTSIDER)
     assert recluse.alignment == Alignement.BON
 
 
 @pytest.mark.parametrize("team", [Equipe.SBIRE, Equipe.DEMON])
 def test_minion_and_demon_are_evil(team):
-    assert Role(name="Test", team=team).alignment == Alignement.MAUVAIS
+    assert Role(name_FR="Test", name_EN="test", team=team).alignment == Alignement.MAUVAIS
 
 
 def test_role_without_specific_phase():
-    assert Role(name="Recluse", team=Equipe.OUTSIDER).phase is None
+    assert Role(name_FR="Recluse", name_EN="hermit", team=Equipe.OUTSIDER).phase is None
 
 
 def test_effects_empty_by_default():
-    assert Role(name="Recluse", team=Equipe.OUTSIDER).effects == ()
+    assert Role(name_FR="Recluse", name_EN="hermit", team=Equipe.OUTSIDER).effects == ()
 
 
 def test_empty_name_refused():
     with pytest.raises(ValidationError):
-        Role(name="", team=Equipe.VILLAGEOIS)
+        Role(name_FR="", name_EN="", team=Equipe.VILLAGEOIS)
 
 
 def test_role_is_immutable():
     role = monk()
     with pytest.raises(ValidationError):
-        role.name = "autre"
+        role.name_FR = "autre"

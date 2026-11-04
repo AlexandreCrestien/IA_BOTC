@@ -15,7 +15,8 @@ class Role(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    name: str = Field(min_length=1)
+    name_FR: str = Field(min_length=1)
+    name_EN: str = Field(min_length=1)
     team: Equipe
     # None = le rôle n'agit à aucun moment précis.
     phase: Optional[Phase] = None

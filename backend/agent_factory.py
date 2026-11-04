@@ -5,7 +5,7 @@ from pydantic import BaseModel, ValidationInfo, field_validator
 from backend.llm_client import ask_llm, ask_llm_json
 from backend.memory_manager import MemoryManager
 from backend.prompt_loader import PromptLoader
-from backend.models import Joueur, Role
+from backend.models import Player, Role
 
 logger = logging.getLogger(__name__)
 
@@ -13,10 +13,10 @@ logger = logging.getLogger(__name__)
 class Agent:
     """
     Représente un agent IA complet pour le jeu, combinant :
-    - L'état de jeu officiel (le Joueur et son Role de models.py)
+    - L'état de jeu officiel (le Player et son Role de models.py)
     - La couche IA et comportementale (le system_prompt généré par le PromptLoader, la mémoire et les actions)
     """
-    def __init__(self, player: Joueur, personality: str, memory: MemoryManager, system_prompt: str):
+    def __init__(self, player: Player, personality: str, memory: MemoryManager, system_prompt: str):
         self.player = player
         self.personality = personality
         self.memory = memory
@@ -28,11 +28,11 @@ class Agent:
 
     @property
     def name(self) -> str:
-        return self.player.nom
+        return self.player.name
 
     @property
     def role_name(self) -> str:
-        return self.player.role.nom
+        return self.player.role.name_FR
 
     def _build_system_prompt(self) -> str:
         """Injecte dynamiquement la liste des joueurs vivants/présents sans dupliquer le general_rules."""
@@ -80,7 +80,7 @@ class Agent:
         )
         result = await ask_llm_json("capable", self._messages(instruction), Vote,
                                      context={"options": options + [NOBODY]})
-        logger.info("%s (nomination) -> %s : %s", self.player_id, result.cible, result.raison)
+        logger.info("%s (vote) -> %s : %s", self.player_id, result.cible, result.raison)
         return None if result.cible == NOBODY else result.cible
 
 NOBODY = "Personne"
@@ -129,13 +129,13 @@ class AgentFactory:
         """
         role_obj = Role(**role_data)
 
-        player_obj = Joueur(
+        player_obj = Player(
             id=agent_id,
-            nom=agent_name,
+            name=agent_name,
             role=role_obj
         )
 
-        role_file = role_obj.nom_EN
+        role_file = role_obj.name_EN
         personality_file = personality_data["personality_name_EN"]
         personality_display_name = personality_data.get("personality_name_FR", personality_file)
 
@@ -153,7 +153,7 @@ class AgentFactory:
         )
 
 
-# !! A déplacer dans un fichier qui gère le déroulement du jeu
+# !! A déplacer dans un fichier qui gère le déroulement du jeu si besoin
 
 def create_all_agents(assignments: dict[str, tuple[str, dict, dict]], memory: MemoryManager, human_id: str, prompt_loader: Optional[PromptLoader] = None) -> dict[str, Agent]:
     """
