@@ -6,16 +6,16 @@ from backend.models import Equipe, GameState, Player, TypeEffet
 FALSE_LEAD_KEY = "fausse_piste"
 
 
-def is_drunk(player: Player) -> bool:
-    """Un joueur empoisonné est « bourré » : son pouvoir n'a aucun effet, et il ne le sait pas."""
+def is_poisoned(player: Player) -> bool:
+    """Un joueur empoisonné est « poisoned » : son pouvoir n'a aucun effet, et il ne le sait pas."""
     return player.has_effect(TypeEffet.EMPOISONNE)
 
 
 def psychic_answer(state: GameState, viewer_id: str, probed_ids: tuple[str, ...], rng: random.Random) -> bool:
     """Réponse de la Voyante : True si au moins un des joueurs sondés est démon,
-    le leurre comptant comme démon. Réponse au hasard si la Voyante est bourrée."""
+    le leurre comptant comme démon. Réponse au hasard si la Voyante est poisonede."""
     viewer = state.player(viewer_id)
-    if is_drunk(viewer):
+    if is_poisoned(viewer):
         return rng.random() < 0.5
     false_lead = viewer.link(FALSE_LEAD_KEY)
     for player_id in probed_ids:

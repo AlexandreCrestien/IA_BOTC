@@ -47,12 +47,12 @@ def test_poison_on_dead_target_is_allowed():
     assert result.player("c").has_effect(TypeEffet.EMPOISONNE)
 
 
-def test_drunk_poisoner_has_no_effect():
-    drunk = make_player("b", "poisoner").add_effect(
+def test_poisoned_poisoner_has_no_effect():
+    poisoned = make_player("b", "poisoner").add_effect(
         __import__("backend.models", fromlist=["Effect"]).Effect(
             type=TypeEffet.EMPOISONNE, source="x", turn_start=1, phase_start=Phase.NUIT,
         )
     )
-    state = night_game().replace_player(drunk)
+    state = night_game().replace_player(poisoned)
     result = poison(state, "b", "c")
     assert not result.player("c").has_effect(TypeEffet.EMPOISONNE)
