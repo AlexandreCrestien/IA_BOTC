@@ -1,55 +1,51 @@
 import pytest
 from pydantic import ValidationError
 
-from backend.models import Alignement, Equipe, Phase, Role, TypeEffet
-from backend.rules_engine import ROLES, obtenir_role
+from backend.models import Alignement, Equipe, Phase, Role
+from backend.rules import ROLES, get_role
 
 
-def moine() -> Role:
-    return obtenir_role("Moine")
+def monk() -> Role:
+    return get_role("Moine")
 
 
-def test_moine_est_dans_le_catalogue():
-    assert ROLES["Moine"] == moine()
+def test_monk_is_in_catalogue():
+    assert ROLES["Moine"] == monk()
 
 
-def test_role_inconnu_refuse():
+def test_unknown_role_refused():
     with pytest.raises(KeyError):
-        obtenir_role("Inexistant")
+        get_role("Inexistant")
 
 
-def diablotin() -> Role:
-    return Role(nom="Diablotin", camp=Equipe.DEMON, phase=Phase.NUIT, effets=(TypeEffet.EMPOISONNE,))
+def test_monk_is_good():
+    assert monk().alignment == Alignement.BON
 
 
-def test_moine_est_du_bien():
-    assert moine().alignement == Alignement.BON
+def test_outsider_is_good():
+    recluse = Role(name="Recluse", team=Equipe.OUTSIDER)
+    assert recluse.alignment == Alignement.BON
 
 
-def test_outsider_est_du_bien():
-    recluse = Role(nom="Recluse", camp=Equipe.OUTSIDER)
-    assert recluse.alignement == Alignement.BON
+@pytest.mark.parametrize("team", [Equipe.SBIRE, Equipe.DEMON])
+def test_minion_and_demon_are_evil(team):
+    assert Role(name="Test", team=team).alignment == Alignement.MAUVAIS
 
 
-@pytest.mark.parametrize("camp", [Equipe.SBIRE, Equipe.DEMON])
-def test_sbire_et_demon_sont_mauvais(camp):
-    assert Role(nom="Test", camp=camp).alignement == Alignement.MAUVAIS
+def test_role_without_specific_phase():
+    assert Role(name="Recluse", team=Equipe.OUTSIDER).phase is None
 
 
-def test_role_sans_phase_precise():
-    assert Role(nom="Recluse", camp=Equipe.OUTSIDER).phase is None
+def test_effects_empty_by_default():
+    assert Role(name="Recluse", team=Equipe.OUTSIDER).effects == ()
 
 
-def test_effets_par_defaut_vides():
-    assert Role(nom="Recluse", camp=Equipe.OUTSIDER).effets == ()
-
-
-def test_nom_vide_refuse():
+def test_empty_name_refused():
     with pytest.raises(ValidationError):
-        Role(nom="", camp=Equipe.VILLAGEOIS)
+        Role(name="", team=Equipe.VILLAGEOIS)
 
 
-def test_role_immutable():
-    role = moine()
+def test_role_is_immutable():
+    role = monk()
     with pytest.raises(ValidationError):
-        role.nom = "autre"
+        role.name = "autre"
