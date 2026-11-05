@@ -1,5 +1,7 @@
 import os
 import logging
+import secrets
+from typing import Optional
 from fastapi import APIRouter, Header, HTTPException, status, Depends
 from dotenv import load_dotenv
 
@@ -11,10 +13,13 @@ router = APIRouter(prefix="/admin", tags=["Administration"])
 
 ADMIN_SECRET_TOKEN = os.getenv("ADMIN_SECRET_TOKEN")
 
-def verify_admin_token(x_admin_token: str = Header(...)):
+def verify_admin_token(x_admin_token: Optional[str] = Header(default=None)):
     """Vérifie que la requête contient le bon jeton secret dans le header.
-    Si aucun jeton n'est configuré (variable absente ou vide), l'accès admin est toujours refusé."""
-    if not ADMIN_SECRET_TOKEN or x_admin_token != ADMIN_SECRET_TOKEN:
+    Si aucun jeton n'est configuré (variable absente ou vide), l'accès admin est toujours refusé.
+    Header absent ou jeton faux : même réponse 403.
+    compare_digest compare en temps constant : le temps de réponse ne révèle rien du jeton.
+    On compare des octets : avec du texte, un caractère non ASCII ferait planter la comparaison."""
+    if not ADMIN_SECRET_TOKEN or not x_admin_token or not secrets.compare_digest(x_admin_token.encode(), ADMIN_SECRET_TOKEN.encode()):
         logger.warning("Tentative d'accès admin non autorisée détectée.")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

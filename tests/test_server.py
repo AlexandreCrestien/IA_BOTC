@@ -60,8 +60,20 @@ def test_admin_with_wrong_token_is_forbidden(client, admin_token):
     assert "Jeton admin invalide" in response.json()["detail"]
 
 
-def test_admin_without_header_is_rejected(client, admin_token):
-    assert client.get(ADMIN_URL).status_code == 422  # header obligatoire
+def test_admin_without_header_is_forbidden(client, admin_token):
+    response = client.get(ADMIN_URL)
+    assert response.status_code == 403  # même réponse qu'un jeton faux
+    assert "Jeton admin invalide ou manquant" in response.json()["detail"]
+
+
+def test_admin_with_non_ascii_token_is_forbidden(client, admin_token):
+    """Un header avec accent ne doit pas faire planter le serveur (erreur 500)."""
+    headers = {"x-admin-token": "jeton-é".encode("latin-1")}
+    assert client.get(ADMIN_URL, headers=headers).status_code == 403
+
+
+def test_admin_with_token_of_different_length_is_forbidden(client, admin_token):
+    assert client.get(ADMIN_URL, headers={"x-admin-token": admin_token + "x"}).status_code == 403
 
 
 def test_admin_is_closed_when_token_is_not_configured(client, monkeypatch):
