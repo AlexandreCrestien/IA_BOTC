@@ -117,6 +117,7 @@ Les tests n'appellent jamais de vrai LLM : ils utilisent un faux LLM. À lancer 
 
 **À faire :**
 - Brancher les agents IA sur la boucle de jeu (choix de nuit, votes, phases de conversation publique et privée)
+- Enregistrer dans la mémoire des agents ce qui se passe à chaque tour : morts de la nuit, réponse de la Voyante (`psychic_answer` existe mais n'est pas encore appelée), votes et exécution
 - Relier la boucle de jeu au serveur (actions de l'humain reçues par le WebSocket, envoi de l'état)
 - Interface web (`frontend/`)
 - Contenu de la route admin (en attente du moteur de jeu)
