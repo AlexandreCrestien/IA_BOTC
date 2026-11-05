@@ -1,5 +1,6 @@
 # 1- Préparation de la partie
 # Distribution des rôles - rules > distribution (à améliorer)
+# Distribution des Personalité > a faire 
 # Envoi des rôles à la fonction create_agents (déjà dans agent_factory)
 # Affichage du rôle du joueur
 
