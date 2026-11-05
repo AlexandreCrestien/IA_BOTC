@@ -9,6 +9,9 @@ from backend.rules.night_effects import kill, protect
 from backend.rules.poison import poison
 from backend.rules.powers import is_poisoned, psychic_answer
 from backend.rules.victory import winner
+from backend.rules.night_resolution import resolve_night
+from backend.rules.vote import resolve_vote, vote_result
+from backend.rules.butler import choose_master, filter_butler_votes, master_of
 
 __all__ = [
     "FirstNightInfo",
@@ -29,4 +32,10 @@ __all__ = [
     "psychic_answer",
     "random_legal_choice",
     "set_link",
+    "resolve_night",
+    "resolve_vote",
+    "vote_result",
+    "choose_master",
+    "filter_butler_votes",
+    "master_of",
 ]
