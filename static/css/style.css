@@ -1,0 +1,44 @@
+/* ==========================================================
+   Blood on the Clocktower - Styles Personnalisés
+   ========================================================== */
+
+/* Personnalisation de la barre de défilement (style sombre/gothique) */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: #07080a;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #232733;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #b48a3d;
+}
+
+/* Styles globaux complémentaires */
+body {
+    background-color: #07080a;
+    color: #e5e7eb;
+}
+
+/* Effets de lueur subtils pour l'ambiance mystérieuse */
+.glow-gold {
+    box-shadow: 0 0 15px rgba(180, 138, 61, 0.15);
+}
+
+.glow-red {
+    box-shadow: 0 0 15px rgba(129, 29, 29, 0.25);
+}
+
+/* Fond d'écran général ou de l'accueil */
+#screen-welcome {
+    background-image: linear-gradient(rgba(7, 8, 10, 0.85), rgba(7, 8, 10, 0.95)), url('../background.jpg');
+    background-size: cover;
+    background-position: center;
+}
