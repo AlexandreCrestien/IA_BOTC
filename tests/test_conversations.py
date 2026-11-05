@@ -4,9 +4,14 @@ import pytest
 
 import backend.agent_factory as agent_factory
 from backend.agent_factory import PASS, Agent
-from backend.conversations import public_conversation
+from backend.conversations import (
+    choose_agent_for_human,
+    private_message,
+    public_conversation,
+    start_private_conversation,
+)
 from backend.memory_manager import MemoryManager
-from backend.models import Player
+from backend.models import EventType, Player
 from backend.rules.catalogue import ROLES
 
 IDS = ["ana", "bruno", "carla", "dan", "eva"]
@@ -107,3 +112,94 @@ def test_personality_key_is_separate_from_display_name(memory):
                   personality_key="agitator")
     assert agent.personality == "Provocateur"
     assert agent.personality_key == "agitator"
+
+
+# --- Conversation privée -----------------------------------------------------
+
+HUMAN = "eva"
+
+
+def test_choose_most_talkative_first(memory):
+    agents = make_agents(memory, ["observer", "clown", "agitator", "strategist"])
+    assert choose_agent_for_human(agents, HUMAN, memory).player_id == "carla"  # agitator
+
+
+def test_choose_agent_who_never_talked_with_human(memory):
+    agents = make_agents(memory, ["observer", "clown", "agitator", "strategist"])
+    memory.add_private(EventType.private_summary, HUMAN, "salut", {"carla"})
+    assert choose_agent_for_human(agents, HUMAN, memory).player_id == "bruno"  # clown, le suivant
+
+
+def test_choose_anybody_when_everybody_already_talked(memory):
+    agents = make_agents(memory, ["observer", "agitator"])
+    memory.add_private(EventType.private_summary, HUMAN, "salut", {"ana", "bruno"})
+    assert choose_agent_for_human(agents, HUMAN, memory).player_id == "bruno"
+
+
+def test_start_announces_meeting_publicly_without_content(memory, fake_llm):
+    agents = make_agents(memory, ["agitator", "clown"])
+    said = asyncio.run(start_private_conversation(HUMAN, agents, memory))
+    assert said == []
+    assert [e.type for e in memory.events_for("dan")] == [EventType.private_meeting]
+    assert fake_llm.calls == []  # l'humain parle en premier : pas d'appel au LLM
+
+
+def test_agent_can_speak_first(memory, fake_llm):
+    agent = make_agents(memory, ["agitator"])
+    said = asyncio.run(start_private_conversation(HUMAN, agent, memory, agent_speaks_first=True))
+    assert said == [("ana", "message de ana")]
+
+
+def test_private_message_gets_replies_from_each_agent(memory, fake_llm):
+    agents = make_agents(memory, ["agitator", "clown"])
+    said = asyncio.run(private_message(HUMAN, "Qui suspectez-vous ?", agents, memory))
+    assert said == [("ana", "message de ana"), ("bruno", "message de bruno")]
+    assert [e.content for e in memory.events_for("bruno")] == [
+        "Qui suspectez-vous ?", "message de ana", "message de bruno"]
+
+
+def test_private_content_stays_secret(memory, fake_llm):
+    agents = make_agents(memory, ["agitator"])
+    asyncio.run(start_private_conversation(HUMAN, agents, memory))
+    asyncio.run(private_message(HUMAN, "SECRET", agents, memory))
+    for outsider in ["bruno", "carla", "dan"]:
+        assert all("SECRET" not in e.content for e in memory.events_for(outsider))
+        assert memory.private_partners(outsider) == set()
+    assert memory.private_partners(HUMAN) == {"ana"}
+
+
+def test_failing_agent_does_not_stop_private_conversation(memory, fake_llm):
+    def reply(player_id, optional):
+        if player_id == "ana":
+            raise RuntimeError("tous les modèles ont échoué")
+        return f"message de {player_id}"
+
+    fake_llm.reply = reply
+    agents = make_agents(memory, ["agitator", "clown"])
+    assert asyncio.run(private_message(HUMAN, "Salut", agents, memory)) == [("bruno", "message de bruno")]
+
+
+@pytest.mark.parametrize("count", [0, 3])
+def test_private_conversation_needs_one_or_two_agents(memory, count):
+    agents = make_agents(memory, ["agitator", "clown", "observer"])[:count]
+    with pytest.raises(ValueError, match="1 ou 2"):
+        asyncio.run(private_message(HUMAN, "Salut", agents, memory))
+
+
+# --- Cas limites ---------------------------------------------------------------
+
+def test_unknown_personality_speaks_last_and_may_pass(memory, fake_llm):
+    agents = make_agents(memory, ["inconnue", "agitator"])
+    asyncio.run(public_conversation(agents, memory, max_messages=2))
+    assert fake_llm.calls == [("bruno", False), ("ana", True)]
+
+
+def test_choose_agent_without_agents_raises(memory):
+    with pytest.raises(ValueError, match="Aucun agent"):
+        choose_agent_for_human([], HUMAN, memory)
+
+
+def test_human_cannot_talk_privately_with_himself(memory):
+    agents = make_agents(memory, ["agitator", "clown", "observer", "paranoid", "strategist"])
+    with pytest.raises(ValueError, match="propre interlocuteur"):
+        asyncio.run(start_private_conversation(HUMAN, [agents[4]], memory))  # agents[4] = eva = HUMAN

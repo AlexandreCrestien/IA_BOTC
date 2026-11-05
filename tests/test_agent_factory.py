@@ -1,9 +1,14 @@
+import asyncio
 from unittest.mock import MagicMock
+
 import pytest
+
+import backend.agent_factory as agent_factory
+import backend.llm_client as llm_client
 
 from backend.models import Role, Player, Equipe, Phase
 from backend.prompt_loader import PromptLoader
-from backend.agent_factory import Agent, AgentFactory, create_all_agents
+from backend.agent_factory import NOBODY, PASS, Agent, AgentFactory, create_all_agents
 from backend.memory_manager import MemoryManager
 
 
@@ -181,3 +186,120 @@ def test_agent_factory_real_integration(mock_memory):
     assert len(agent.system_prompt) > 0
     assert "dIAna" in agent.system_prompt
     assert "moine" in agent.system_prompt.lower() or "monk" in agent.system_prompt.lower()
+
+# --- Actions de l'agent avec un faux LLM ------------------------------------
+
+@pytest.fixture
+def fake_llm(monkeypatch):
+    """Remplace le LLM par des réponses préparées, renvoyées dans l'ordre. Aucun appel réseau.
+    fake_llm.calls : les messages reçus à chaque appel."""
+    class FakeLLM:
+        def __init__(self):
+            self.replies: list[str] = []
+            self.calls: list[list[dict]] = []
+
+        async def __call__(self, profile, messages, **kwargs):
+            self.calls.append(messages)
+            return self.replies.pop(0)
+
+    fake = FakeLLM()
+    monkeypatch.setattr(llm_client, "ask_llm", fake)     # utilisé par ask_llm_json
+    monkeypatch.setattr(agent_factory, "ask_llm", fake)  # utilisé par speak_public / speak_private
+    return fake
+
+
+@pytest.fixture
+def agent(sample_role_data):
+    memory = MemoryManager(["ana", "bruno", "carla"])
+    player = Player(id="ana", name="ana", role=Role(**sample_role_data))
+    return Agent(player=player, personality="Provocateur", memory=memory, system_prompt="prompt",
+                 personality_key="agitator")
+
+
+def test_night_action_returns_legal_target(agent, fake_llm):
+    fake_llm.replies = ['{"cibles": ["bruno"], "raison": "x"}']
+    assert asyncio.run(agent.night_action(["bruno", "carla"])) == ["bruno"]
+
+
+def test_night_action_instruction_shows_json_example(agent, fake_llm):
+    """Régression : les accolades de l'exemple JSON faisaient planter la f-string."""
+    fake_llm.replies = ['{"cibles": ["bruno"], "raison": "x"}']
+    asyncio.run(agent.night_action(["bruno", "carla"]))
+    assert '{"cibles": ["nom", ...]' in fake_llm.calls[0][-1]["content"]
+
+
+def test_night_action_retries_after_illegal_target(agent, fake_llm):
+    fake_llm.replies = ['{"cibles": ["zoe"], "raison": "x"}', '{"cibles": ["carla"], "raison": "x"}']
+    assert asyncio.run(agent.night_action(["bruno", "carla"])) == ["carla"]
+    assert "n'est pas un choix possible" in fake_llm.calls[1][-1]["content"]
+
+
+def test_night_action_retries_after_wrong_number_of_targets(agent, fake_llm):
+    fake_llm.replies = ['{"cibles": ["bruno"], "raison": "x"}', '{"cibles": ["bruno", "carla"], "raison": "x"}']
+    assert asyncio.run(agent.night_action(["bruno", "carla"], number_of_targets=2)) == ["bruno", "carla"]
+    assert "exactement 2" in fake_llm.calls[1][-1]["content"]
+
+
+def test_night_action_gives_up_after_two_failures(agent, fake_llm):
+    fake_llm.replies = ["nope", "nope"]
+    with pytest.raises(ValueError, match="Pas de JSON valide"):
+        asyncio.run(agent.night_action(["bruno", "carla"]))
+
+
+def test_night_action_without_options_raises(agent, fake_llm):
+    with pytest.raises(ValueError, match="Aucune option"):
+        asyncio.run(agent.night_action([]))
+    assert fake_llm.calls == []  # aucun appel inutile
+
+
+def test_vote_for_player(agent, fake_llm):
+    fake_llm.replies = ['{"cible": "carla", "raison": "x"}']
+    assert asyncio.run(agent.vote(["bruno", "carla"])) == "carla"
+    assert '{"cible": "nom"' in fake_llm.calls[0][-1]["content"]
+
+
+def test_vote_for_nobody_returns_none(agent, fake_llm):
+    fake_llm.replies = [f'{{"cible": "{NOBODY}", "raison": "x"}}']
+    assert asyncio.run(agent.vote(["bruno", "carla"])) is None
+
+
+def test_vote_retries_after_illegal_target(agent, fake_llm):
+    fake_llm.replies = ['{"cible": "zoe", "raison": "x"}', '{"cible": "bruno", "raison": "x"}']
+    assert asyncio.run(agent.vote(["bruno", "carla"])) == "bruno"
+
+
+@pytest.mark.parametrize("reply", [PASS, "passe", "PASSE.", "  Passe  "])
+def test_optional_speaker_can_pass(agent, fake_llm, reply):
+    fake_llm.replies = [reply]
+    assert asyncio.run(agent.speak_public(optional=True)) is None
+    assert PASS in fake_llm.calls[0][-1]["content"]
+
+
+def test_obliged_speaker_is_not_offered_to_pass(agent, fake_llm):
+    fake_llm.replies = ["Je soupçonne bruno."]
+    assert asyncio.run(agent.speak_public()) == "Je soupçonne bruno."
+    assert PASS not in fake_llm.calls[0][-1]["content"]
+
+
+def test_optional_speaker_message_is_kept(agent, fake_llm):
+    fake_llm.replies = ["Je passe mon tour de garde, mais bruno ment."]
+    assert asyncio.run(agent.speak_public(optional=True)) == "Je passe mon tour de garde, mais bruno ment."
+
+
+def test_speak_private_mentions_partners(agent, fake_llm):
+    fake_llm.replies = ["Salut !"]
+    assert asyncio.run(agent.speak_private(["bruno"])) == "Salut !"
+    assert "conversation privée avec bruno" in fake_llm.calls[0][-1]["content"]
+
+
+def test_personality_key_defaults_to_personality(sample_role_data, mock_memory):
+    player = Player(id="j1", name="j1", role=Role(**sample_role_data))
+    agent = Agent(player=player, personality="paranoid", memory=mock_memory, system_prompt="x")
+    assert agent.personality_key == "paranoid"
+
+
+def test_create_all_agents_requires_human(fake_skills_env, sample_role_data, sample_personality_data, mock_memory):
+    with pytest.raises(ValueError, match="humain"):
+        create_all_agents({"agent_1": ("IAn", sample_role_data, sample_personality_data)},
+                          mock_memory, human_id="human_id",
+                          prompt_loader=PromptLoader(base_dir=fake_skills_env))
