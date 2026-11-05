@@ -1,5 +1,6 @@
 import logging
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.server.websockets import router as ws_router
@@ -36,3 +37,6 @@ app.include_router(admin_router)
 def health_check():
     """Route de santé pour vérifier rapidement si le serveur tourne."""
     return {"status": "online", "message": "Le serveur Blood on the Clocktower tourne à merveille !"}
+
+
+app.mount("/", StaticFiles(directory="static", html=True), name="static")
