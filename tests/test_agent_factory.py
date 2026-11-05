@@ -91,6 +91,7 @@ def test_agent_factory_creates_agent_successfully(fake_skills_env, sample_role_d
     assert agent.name == "IAn"
     assert agent.role_name == "Moine"
     assert agent.personality == "Paranoïaque"
+    assert agent.personality_key == "paranoid"
 
     assert "IAn" in agent.system_prompt
     assert "Règles générales" in agent.system_prompt
