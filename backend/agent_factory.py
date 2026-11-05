@@ -16,9 +16,12 @@ class Agent:
     - L'état de jeu officiel (le Player et son Role de models.py)
     - La couche IA et comportementale (le system_prompt généré par le PromptLoader, la mémoire et les actions)
     """
-    def __init__(self, player: Player, personality: str, memory: MemoryManager, system_prompt: str):
+    def __init__(self, player: Player, personality: str, memory: MemoryManager, system_prompt: str,
+                 personality_key: str | None = None):
         self.player = player
-        self.personality = personality
+        self.personality = personality  # nom affiché (français)
+        # Identifiant stable de la personnalité = nom du fichier skill (ex. "agitator").
+        self.personality_key = personality_key or personality
         self.memory = memory
         self.system_prompt = system_prompt
 
@@ -47,12 +50,18 @@ class Agent:
             {"role": "user", "content": f"# CE QUE TU SAIS\n{context}\n\n# À TOI\n{instruction}"},
         ]
 
-    async def speak_public(self) -> str:
-        """Message pour le salon public."""
+    async def speak_public(self, optional: bool = False) -> str | None:
+        """Message pour le salon public.
+        optional=True : l'agent peut passer son tour ; renvoie alors None."""
         instruction = (
             "C'est ton tour de parler dans le salon public. Écris un seul message court (2 phrases maximum), sans préfixe ni guillemets."
         )
-        return await ask_llm("fast", self._messages(instruction))
+        if optional:
+            instruction += f" Si tu n'as rien d'utile à dire, réponds seulement : {PASS}"
+        text = await ask_llm("fast", self._messages(instruction))
+        if optional and text.strip().strip(".").upper() == PASS:
+            return None
+        return text
 
     async def speak_private(self, partners: list[str]) -> str:
         """Réponse dans une conversation privée."""
@@ -66,7 +75,7 @@ class Agent:
         if not options:
             raise ValueError("Aucune option légale fournie")
         instruction = (
-            f"C'est la nuit. Utilise ton pouvoir : choisis {number_of_targets} joueur(s) parmi : {', '.join(options)}. Réponds uniquement en JSON : {'cibles': ['nom', ...], 'raison': 'pourquoi, en 5 mots maximum'}."
+            f"C'est la nuit. Utilise ton pouvoir : choisis {number_of_targets} joueur(s) parmi : {', '.join(options)}. Réponds uniquement en JSON : {{\"cibles\": [\"nom\", ...], \"raison\": \"pourquoi, en 5 mots maximum\"}}."
         )
         result = await ask_llm_json("capable", self._messages(instruction), NightAction,
                                      context={"options": options, "number_of_targets": number_of_targets})
@@ -76,7 +85,7 @@ class Agent:
     async def vote(self, options: list[str]) -> str | None:
         """Vote pour un joueur à exécuter, ou None."""
         instruction = (
-            f"Phase de jour. Veux-tu voter pour qu'un joueur soit exécuté ? Choix possibles : {', '.join(options)}, ou \"{NOBODY}\" si tu ne veux désigner personne pour l'instant. Réponds uniquement en JSON : {'cible': 'nom', 'raison': 'pourquoi, en 5 mots maximum'}."
+            f"Phase de jour. Veux-tu voter pour qu'un joueur soit exécuté ? Choix possibles : {', '.join(options)}, ou \"{NOBODY}\" si tu ne veux désigner personne pour l'instant. Réponds uniquement en JSON : {{\"cible\": \"nom\", \"raison\": \"pourquoi, en 5 mots maximum\"}}."
         )
         result = await ask_llm_json("capable", self._messages(instruction), Vote,
                                      context={"options": options + [NOBODY]})
@@ -84,6 +93,7 @@ class Agent:
         return None if result.cible == NOBODY else result.cible
 
 NOBODY = "Personne"
+PASS = "PASSE"  # réponse d'un agent qui ne veut pas parler
 
 
 def _check_in_options(name: str, info: ValidationInfo) -> str:
@@ -148,6 +158,7 @@ class AgentFactory:
         return Agent(
             player=player_obj,
             personality=personality_display_name,
+            personality_key=personality_file,
             memory=memory,
             system_prompt=system_prompt
         )
