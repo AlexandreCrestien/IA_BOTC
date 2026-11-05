@@ -66,7 +66,6 @@ function updateConnectionBadge(isConnected) {
 
 // ================= GESTION DES MESSAGES SERVEUR =================
 function handleServerMessage(data) {
-    // Le serveur envoie différents types de paquets (ex: state_update, chat, role_assigned, etc.)
     switch (data.type) {
         case "chat":
             receiveChatMessage(data.channel_id || "public", data.sender, data.content);
@@ -142,8 +141,8 @@ function renderChatMessages() {
     const box = document.getElementById('chat-messages');
     const msgs = gameState.messages[gameState.currentChannel] || [];
     box.innerHTML = msgs.map(m => `
-        <div class="mb-1">
-            <span class="text-clock-gold">[${m.sender}]</span>: ${escapeHtml(m.content)}
+        <div class="mb-1.5">
+            <span class="text-clock-gold font-bold">[${m.sender}]</span>: ${escapeHtml(m.content)}
         </div>
     `).join('') || '<div class="text-gray-500 italic text-center">Aucun message dans ce canal...</div>';
     box.scrollTop = box.scrollHeight;
@@ -173,27 +172,27 @@ function renderRoundTable() {
     const table = document.getElementById('round-table');
     const players = gameState.players || [];
     if (players.length === 0) {
-        table.innerHTML = `<div class="text-center text-gray-500 text-xs italic">En attente des joueurs...</div>`;
+        table.innerHTML = `<div class="text-center text-gray-500 text-sm italic">En attente des joueurs...</div>`;
         return;
     }
 
     const radius = 130; // Rayon du cercle en pixels
-    const centerX = table.offsetWidth / 2 || 180;
-    const centerY = table.offsetHeight / 2 || 180;
+    const centerX = table.offsetWidth / 2 || 192;
+    const centerY = table.offsetHeight / 2 || 192;
 
     let html = '';
     players.forEach((p, index) => {
         const angle = (index / players.length) * 2 * Math.PI - Math.PI / 2;
-        const x = centerX + radius * Math.cos(angle) - 30; // 30 = demi taille avatar
-        const y = centerY + radius * Math.sin(angle) - 30;
+        const x = centerX + radius * Math.cos(angle) - 36; // Centrage avatar
+        const y = centerY + radius * Math.sin(angle) - 36;
 
         const statusColor = p.alive ? 'border-green-600 bg-clock-panel' : 'border-red-900 bg-red-950/40 opacity-70';
         
         html += `
-            <div class="absolute w-16 h-16 rounded-full border-2 ${statusColor} flex flex-col items-center justify-center p-1 text-center shadow-lg transition-all duration-300 cursor-pointer hover:scale-105"
+            <div class="absolute w-20 h-20 rounded-full border-2 ${statusColor} flex flex-col items-center justify-center p-1 text-center shadow-lg transition-all duration-300 cursor-pointer hover:scale-105"
                  style="left: ${x}px; top: ${y}px;" title="${p.name} (${p.alive ? 'Vivant' : 'Mort'})">
-                <span class="text-[10px] font-bold truncate w-full text-gray-200">${p.name}</span>
-                <span class="text-[9px] ${p.alive ? 'text-green-400' : 'text-red-500'}">${p.alive ? 'Vivant' : 'Mort'}</span>
+                <span class="text-xs font-bold truncate w-full text-gray-200 px-1">${p.name}</span>
+                <span class="text-xs ${p.alive ? 'text-green-400 font-semibold' : 'text-red-500 font-semibold'}">${p.alive ? 'Vivant' : 'Mort'}</span>
             </div>
         `;
     });
@@ -206,16 +205,16 @@ function renderPlayersList() {
     const players = gameState.players || [];
     
     list.innerHTML = players.map(p => `
-        <div class="bg-clock-dark border border-clock-border p-2 rounded-xl space-y-1.5">
-            <div class="flex justify-between items-center text-xs">
+        <div class="bg-clock-dark border border-clock-border p-2.5 rounded-xl space-y-2">
+            <div class="flex justify-between items-center text-sm">
                 <span class="font-bold ${p.alive ? 'text-gray-200' : 'text-gray-500 line-through'}">${p.name}</span>
-                <span class="text-[10px] px-1.5 py-0.5 rounded ${p.alive ? 'bg-green-900/40 text-green-400' : 'bg-red-900/40 text-red-400'}">
+                <span class="text-xs px-2 py-0.5 rounded font-medium ${p.alive ? 'bg-green-900/40 text-green-400' : 'bg-red-900/40 text-red-400'}">
                     ${p.alive ? 'Vivant' : 'Mort'}
                 </span>
             </div>
-            ${!p.alive ? `<div class="text-[10px] text-gray-500">Dernier vote : ${p.lastVote !== null ? p.lastVote : 'Non utilisé'}</div>` : ''}
-            <div class="flex items-center space-x-1">
-                <select onchange="updateSuspicion('${p.id}', this.value)" class="w-full bg-clock-panel border border-clock-border text-[10px] rounded px-1 py-1 text-gray-300 focus:outline-none">
+            ${!p.alive ? `<div class="text-xs text-gray-400">Dernier vote : ${p.lastVote !== null ? p.lastVote : 'Non utilisé'}</div>` : ''}
+            <div class="flex items-center">
+                <select onchange="updateSuspicion('${p.id}', this.value)" class="w-full bg-clock-panel border border-clock-border text-xs rounded px-2 py-1.5 text-gray-300 focus:outline-none focus:border-clock-gold">
                     <option value="">-- Soupçon / Rôle --</option>
                     <option value="Townsfolk" ${p.suspicion === 'Townsfolk' ? 'selected' : ''}>Villageois (Bien)</option>
                     <option value="Outsider" ${p.suspicion === 'Outsider' ? 'selected' : ''}>Étranger</option>
@@ -224,7 +223,7 @@ function renderPlayersList() {
                 </select>
             </div>
         </div>
-    `).join('') || '<div class="text-gray-500 text-xs italic">Aucun joueur inscrit.</div>';
+    `).join('') || '<div class="text-gray-500 text-sm italic">Aucun joueur inscrit.</div>';
 }
 
 function renderActionPanel() {
@@ -233,27 +232,27 @@ function renderActionPanel() {
 
     if (phase === 'day') {
         panel.innerHTML = `
-            <div class="text-gray-300 text-[11px]">Phase de discussion. Choisissez des agents pour une conversation privée ou discutez dans le chat public.</div>
-            <button onclick="openPrivateChatModal()" class="w-full bg-clock-gold/20 hover:bg-clock-gold/30 text-clock-gold border border-clock-gold/50 py-1.5 rounded-lg text-xs font-semibold transition mt-1">
+            <div class="text-gray-300 text-sm">Phase de discussion. Choisissez des agents pour une conversation privée ou discutez dans le chat public.</div>
+            <button onclick="openPrivateChatModal()" class="w-full bg-clock-gold/20 hover:bg-clock-gold/30 text-clock-gold border border-clock-gold/50 py-2 rounded-lg text-xs font-semibold transition mt-2 uppercase tracking-wider">
                 Proposer un chuchotement
             </button>
         `;
     } else if (phase === 'vote') {
         panel.innerHTML = `
-            <div class="text-blue-400 text-[11px] font-semibold">Phase de Vote & Exécution</div>
-            <div class="text-gray-400 text-[10px]">Indiquez votre choix d'exécution pour le village :</div>
-            <select id="vote-target-select" class="w-full bg-clock-dark border border-clock-border rounded p-1 text-xs text-gray-200">
+            <div class="text-blue-400 text-sm font-semibold">Phase de Vote & Exécution</div>
+            <div class="text-gray-300 text-xs">Indiquez votre choix d'exécution pour le village :</div>
+            <select id="vote-target-select" class="w-full bg-clock-dark border border-clock-border rounded p-2 text-sm text-gray-200 focus:outline-none focus:border-clock-gold">
                 <option value="">Ne voter pour personne</option>
                 ${(gameState.players || []).filter(p => p.alive).map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
             </select>
-            <button onclick="submitVote()" class="w-full bg-clock-red hover:bg-red-800 text-white py-1.5 rounded-lg text-xs font-semibold transition">
+            <button onclick="submitVote()" class="w-full bg-clock-red hover:bg-red-800 text-white py-2 rounded-lg text-xs font-semibold transition uppercase tracking-wider">
                 Confirmer mon vote
             </button>
         `;
     } else if (phase === 'night') {
         panel.innerHTML = `
-            <div class="text-purple-400 text-[11px] font-semibold">Phase Nocturne</div>
-            <div class="text-gray-400 text-[10px]">Le village endormi... Votre capacité secrète s'active.</div>
+            <div class="text-purple-400 text-sm font-semibold">Phase Nocturne</div>
+            <div class="text-gray-300 text-xs">Le village endormi... Votre capacité secrète s'active.</div>
         `;
     }
 }

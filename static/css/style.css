@@ -37,8 +37,16 @@ body {
 }
 
 /* Fond d'écran général ou de l'accueil */
-#screen-welcome {
-    background-image: linear-gradient(rgba(7, 8, 10, 0.85), rgba(7, 8, 10, 0.95)), url('../background.jpg');
+#screen-welcome, #screen-game {
+    background-image: linear-gradient(rgba(7, 8, 10, 0.5), rgba(7, 8, 10, 0.5)), url('../img/background.jpg');
     background-size: cover;
     background-position: center;
+    background-repeat: no-repeat;
+}
+
+
+/* Rendre les panneaux du jeu légèrement translucides (semi-opaques) */
+.bg-clock-panel {
+    background-color: rgba(17, 19, 24, 0.85) !important;
+    backdrop-filter: blur(4px);
 }
