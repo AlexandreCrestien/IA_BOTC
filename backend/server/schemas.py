@@ -1,14 +1,20 @@
-from typing import List, Literal, Optional, Union
-from pydantic import BaseModel, Field
+from typing import Annotated, List, Literal, Optional, Union
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # INPUTS
 
-class BaseAction(BaseModel):
+class StrictInput(BaseModel):
+    """Base des messages reçus du client : un champ inconnu est une erreur,
+    pour qu'une faute de frappe ne passe pas silencieusement (ex. 'targets' au lieu de 'target_id')."""
+    model_config = ConfigDict(extra="forbid")
+
+
+class BaseAction(StrictInput):
     action: str
 
 
-class SendChatPayload(BaseModel):
+class SendChatPayload(StrictInput):
     channel_id: str = Field(..., description="ID du salon (ex: 'public' ou ID d'un salon privé)")
     content: str = Field(..., min_length=1, description="Contenu du message")
 
@@ -18,7 +24,7 @@ class SendChatAction(BaseAction):
     payload: SendChatPayload
 
 
-class CreateChannelPayload(BaseModel):
+class CreateChannelPayload(StrictInput):
     target_ids: List[str] = Field(..., min_length=1, max_length=2, description="1 ou 2 agents avec qui lancer la conversation privée")
 
 class CreateChannelAction(BaseAction):
@@ -27,7 +33,7 @@ class CreateChannelAction(BaseAction):
     payload: CreateChannelPayload
 
 
-class NightActionPayload(BaseModel):
+class NightActionPayload(StrictInput):
     targets: List[str] = Field(default_factory=list, description="Cible(s) choisie(s) pour le pouvoir de nuit")
 
 class NightAction(BaseAction):
@@ -36,7 +42,7 @@ class NightAction(BaseAction):
     payload: NightActionPayload
 
 
-class VotePayload(BaseModel):
+class VotePayload(StrictInput):
     target_id: Optional[str] = Field(default=None, description="ID du joueur visé pour l'exécution, ou None pour voter blanc/personne")
 
 class VoteAction(BaseAction):
@@ -45,11 +51,15 @@ class VoteAction(BaseAction):
     payload: VotePayload
 
 
-ClientActionPacket = Union[
-    SendChatAction,
-    CreateChannelAction,
-    NightAction,
-    VoteAction,
+# Le type d'action est choisi uniquement d'après le champ "action" (obligatoire dans le paquet reçu).
+ClientActionPacket = Annotated[
+    Union[
+        SendChatAction,
+        CreateChannelAction,
+        NightAction,
+        VoteAction,
+    ],
+    Field(discriminator="action"),
 ]
 
 
