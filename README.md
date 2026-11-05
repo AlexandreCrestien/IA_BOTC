@@ -21,12 +21,13 @@ Une partie se joue à **6 joueurs** : un humain et **5 agents IA**. Chaque agent
 
 ### Personnalités des agents
 
-Provocateur, Parano, Bouffon, Stratège et Observateur (fichiers dans `skills/personalities/`).
+Provocateur, Parano, Bouffon, Stratège et Observateur (fichiers dans `skills/personalities/`). Chaque agent IA reçoit une personnalité différente, tirée au hasard ; l'humain n'en a pas.
 
 ### Déroulement
 
 - Chaque tour enchaîne trois phases : **nuit → discussion → vote**.
-- La première nuit, personne ne meurt.
+- La première nuit, personne ne meurt. Le Diablotin et l'Empoisonneur apprennent qui est leur allié, et le Détective reçoit son information.
+- Si un joueur (IA) fait un choix de nuit invalide ou n'en fait pas, un choix légal est tiré au hasard. Un vote pour un joueur mort ou inconnu compte comme une abstention.
 - Les morts restent dans la partie et gardent un dernier vote (vote fantôme).
 - **Victoire :** le bien gagne si le Diablotin meurt ; le mal gagne s'il ne reste aucun joueur du bien vivant.
 
@@ -43,14 +44,14 @@ Provocateur, Parano, Bouffon, Stratège et Observateur (fichiers dans `skills/pe
 ```
 backend/
 ├── models/            État de la partie : joueurs, rôles, effets, salons, journal (GameState, Player, Role…)
-├── rules/             Règles : distribution des rôles, actions légales, nuit, vote, Majordome, victoire
+├── rules/             Règles : distribution des rôles et personnalités, actions légales, nuit, vote, Majordome, victoire
 ├── server/            Serveur FastAPI : WebSocket, route admin, schémas des messages
 ├── llm_client.py      Seul accès aux LLM (profils "fast" et "capable", fallback, réponses JSON)
 ├── memory_manager.py  Ce que chaque joueur sait (événements publics, privés, personnels)
 ├── agent_factory.py   Création des agents IA et leurs actions (parler, agir la nuit, voter)
 ├── conversations.py   Phases de conversation publique et privée
 ├── prompt_loader.py   Assemblage du prompt des agents à partir des skills
-└── game_engine.py     Boucle de jeu (à faire)
+└── game_engine.py     Boucle de jeu : mise en place de la partie, nuit, vote, tours jusqu'à la victoire
 skills/                Textes des prompts : règles générales, rôles, personnalités
 frontend/              Interface web (à faire)
 docs/                  Documentation technique
@@ -112,9 +113,11 @@ Les tests n'appellent jamais de vrai LLM : ils utilisent un faux LLM. À lancer 
 - Mémoire par joueur et agents IA
 - Phases de conversation publique et privée
 - Serveur : WebSocket, validation des actions, route admin
+- Boucle de jeu (`game_engine.py`) : mise en place (rôles, personnalités, fausse piste de la Voyante, agents, infos de première nuit), tours nuit → vote, arrêt à la victoire
 
 **À faire :**
-- Boucle de jeu (`game_engine.py`) : relier les règles, les agents et le serveur
+- Brancher les agents IA sur la boucle de jeu (choix de nuit, votes, phases de conversation publique et privée)
+- Relier la boucle de jeu au serveur (actions de l'humain reçues par le WebSocket, envoi de l'état)
 - Interface web (`frontend/`)
 - Contenu de la route admin (en attente du moteur de jeu)
 

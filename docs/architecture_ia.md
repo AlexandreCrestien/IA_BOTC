@@ -106,6 +106,8 @@ La mémoire **ne décide pas** si une information est vraie ou fausse (empoisonn
 
 ### Méthodes de `MemoryManager(player_ids)`
 
+`player_ids` est une liste d'ids, ou un dictionnaire `{id: nom affiché}`. Avec le dictionnaire, l'historique montre les **noms** (ceux que les agents connaissent) ; sans lui, il montre les ids. Les ids restent la seule façon de désigner un joueur dans les méthodes.
+
 | Méthode | Rôle |
 |---|---|
 | `advance_phase()` | Nuit N → Discussion N → Vote N → Nuit N+1. La partie commence à la nuit 1. |
@@ -113,7 +115,8 @@ La mémoire **ne décide pas** si une information est vraie ou fausse (empoisonn
 | `add_public` / `add_private` / `add_personal` | Raccourcis qui fixent `visible_to`. |
 | `events_for(player)` | **Seule façon de lire la mémoire** : les événements visibles par ce joueur, dans l'ordre. Renvoie une nouvelle liste. |
 | `private_partners(player)` | Les joueurs avec qui ce joueur a déjà eu une conversation privée (lu à partir des événements `private_summary`). |
-| `context_for(player)` | Les événements visibles, sous forme de texte en français pour le prompt. |
+| `context_for(player)` | Les événements visibles, sous forme de texte en français pour le prompt. Auteurs et participants y sont écrits avec leur nom. |
+| `name_of(player)` | Nom affiché d'un joueur (son id si aucun nom n'a été donné ; « Maître du Jeu » pour `game_master`). |
 
 ### Protections (lèvent `ValueError`)
 
@@ -122,15 +125,17 @@ La mémoire **ne décide pas** si une information est vraie ou fausse (empoisonn
 - lecteur inconnu, ou liste de lecteurs vide ;
 - lecture par un joueur inconnu.
 
-### Exemple de `context_for("ana")`
+### Exemple de `context_for("p1")`
+
+Avec `MemoryManager({"p1": "Ana", "p2": "Bruno", "p3": "Carla", "p5": "Eva"})` :
 
 ```
 [Nuit 1] (personnel) Maître du Jeu : Tu es le Moine.
-[Nuit 1] (personnel) Toi : Je protège bruno.
+[Nuit 1] (personnel) Toi : Je protège Bruno.
 [Jour 1] (public) Maître du Jeu : Le jour 1 se lève. Personne n'est mort cette nuit.
-[Jour 1] (public) carla : Bonjour à tous !
-[Jour 1] (public) Maître du Jeu : Conversation privée entre eva, ana.
-[Jour 1] (privé avec eva) Toi : Je soupçonne carla.
+[Jour 1] (public) Carla : Bonjour à tous !
+[Jour 1] (public) Maître du Jeu : Conversation privée entre Eva, Ana.
+[Jour 1] (privé avec Eva) Toi : Je soupçonne Carla.
 ```
 
 Les phases `DISCUSSION` et `VOTE` s'affichent toutes les deux « Jour ». Le canal (`public` / `personnel` / `privé avec …`) aide l'agent à ne pas répéter en public ce qu'il a appris en privé.
@@ -142,7 +147,7 @@ Les phases `DISCUSSION` et `VOTE` s'affichent toutes les deux « Jour ». Le can
 ### Le prompt d'un agent
 
 1. **Base assemblée par `PromptLoader`** (`backend/prompt_loader.py`) : contexte du jeu, skill de rôle (`skills/roles/<role>.md`), skill de personnalité (`skills/personalities/<personnalité>.md`) et règles générales (`skills/general_rules.md`). Ces règles comprennent la concision (2 phrases maximum), « pas de mort la première nuit », « ne rien inventer », le secret du privé et le secret de l'allié démon.
-2. **La liste des joueurs présents**, ajoutée à chaque appel.
+2. **La liste des joueurs présents** (par leur nom), ajoutée à chaque appel.
 
 À chaque appel, on ajoute un message avec **ce que l'agent sait** (`memory.context_for`) et **l'instruction du moment**.
 
@@ -157,8 +162,8 @@ Les phases `DISCUSSION` et `VOTE` s'affichent toutes les deux « Jour ». Le can
 
 | Méthode | Profil | Renvoie |
 |---|---|---|
-| `await speak_public(optional=False)` | fast | Texte du message. Avec `optional=True`, l'agent peut répondre `PASSE` : la méthode renvoie alors `None`. |
-| `await speak_private(partners)` | fast | Réponse dans une conversation privée |
+| `await speak_public(optional=False)` | fast | Texte du message. Avec `optional=True`, l'instruction dit que passer est un choix normal et qu'il ne faut parler que pour apporter du nouveau ; si l'agent répond `PASSE` (même avec ponctuation, guillemets ou gras), la méthode renvoie `None`. |
+| `await speak_private(partners)` | fast | Réponse dans une conversation privée. `partners` = ids ; le prompt montre leurs noms. |
 | `await night_action(options, number_of_targets=1)` | capable | Liste des cibles (2 pour la Voyante) |
 | `await vote(options)` | capable | L'id du joueur choisi, ou `None` pour « Personne » |
 
@@ -215,6 +220,10 @@ Une personnalité absente du tableau parle en dernier, sans obligation.
 
 ## 5. Comment tout s'enchaîne
 
+### Mise en place (`game_engine.setup_game`)
+
+`setup_game(names, human_id, personality_names, rng)` tire les rôles et les personnalités (`assign_players`), choisit la fausse piste de la Voyante, crée la mémoire et les agents (`create_all_agents`), puis enregistre les informations de première nuit (`first_night_info`) en `role_info`, visibles du seul joueur concerné. Elle renvoie `(state, agents, memory)`.
+
 ### Un jour de discussion
 
 ```
@@ -248,6 +257,8 @@ replies = await private_message("humain", "Tu soupçonnes qui ?", [agents["ana"]
 
 ### Une nuit
 
+Dans `game_engine`, `play_night(state, rng, choose)` et `play_day(state, choose)` reçoivent une fonction de choix ; un choix invalide ou absent devient un choix légal au hasard (nuit) ou une abstention (vote). Les agents ne sont pas encore branchés sur ces fonctions (voir section 7). Le principe du branchement :
+
 ```python
 from backend.rules import legal_actions, random_legal_choice, resolve_night
 
@@ -274,21 +285,26 @@ state = resolve_night(state, choices)
 |---|---|
 | Choix légaux, effets des pouvoirs, nuit, vote, Majordome, victoire, informations de la première nuit | `backend/rules` |
 | État de la partie (vivants / morts, rôles réels, effets) | `backend/models` (`GameState`, `Player`, `Role`) |
-| Boucle de jeu, timer, enregistrement des actions de nuit et des votes, tirage des personnalités | `game_engine` |
+| Tirage des rôles et des personnalités | `backend/rules` (`assign_players`) |
+| Boucle de jeu (mise en place, nuit, vote, tours jusqu'à la victoire), timer, enregistrement des actions de nuit et des votes | `game_engine` |
 | Chargement des skills | `prompt_loader` |
 | Lien avec le front, choix de l'humain | `server` |
 
 ## 7. Points à aligner avec le moteur de jeu
 
-- **Id et nom des joueurs** : la mémoire affiche les auteurs par leur **id**, alors que le prompt donne à l'agent son **nom**. Il faut soit utiliser le nom comme id, soit traduire les ids en noms dans `context_for`.
-- **Deux horloges** : `MemoryManager` (`day`, `phase`) et `GameState` (`turn`, `phase`) doivent avancer ensemble.
+- **Id et nom des joueurs** : la mémoire et les prompts savent afficher les noms, à condition de créer la mémoire avec le dictionnaire `{id: nom}`. Aujourd'hui `setup_game` appelle `MemoryManager(list(names))` (ids seulement) ; il suffit de passer `MemoryManager(names)`.
+- **Fonctions de choix synchrones** : `play_night` et `play_day` attendent des fonctions normales (`ChoiceFn`, `VoteFn`), alors que `agent.night_action` et `agent.vote` sont `async`. Il faut soit rendre la boucle `async`, soit recueillir les choix des agents avant d'appeler la boucle.
+- **Deux horloges** : `MemoryManager` (`day`, `phase`) et `GameState` (`turn`, `phase`) doivent avancer ensemble. La boucle n'appelle pas encore `memory.advance_phase()` : tous les événements sont datés « Nuit 1 ».
+- **Nuits et votes absents de la mémoire** : à part la première nuit, rien n'est enregistré (morts annoncées, réponse de la Voyante, votes, exécution). Sans cela, les agents ne savent pas ce qui s'est passé.
+- **Information du Détective** : le texte de `_info_text` dit « l'un d'eux est le Diablotin », alors que le Détective voit un **sbire**.
+- **Nom affiché des personnalités** : `assign_players` met le nom anglais aussi comme nom français (`agent.personality` vaut `"agitator"` et non `"Provocateur"`). Les conversations ne sont pas touchées : elles utilisent `personality_key`.
 - **Historique** : `GameState.log` et `Channel` ont un rôle proche de la mémoire. Il faut décider si les messages des conversations y sont aussi copiés (par exemple pour le front).
 - **Agent et état du joueur** : `Player` est immuable, donc `agent.player` reste celui de la création (il ne voit pas sa mort). Pour l'état actuel, lire `GameState`.
 
 ## 8. Limites connues / à faire
 
 - Le contexte grandit à chaque événement (environ 1 900 à 2 800 tokens par appel dans une phase de discussion) : prévoir un **résumé par jour** pour les longues parties.
-- Les personnalités non obligées passent rarement leur tour : à renforcer si l'Observateur doit parler moins.
+- Les personnalités non obligées passaient rarement leur tour : l'instruction a été renforcée, à vérifier dans une vraie partie.
 - Conversation privée : pas de limite de messages pour l'instant (le serveur ou le timer décide de la fin). Quand l'humain refuse, c'est un agent qui vient lui parler ; les conversations entre agents seuls ne sont pas encore faites.
 
 ## 9. Tests
@@ -299,8 +315,8 @@ python -m pytest tests/ -q
 
 | Fichier | Vérifie surtout |
 |---|---|
-| `tests/test_memory_manager.py` | L'**isolation** : un joueur ne voit jamais un événement qui ne lui est pas destiné |
-| `tests/test_agent_factory.py` | Prompt, actions de nuit, votes, choix illégaux redemandés, `PASSE` |
+| `tests/test_memory_manager.py` | L'**isolation** : un joueur ne voit jamais un événement qui ne lui est pas destiné ; noms affichés à la place des ids |
+| `tests/test_agent_factory.py` | Prompt (noms des joueurs), actions de nuit, votes, choix illégaux redemandés, `PASSE` et ses variantes |
 | `tests/test_conversations.py` | Ordre de parole, limite de 10 messages, fin quand tout le monde passe, secret du privé, agent en échec |
 
 Les tests utilisent un **faux LLM** : aucun appel réseau. Lancer depuis la racine du projet.

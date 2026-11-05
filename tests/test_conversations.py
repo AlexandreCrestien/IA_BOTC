@@ -203,3 +203,10 @@ def test_human_cannot_talk_privately_with_himself(memory):
     agents = make_agents(memory, ["agitator", "clown", "observer", "paranoid", "strategist"])
     with pytest.raises(ValueError, match="propre interlocuteur"):
         asyncio.run(start_private_conversation(HUMAN, [agents[4]], memory))  # agents[4] = eva = HUMAN
+
+
+def test_meeting_announcement_uses_names(fake_llm):
+    memory = MemoryManager({i: i.capitalize() for i in IDS})
+    agents = make_agents(memory, ["clown"])
+    asyncio.run(start_private_conversation("eva", agents, memory))
+    assert memory.events_for("dan")[0].content == "Conversation privée entre Eva, Ana."

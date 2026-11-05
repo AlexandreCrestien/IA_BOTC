@@ -6,7 +6,14 @@ game_master = "game_master"
 
 
 class MemoryManager:
-    def __init__(self, player_ids: list[str]):
+    def __init__(self, player_ids: list[str] | dict[str, str]):
+        """player_ids : liste d'ids, ou dict {id: nom affiché}.
+        Avec le dict, l'historique montre les noms (ce que les agents connaissent) au lieu des ids."""
+        if isinstance(player_ids, dict):
+            self.names = dict(player_ids)
+            player_ids = list(player_ids)
+        else:
+            self.names = {}
         duplicates = sorted({p for p in player_ids if player_ids.count(p) > 1})
         if duplicates:
             raise ValueError(f"Identifiants de joueurs en double : {duplicates}")
@@ -84,6 +91,12 @@ class MemoryManager:
                 partners |= e.visible_to - {player}
         return partners
 
+    def name_of(self, player: str) -> str:
+        """Nom affiché d'un joueur (son id si aucun nom n'a été donné)."""
+        if player == game_master:
+            return "Maître du Jeu"
+        return self.names.get(player, player)
+
     def context_for(self, player: str) -> str:
         """Texte à injecter dans le prompt de l'agent : tout ce que ce joueur sait, en français."""
         lines = []
@@ -95,15 +108,15 @@ class MemoryManager:
             elif e.visible_to == {player}:
                 channel = "personnel"
             else:
-                others = sorted(e.visible_to - {player})
+                others = sorted(self.name_of(p) for p in e.visible_to - {player})
                 channel = f"privé avec {', '.join(others)}"
 
             if e.author_id is None:
-                author = "Maître du Jeu"
+                author = self.name_of(game_master)
             elif e.author_id == player:
                 author = "Toi"
             else:
-                author = e.author_id
+                author = self.name_of(e.author_id)
 
             lines.append(f"[{moment}] ({channel}) {author} : {e.content}")
 
