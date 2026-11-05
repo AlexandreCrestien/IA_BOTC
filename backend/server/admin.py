@@ -12,8 +12,9 @@ router = APIRouter(prefix="/admin", tags=["Administration"])
 ADMIN_SECRET_TOKEN = os.getenv("ADMIN_SECRET_TOKEN")
 
 def verify_admin_token(x_admin_token: str = Header(...)):
-    """Vérifie que la requête contient le bon jeton secret dans le header."""
-    if x_admin_token != ADMIN_SECRET_TOKEN:
+    """Vérifie que la requête contient le bon jeton secret dans le header.
+    Si aucun jeton n'est configuré (variable absente ou vide), l'accès admin est toujours refusé."""
+    if not ADMIN_SECRET_TOKEN or x_admin_token != ADMIN_SECRET_TOKEN:
         logger.warning("Tentative d'accès admin non autorisée détectée.")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
