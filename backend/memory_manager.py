@@ -1,6 +1,6 @@
 from backend.models import EventType, GameEvent, Phase
 
-Event = GameEvent  # le modèle d'événement vit maintenant dans backend.models
+Event = GameEvent  # le modèle d'événement vit dans backend.models
 
 game_master = "game_master"
 
@@ -14,19 +14,14 @@ class MemoryManager:
             raise ValueError(f"'{game_master}' est réservé au Maître du Jeu, pas à un joueur")
         self.player_ids = frozenset(player_ids)
         self._events: list[Event] = []
-        # Moment actuel de la partie : la partie commence par la nuit 1
-        self.day = 1
+        # Moment courant, fixé par l'orchestrateur via set_moment (il vient de GameState).
+        self.turn = 1
         self.phase = Phase.NUIT
 
-    def advance_phase(self) -> None:
-        """Nuit N -> Jour N -> Nuit N+1. Appelé par l'orchestrateur à chaque changement de phase."""
-        if self.phase == Phase.NUIT:
-            self.phase = Phase.DISCUSSION
-        elif self.phase == Phase.DISCUSSION:
-            self.phase = Phase.VOTE
-        else:
-            self.phase = Phase.NUIT
-            self.day += 1
+    def set_moment(self, turn: int, phase: Phase) -> None:
+        """Appelé par l'orchestrateur à chaque changement de phase. Ne calcule rien."""
+        self.turn = turn
+        self.phase = phase
 
     def _check_readers(self, visible_to: frozenset[str] | None) -> None:
         if visible_to is None:
@@ -52,7 +47,7 @@ class MemoryManager:
             self._check_readers(visible_to)
             if author != game_master:
                 visible_to = visible_to | {author}
-        event = Event(turn=self.day, phase=self.phase, type=type,
+        event = Event(turn=self.turn, phase=self.phase, type=type,
                       author_id=None if author == game_master else author,
                       content=content, visible_to=visible_to)
         self._events.append(event)

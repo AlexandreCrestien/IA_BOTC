@@ -30,7 +30,7 @@ def state() -> GameState:
 
 def test_initial_state_is_night_turn_1():
     s = GameState()
-    assert s.turn == 1 and s.phase == Phase.NUIT and s.players == () and s.log == ()
+    assert s.turn == 1 and s.phase == Phase.NUIT and s.players == ()
 
 
 def test_night_moves_to_discussion_same_turn():
@@ -82,29 +82,6 @@ def test_alive_players_excludes_dead():
     ids = [p.id for p in state().alive_players()]
     assert ids == ["odette", "brutus"]
 
-
-def test_add_event():
-    event = GameEvent(type=EventType.death, turn=1, phase=Phase.NUIT, content="Gaspard est mort.")
-    assert len(state().add_event(event).log) == 1
-
-
-def test_public_log_visible_to_everyone():
-    event = GameEvent(type=EventType.vote, turn=1, phase=Phase.DISCUSSION, content="Vote ouvert.")
-    assert len(state().add_event(event).log_visible_to("gaspard")) == 1
-
-
-def test_private_log_visible_only_to_readers():
-    event = GameEvent(type=EventType.night_info, turn=1, phase=Phase.NUIT,
-                      content="Info privée.", visible_to=frozenset({"odette"}))
-    s = state().add_event(event)
-    assert len(s.log_visible_to("odette")) == 1
-    assert s.log_visible_to("brutus") == ()
-
-
-def test_engine_only_log_invisible_to_players():
-    event = GameEvent(type=EventType.role_info, turn=1, phase=Phase.NUIT,
-                      content="Information interne.", visible_to=frozenset())
-    assert state().add_event(event).log_visible_to("odette") == ()
 
 def test_replace_channel():
     s = state()

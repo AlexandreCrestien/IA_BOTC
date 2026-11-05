@@ -59,7 +59,7 @@ def setup_game(
         Player(id=player_id, name=name, role=Role(**role_data))
         for player_id, (name, role_data, _) in assignments.items()
     )
-    state = GameState(turn=1, phase=Phase.NUIT, players=players, channels=(), log=())
+    state = GameState(turn=1, phase=Phase.NUIT, players=players, channels=())
 
     roles = {player.id: player.role for player in players}
     false_lead = choose_false_lead(roles, rng)
@@ -69,6 +69,7 @@ def setup_game(
     memory = MemoryManager(list(names))
     agents = create_all_agents(assignments, memory, human_id, prompt_loader)
 
+    memory.set_moment(state.turn, state.phase)
     for info in first_night_info(state, rng):
         memory.add_event(
             EventType.role_info,
