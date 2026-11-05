@@ -1,6 +1,6 @@
-# Architecture IA : `llm_client`, `memory_manager` et `agent_factory`
+# Architecture IA : `llm_client`, `memory_manager`, `agent_factory` et `conversations`
 
-*Partie « AI & Memory Architect ». Ce document décrit les trois modules, ce que chacun fait, et comment ils s'enchaînent.*
+*Partie « AI & Memory Architect ». Ce document décrit les quatre modules, ce que chacun fait, et comment ils s'enchaînent.*
 
 ## Vue d'ensemble
 
@@ -11,15 +11,18 @@ Chaque module a une seule responsabilité :
 | `backend/llm_client.py` | **Comment** parler aux modèles (choix du modèle, fallback, JSON) | Rien de spécifique au jeu |
 | `backend/memory_manager.py` | **Ce que** chaque joueur sait (qui a vu quoi) | Appeler un LLM, décider des règles |
 | `backend/agent_factory.py` | **Assembler** un personnage IA : prompt + mémoire + LLM | Enregistrer dans la mémoire, décider ce qui est légal |
+| `backend/conversations.py` | **Qui parle et quand** pendant les conversations publiques et privées | Gérer la boucle de jeu, le timer ou l'interface |
 
 Les dépendances vont dans un seul sens :
 
 ```
-agent_factory ──► memory_manager
+conversations ──► agent_factory ──► memory_manager ──► models (GameEvent, EventType, Phase)
+      │                 │
+      │                 ├────────► prompt_loader ──► skills/*.md
+      │                 │
+      │                 └────────► llm_client ──► LiteLLM (Groq, Gemini, OpenRouter)
       │
-      ├────────► prompt_loader ──► skills/*.md
-      │
-      └────────► llm_client ──► LiteLLM (Groq, Gemini, OpenRouter)
+      └──────────────► memory_manager
 ```
 
 `memory_manager` et `llm_client` ne se connaissent pas. Seul `agent_factory` les relie.
@@ -37,7 +40,7 @@ Le code ne demande jamais un modèle précis, mais un **profil** :
 | Profil | Usage | Timeout | `max_tokens` |
 |---|---|---|---|
 | `"fast"` | Messages du salon public, conversations privées | 10 s | 1000 |
-| `"capable"` | Actions de nuit, nominations, votes | 25 s | 2000 |
+| `"capable"` | Actions de nuit, votes | 25 s | 2000 |
 
 Chaque profil est une **liste ordonnée de modèles** (`FAST_MODELS`, `CAPABLE_MODELS`). Le choix et l'ordre sont justifiés dans [`choix_des_modeles.md`](choix_des_modeles.md).
 
@@ -54,7 +57,7 @@ Le `Router` de LiteLLM, créé **une seule fois** au chargement du module :
 | `await ask_llm(profile, messages)` | `str` | Texte de la réponse. Lève une erreur si la réponse est vide. |
 | `await ask_llm_json(profile, messages, schema, context=None)` | objet Pydantic | Demande du JSON, retire les balises ` ```json `, valide avec `schema`. En cas de JSON invalide, de refus ou de choix illégal, redemande en expliquant l'erreur (2 essais au total, `JSON_ATTEMPTS`). `context` est transmis aux validateurs du schéma. |
 
-**Si tous les modèles échouent**, l'exception remonte. C'est à l'appelant (l'orchestrateur) de prendre une décision par défaut, par exemple une action légale au hasard. Attraper `Exception` de façon générale : le type exact varie selon la dernière erreur de la chaîne.
+**Si tous les modèles échouent**, l'exception remonte. C'est à l'appelant de prendre une décision par défaut : par exemple `random_legal_choice` (dans `backend/rules`) pour une action de nuit. Attraper `Exception` de façon générale : le type exact varie selon la dernière erreur de la chaîne.
 
 ### Logs
 
@@ -64,6 +67,7 @@ Chaque appel écrit une ligne `INFO` : profil, modèle qui a vraiment répondu, 
 import logging
 logging.basicConfig(level=logging.WARNING)
 logging.getLogger("backend.llm_client").setLevel(logging.INFO)
+logging.getLogger("backend.conversations").setLevel(logging.INFO)  # tours passés, agents en échec
 ```
 
 ---
@@ -72,41 +76,44 @@ logging.getLogger("backend.llm_client").setLevel(logging.INFO)
 
 ### Principe
 
-Toute information de la partie est un **événement** (`Event`), et chaque événement indique **qui peut le voir** (`visible_to`). La mémoire est la liste chronologique des événements ; ce qu'un joueur sait, c'est cette liste **filtrée** pour lui.
+Toute information de la partie est un **événement**, et chaque événement indique **qui peut le voir** (`visible_to`). La mémoire est la liste chronologique des événements ; ce qu'un joueur sait, c'est cette liste **filtrée** pour lui.
 
-### `Event`
+### L'événement : `GameEvent` (défini dans `backend/models`)
 
-Modèle Pydantic **figé** (`frozen=True`) : on ne peut pas modifier un événement après sa création.
+`memory_manager` utilise le modèle commun `GameEvent` (alias `Event`). Il est **figé** : on ne peut pas le modifier après sa création.
 
 | Champ | Type | Sens |
 |---|---|---|
-| `day` | `int` | Numéro du jour / de la nuit |
-| `phase` | `Phase` | `night` ou `day` |
+| `turn` | `int` | Numéro du tour (nuit N, puis jour N) |
+| `phase` | `Phase` | `NUIT`, `DISCUSSION` ou `VOTE` |
 | `type` | `EventType` | `announcement`, `death`, `public_message`, `private_meeting`, `private_summary`, `nomination`, `vote`, `night_action`, `night_info`, `role_info` |
-| `author` | `str` | Id d'un joueur, ou `game_master` |
+| `author_id` | `str \| None` | Id d'un joueur ; `None` = le Maître du Jeu |
 | `content` | `str` | Le texte de l'événement |
 | `visible_to` | `frozenset[str] \| None` | `None` = tout le monde ; sinon, les ids qui peuvent le voir |
+
+Pour écrire au nom du Maître du Jeu, on passe l'auteur `game_master` : la mémoire le convertit en `author_id=None`.
 
 ### Qui voit quoi
 
 | Événement | Visible par | Méthode |
 |---|---|---|
-| Annonce, mort, message public, nomination, vote, « A et B ont discuté » | Tous | `add_public` |
-| Contenu d'une conversation privée, alliance entre démons | Les participants | `add_private` |
+| Annonce, mort, message public, vote, « Conversation privée entre A, B » | Tous | `add_public` |
+| Messages d'une conversation privée, alliance entre démons | Les participants | `add_private` |
 | Action de nuit, information de nuit, rôle | Un seul joueur | `add_personal` |
-| Leurre de la Voyante, joueur empoisonné, vrais rôles | **Personne** : c'est l'état du jeu, pas la mémoire | — |
+| Fausse piste de la Voyante, joueur empoisonné, vrais rôles | **Personne** : c'est l'état du jeu (`GameState`), pas la mémoire | — |
 
-La mémoire **ne décide pas** si une information est vraie ou fausse (empoisonnement, leurre) : elle enregistre ce que l'orchestrateur lui donne.
+La mémoire **ne décide pas** si une information est vraie ou fausse (empoisonnement, fausse piste) : elle enregistre ce que l'orchestrateur lui donne.
 
 ### Méthodes de `MemoryManager(player_ids)`
 
 | Méthode | Rôle |
 |---|---|
-| `advance_phase()` | Nuit N → Jour N → Nuit N+1. La partie commence à la nuit 1. |
+| `advance_phase()` | Nuit N → Discussion N → Vote N → Nuit N+1. La partie commence à la nuit 1. |
 | `add_event(type, author, content, visible_to)` | Fonction générique. Si l'auteur est un joueur, il est ajouté automatiquement aux lecteurs. |
 | `add_public` / `add_private` / `add_personal` | Raccourcis qui fixent `visible_to`. |
 | `events_for(player)` | **Seule façon de lire la mémoire** : les événements visibles par ce joueur, dans l'ordre. Renvoie une nouvelle liste. |
-| `context_for(player)` | Les mêmes événements, sous forme de texte en français pour le prompt. |
+| `private_partners(player)` | Les joueurs avec qui ce joueur a déjà eu une conversation privée (lu à partir des événements `private_summary`). |
+| `context_for(player)` | Les événements visibles, sous forme de texte en français pour le prompt. |
 
 ### Protections (lèvent `ValueError`)
 
@@ -120,12 +127,13 @@ La mémoire **ne décide pas** si une information est vraie ou fausse (empoisonn
 ```
 [Nuit 1] (personnel) Maître du Jeu : Tu es le Moine.
 [Nuit 1] (personnel) Toi : Je protège bruno.
-[Jour 1] (public) Maître du Jeu : Le jour 1 commence. Personne n'est mort.
+[Jour 1] (public) Maître du Jeu : Le jour 1 se lève. Personne n'est mort cette nuit.
 [Jour 1] (public) carla : Bonjour à tous !
-[Jour 1] (privé avec bruno) Toi : Ana et Bruno soupçonnent carla.
+[Jour 1] (public) Maître du Jeu : Conversation privée entre eva, ana.
+[Jour 1] (privé avec eva) Toi : Je soupçonne carla.
 ```
 
-Le canal (`public` / `personnel` / `privé avec …`) aide l'agent à ne pas répéter en public ce qu'il a appris en privé.
+Les phases `DISCUSSION` et `VOTE` s'affichent toutes les deux « Jour ». Le canal (`public` / `personnel` / `privé avec …`) aide l'agent à ne pas répéter en public ce qu'il a appris en privé.
 
 ---
 
@@ -133,106 +141,166 @@ Le canal (`public` / `personnel` / `privé avec …`) aide l'agent à ne pas ré
 
 ### Le prompt d'un agent
 
-Construit une fois, à la création de l'agent :
-
-1. **Base assemblée par `PromptLoader`** (`backend/prompt_loader.py`) : contexte du jeu, skill de rôle (`skills/roles/<role>.md`), skill de personnalité (`skills/personalities/<personnalité>.md`) et règles générales (`skills/general_rules.md`, dont la concision : 2 phrases maximum) ;
-2. **`AGENT_RULES`** : règles propres aux agents IA, absentes de `general_rules.md` (première nuit sans mort, morts toujours présents, ne rien inventer, secret du privé, secret de l'allié démon, français, pas de hashtags) ;
-3. la liste des joueurs présents.
+1. **Base assemblée par `PromptLoader`** (`backend/prompt_loader.py`) : contexte du jeu, skill de rôle (`skills/roles/<role>.md`), skill de personnalité (`skills/personalities/<personnalité>.md`) et règles générales (`skills/general_rules.md`). Ces règles comprennent la concision (2 phrases maximum), « pas de mort la première nuit », « ne rien inventer », le secret du privé et le secret de l'allié démon.
+2. **La liste des joueurs présents**, ajoutée à chaque appel.
 
 À chaque appel, on ajoute un message avec **ce que l'agent sait** (`memory.context_for`) et **l'instruction du moment**.
 
-### Méthodes de `Agent(player_id, role, personality, memory)`
+### `Agent(player, personality, memory, system_prompt, personality_key=None)`
+
+| Attribut | Sens |
+|---|---|
+| `player` | Le `Player` (de `backend/models`) au moment de la création |
+| `player_id`, `name`, `role_name` | Raccourcis vers `player.id`, `player.name`, `player.role.name_FR` |
+| `personality` | Nom affiché de la personnalité (ex. `"Provocateur"`) |
+| `personality_key` | Identifiant stable = nom du fichier skill (ex. `"agitator"`). C'est lui qu'on utilise pour les règles (ordre de parole). Par défaut, égal à `personality`. |
 
 | Méthode | Profil | Renvoie |
 |---|---|---|
-| `await speak_public()` | fast | Texte du message pour le salon public |
+| `await speak_public(optional=False)` | fast | Texte du message. Avec `optional=True`, l'agent peut répondre `PASSE` : la méthode renvoie alors `None`. |
 | `await speak_private(partners)` | fast | Réponse dans une conversation privée |
 | `await night_action(options, number_of_targets=1)` | capable | Liste des cibles (2 pour la Voyante) |
-| `await nominate(options)` | capable | Un joueur, ou `None` pour personne |
-| `await vote(nominee)` | capable | `True` (pour l'exécution) / `False` |
+| `await vote(options)` | capable | L'id du joueur choisi, ou `None` pour « Personne » |
 
-- `options` = les **choix légaux**, fournis par le moteur de règles. Un choix hors des options est refusé par la validation et redemandé au modèle.
+- `options` = les **choix légaux**, fournis par le moteur de règles (`legal_actions(state, id).targets` pour la nuit). Un choix hors des options est refusé par la validation et redemandé au modèle.
 - La `raison` donnée par le modèle va **seulement dans les logs**, jamais dans la mémoire.
 - Les méthodes **renvoient** un résultat : elles n'écrivent pas dans la mémoire.
 
-### `create_agents(assignments, memory, human_id)`
+### Création : `AgentFactory` et `create_all_agents`
 
-Crée un agent par joueur IA à partir de `{id: (rôle, personnalité)}`. L'humain n'a pas d'agent.
+- `AgentFactory(prompt_loader=None).create_agent(agent_id, agent_name, role_data, personality_data, memory)` crée un agent. `role_data` est un dictionnaire de `Role` ; `personality_data` contient `personality_name_EN` (nom du fichier skill) et, en option, `personality_name_FR` (nom affiché).
+- `create_all_agents(assignments, memory, human_id, prompt_loader=None)` crée un agent par joueur IA à partir de `{id: (nom, role_data, personality_data)}`. L'humain n'a pas d'agent.
 
 ---
 
-## 4. Comment tout s'enchaîne : un tour de parole
+## 4. `conversations.py` : les phases de conversation
+
+### Ordre et obligation de parole
+
+Le tableau `personalities` donne, pour chaque `personality_key`, l'ordre de parole et si l'agent est obligé de parler :
+
+| Personnalité | Ordre | Obligé de parler |
+|---|---|---|
+| `agitator` | 1 | oui |
+| `paranoid` | 2 | oui |
+| `clown` | 3 | oui |
+| `strategist` | 4 | non |
+| `observer` | 5 | non |
+
+Une personnalité absente du tableau parle en dernier, sans obligation.
+
+### Conversation publique : `await public_conversation(agents, memory, max_messages=10)`
+
+- `agents` : les agents IA seulement (l'humain ne participe pas à cette phase).
+- Les agents parlent à tour de rôle dans l'ordre du tableau ; ceux qui ne sont pas obligés peuvent passer.
+- Chaque message est enregistré **tout de suite** dans la mémoire (`public_message`), pour que l'agent suivant le voie.
+- Arrêt à `max_messages` messages au total, ou quand un tour entier se passe sans aucun message (évite une boucle infinie).
+- Si le LLM d'un agent échoue, cet agent ne parle pas et la discussion continue.
+- Renvoie la liste `(id_joueur, texte)`, dans l'ordre, pour l'affichage.
+
+### Conversation privée
+
+| Fonction | Rôle |
+|---|---|
+| `choose_agent_for_human(agents, human_id, memory)` | Quand l'humain n'a choisi personne : choisit l'agent qui vient lui parler. Priorité à ceux qui n'ont jamais discuté avec lui (`private_partners`), puis la personnalité la plus bavarde. |
+| `await start_private_conversation(human_id, partners, memory, agent_speaks_first=False)` | Ouvre la conversation avec 1 ou 2 agents. Annonce en public « Conversation privée entre … », sans le contenu. Avec `agent_speaks_first=True`, l'agent ouvre la conversation. |
+| `await private_message(human_id, text, partners, memory)` | L'humain envoie un message ; chaque agent répond à son tour. Appelé à chaque message de l'humain. |
+
+- Les messages privés (de l'humain et des agents) sont enregistrés en `private_summary`, visibles seulement des participants.
+- Chaque réponse est enregistrée tout de suite : dans une conversation à trois, le second agent voit la réponse du premier.
+- 0 ou plus de 2 agents, ou l'humain dans `partners` : `ValueError`.
+- Le choix de l'humain arrive en paramètre : ces fonctions ne posent jamais de question elles-mêmes.
+
+---
+
+## 5. Comment tout s'enchaîne
+
+### Un jour de discussion
 
 ```
-game_engine (orchestrateur)
-   │  « ana, c'est ton tour de parler »
-   ▼
-Agent ana ─────────────── agent_factory
-   │ 1. memory.context_for("ana")           → memory_manager : ce qu'ana sait
-   │ 2. messages = [prompt système, contexte + instruction]
-   │ 3. ask_llm("fast", messages)           → llm_client → Router → modèle
-   ▼
-   renvoie le texte
-   │
 game_engine
-   │ 4. memory.add_public(public_message, "ana", texte)
+   │  memory.advance_phase()  → Discussion
+   │  memory.add_public(announcement, game_master, "Le jour 1 se lève…")
    ▼
-tour suivant : les autres agents verront ce message dans leur contexte
+public_conversation(agents, memory) ─────────── conversations
+   │ pour chaque agent, dans l'ordre des personnalités :
+   │   1. agent.speak_public(optional=…)     → agent_factory → llm_client
+   │   2. memory.add_public(public_message)  → memory_manager
+   ▼
+   renvoie les messages pour l'affichage
 ```
 
 En code :
 
 ```python
-memory = MemoryManager(["ana", "bruno", "carla", "humain"])
-agents = create_agents(
-    {"ana": ("imp", "strategist"), "bruno": ("monk", "paranoid"),
-     "carla": ("psychic", "clown"), "humain": ("butler", "observer")},
-    memory,
-    human_id="humain",
-)
+memory = MemoryManager(ids)
+agents = create_all_agents(assignments, memory, human_id="humain")
 
 memory.add_personal(EventType.role_info, game_master, "Tu es le Diablotin.", "ana")
-memory.advance_phase()  # jour 1
+memory.advance_phase()  # discussion, jour 1
 
-text = await agents["ana"].speak_public()
-memory.add_public(EventType.public_message, "ana", text)
+said = await public_conversation(list(agents.values()), memory)
+
+# L'humain a choisi ana pour une conversation privée
+await start_private_conversation("humain", [agents["ana"]], memory)
+replies = await private_message("humain", "Tu soupçonnes qui ?", [agents["ana"]], memory)
 ```
 
-**C'est l'orchestrateur qui enregistre dans la mémoire**, pas l'agent : lui seul sait si le message va au salon public ou dans une conversation privée.
-
-Pour une action de nuit :
+### Une nuit
 
 ```python
-options = ...  # fourni par le rules_engine
-try:
-    targets = await agents["ana"].night_action(options)
-except Exception:
-    targets = [random.choice(options)]  # filet de sécurité : la partie continue
-memory.add_personal(EventType.night_action, "ana", f"J'ai choisi {targets[0]}.", "ana")
+from backend.rules import legal_actions, random_legal_choice, resolve_night
+
+choices = {}
+for player_id, agent in agents.items():
+    action = legal_actions(state, player_id)
+    if not action.targets:
+        continue
+    try:
+        choices[player_id] = tuple(await agent.night_action(list(action.targets), action.count))
+    except Exception:
+        choices[player_id] = random_legal_choice(state, player_id, rng)  # filet de sécurité
+    memory.add_personal(EventType.night_action, player_id, f"J'ai choisi {', '.join(choices[player_id])}.", player_id)
+state = resolve_night(state, choices)
 ```
+
+**C'est l'orchestrateur qui enregistre les actions de nuit et les votes dans la mémoire**, pas l'agent. Pour les conversations, c'est `conversations.py` qui s'en charge.
 
 ---
 
-## 5. Ce qui n'est pas dans ces modules
+## 6. Ce qui n'est pas dans ces modules
 
 | Sujet | Où |
 |---|---|
-| Qui peut agir, choix légaux, effets des pouvoirs, vote fantôme, victoire | `rules_engine` |
-| État de la partie (vivants / morts, rôles réels) | `models` |
-| Boucle de jeu, timer, enregistrement dans la mémoire, tirage des rôles et personnalités, filet de sécurité | `game_engine` |
+| Choix légaux, effets des pouvoirs, nuit, vote, Majordome, victoire, informations de la première nuit | `backend/rules` |
+| État de la partie (vivants / morts, rôles réels, effets) | `backend/models` (`GameState`, `Player`, `Role`) |
+| Boucle de jeu, timer, enregistrement des actions de nuit et des votes, tirage des personnalités | `game_engine` |
 | Chargement des skills | `prompt_loader` |
-| Lien avec le front | `server` |
+| Lien avec le front, choix de l'humain | `server` |
 
-## 6. Limites connues / à faire
+## 7. Points à aligner avec le moteur de jeu
 
-- Le contexte grandit à chaque événement (environ 1 700 à 2 200 tokens par appel lors des tests) : prévoir un **résumé par jour** pour les longues parties.
-- Les conversations privées simulées entre agents ne sont pas encore décidées (script ou appel LLM).
-- Les agents ne voient pas encore explicitement la liste des vivants / morts : à ajouter quand `models` sera prêt (pour l'instant, les morts sont connues via les événements `death`).
+- **Id et nom des joueurs** : la mémoire affiche les auteurs par leur **id**, alors que le prompt donne à l'agent son **nom**. Il faut soit utiliser le nom comme id, soit traduire les ids en noms dans `context_for`.
+- **Deux horloges** : `MemoryManager` (`day`, `phase`) et `GameState` (`turn`, `phase`) doivent avancer ensemble.
+- **Historique** : `GameState.log` et `Channel` ont un rôle proche de la mémoire. Il faut décider si les messages des conversations y sont aussi copiés (par exemple pour le front).
+- **Agent et état du joueur** : `Player` est immuable, donc `agent.player` reste celui de la création (il ne voit pas sa mort). Pour l'état actuel, lire `GameState`.
 
-## 7. Tests
+## 8. Limites connues / à faire
+
+- Le contexte grandit à chaque événement (environ 1 900 à 2 800 tokens par appel dans une phase de discussion) : prévoir un **résumé par jour** pour les longues parties.
+- Les personnalités non obligées passent rarement leur tour : à renforcer si l'Observateur doit parler moins.
+- Conversation privée : pas de limite de messages pour l'instant (le serveur ou le timer décide de la fin). Quand l'humain refuse, c'est un agent qui vient lui parler ; les conversations entre agents seuls ne sont pas encore faites.
+
+## 9. Tests
 
 ```
 python -m pytest tests/ -q
 ```
 
-`tests/test_memory_manager.py` vérifie surtout l'**isolation** : un joueur ne voit jamais un événement qui ne lui est pas destiné. Lancer depuis la racine du projet.
+| Fichier | Vérifie surtout |
+|---|---|
+| `tests/test_memory_manager.py` | L'**isolation** : un joueur ne voit jamais un événement qui ne lui est pas destiné |
+| `tests/test_agent_factory.py` | Prompt, actions de nuit, votes, choix illégaux redemandés, `PASSE` |
+| `tests/test_conversations.py` | Ordre de parole, limite de 10 messages, fin quand tout le monde passe, secret du privé, agent en échec |
+
+Les tests utilisent un **faux LLM** : aucun appel réseau. Lancer depuis la racine du projet.
