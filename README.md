@@ -1,4 +1,4 @@
-# Blood on the AI Clocktower
+# 🕰️ Blood on the AI Clocktower
 
 Création d'un site pour jouer contre des IA à *Blood on the Clocktower*.
 
@@ -12,12 +12,12 @@ Une partie se joue à **6 joueurs** : un humain et **5 agents IA**. Chaque agent
 
 | Rôle | Camp | Pouvoir |
 |---|---|---|
-| Diablotin | Démon | Chaque nuit, choisit un habitant à tuer. |
-| Empoisonneur | Sbire | Chaque nuit, empoisonne un habitant. Le poison dure jusqu'à la fin de la journée suivante. |
-| Moine | Villageois | Chaque nuit, protège un habitant de l'attaque du diablotin. |
-| Voyante | Villageois | Chaque nuit, sonde deux joueurs et apprend si l'un d'eux est démon. Une fausse piste est choisie au début de la partie. |
-| Détective | Villageois | Au début de la partie, voit un sbire parmi deux joueurs, dont l'un est choisi au hasard. |
-| Majordome | Outsider | Chaque nuit, choisit un maître. Ne peut voter que si son maître vote aussi. |
+| 😈 Diablotin | Démon | Chaque nuit, choisit un habitant à tuer. |
+| 🧪 Empoisonneur | Sbire | Chaque nuit, empoisonne un habitant. Le poison dure jusqu'à la fin de la journée suivante. |
+| 🛡️ Moine | Villageois | Chaque nuit, protège un habitant de l'attaque du diablotin. |
+| 🔮 Voyante | Villageois | Chaque nuit, sonde deux joueurs et apprend si l'un d'eux est démon. Une fausse piste est choisie au début de la partie. |
+| 🔍 Détective | Villageois | Au début de la partie, voit un sbire parmi deux joueurs, dont l'un est choisi au hasard. |
+| 🎩 Majordome | Outsider | Chaque nuit, choisit un maître. Ne peut voter que si son maître vote aussi. |
 
 ### Personnalités des agents
 
