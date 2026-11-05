@@ -76,6 +76,14 @@ class MemoryManager:
             raise ValueError(f"Joueur inconnu : {player}")
         return [e for e in self._events if e.visible_to is None or player in e.visible_to]
 
+    def private_partners(self, player: str) -> set[str]:
+        """Les joueurs avec qui ce joueur a déjà eu une conversation privée."""
+        partners = set()
+        for e in self.events_for(player):
+            if e.type == EventType.private_summary:
+                partners |= e.visible_to - {player}
+        return partners
+
     def context_for(self, player: str) -> str:
         """Texte à injecter dans le prompt de l'agent : tout ce que ce joueur sait, en français."""
         lines = []

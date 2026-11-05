@@ -119,3 +119,11 @@ def test_context_never_leaks_private_content(memory):
 
 def test_context_when_empty(memory):
     assert memory.context_for("ana") == "Aucun événement pour l'instant."
+
+
+def test_private_partners(memory):
+    memory.add_private(EventType.private_summary, "ana", "Salut", {"bruno"})
+    memory.add_public(EventType.public_message, "carla", "Bonjour à tous")
+    assert memory.private_partners("ana") == {"bruno"}
+    assert memory.private_partners("bruno") == {"ana"}
+    assert memory.private_partners("carla") == set()  # un message public n'est pas une conversation privée
