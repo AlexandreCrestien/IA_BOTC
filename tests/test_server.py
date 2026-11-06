@@ -10,10 +10,12 @@ from backend.server.app import app
 from backend.server.connection_manager import ConnectionManager, manager
 from backend.server.schemas import (
     ClientActionPacket,
-    CreateChannelAction,
-    NightAction,
+    RequestWhisperAction,
+    RespondWhisperInvitationAction,
+    SubmitNightAction,
+    SubmitVoteAction,
+    TriggerVotePhaseAction,
     SendChatAction,
-    VoteAction,
 )
 
 ADMIN_URL = "/admin/debug/all-states"
@@ -96,37 +98,49 @@ def test_parse_send_chat():
 
 
 @pytest.mark.parametrize("targets", [["ana"], ["ana", "bruno"]])
-def test_parse_create_channel_with_one_or_two_agents(targets):
-    action = parse_action({"action": "create_channel", "payload": {"target_ids": targets}})
-    assert isinstance(action, CreateChannelAction)
-    assert action.payload.target_ids == targets
+def test_parse_request_whisper_with_one_or_two_agents(targets):
+    action = parse_action({"action": "request_whisper", "payload": {"targets": targets}})
+    assert isinstance(action, RequestWhisperAction)
+    assert action.payload.targets == targets
 
 
 @pytest.mark.parametrize("targets", [[], ["ana", "bruno", "carla"]])
-def test_create_channel_needs_one_or_two_agents(targets):
+def test_request_whisper_needs_one_or_two_agents(targets):
     with pytest.raises(ValidationError):
-        parse_action({"action": "create_channel", "payload": {"target_ids": targets}})
+        parse_action({"action": "request_whisper", "payload": {"targets": targets}})
 
 
-def test_parse_night_action():
-    action = parse_action({"action": "night_action", "payload": {"targets": ["ana", "bruno"]}})
-    assert isinstance(action, NightAction)
+def test_parse_respond_whisper_invitation():
+    action = parse_action({"action": "respond_whisper_invitation", "payload": {"target_agent_id": "tobIAs", "accepted": True}})
+    assert isinstance(action, RespondWhisperInvitationAction)
+    assert action.payload.target_agent_id == "tobIAs"
+    assert action.payload.accepted is True
+
+
+def test_parse_submit_night_action():
+    action = parse_action({"action": "submit_night_action", "payload": {"targets": ["ana", "bruno"]}})
+    assert isinstance(action, SubmitNightAction)
     assert action.payload.targets == ["ana", "bruno"]
 
 
-def test_night_action_targets_default_to_empty():
-    assert parse_action({"action": "night_action", "payload": {}}).payload.targets == []
+def test_submit_night_action_targets_default_to_empty():
+    assert parse_action({"action": "submit_night_action", "payload": {}}).payload.targets == []
 
 
 def test_parse_vote_for_player():
-    action = parse_action({"action": "vote", "payload": {"target_id": "ana"}})
-    assert isinstance(action, VoteAction)
+    action = parse_action({"action": "submit_vote", "payload": {"target_id": "ana"}})
+    assert isinstance(action, SubmitVoteAction)
     assert action.payload.target_id == "ana"
 
 
 def test_vote_for_nobody():
-    assert parse_action({"action": "vote", "payload": {"target_id": None}}).payload.target_id is None
-    assert parse_action({"action": "vote", "payload": {}}).payload.target_id is None
+    assert parse_action({"action": "submit_vote", "payload": {"target_id": None}}).payload.target_id is None
+    assert parse_action({"action": "submit_vote", "payload": {}}).payload.target_id is None
+
+
+def test_parse_trigger_vote_phase():
+    action = parse_action({"action": "trigger_vote_phase", "payload": {}})
+    assert isinstance(action, TriggerVotePhaseAction)
 
 
 def test_empty_chat_message_is_rejected():
@@ -152,12 +166,12 @@ def test_packet_without_action_is_rejected():
 def test_unknown_payload_field_is_rejected():
     """Une faute de frappe ('targets' au lieu de 'target_id') ne doit pas devenir un vote pour personne."""
     with pytest.raises(ValidationError):
-        parse_action({"action": "vote", "payload": {"targets": ["ana"]}})
+        parse_action({"action": "submit_vote", "payload": {"targets": ["ana"]}})
 
 
 def test_unknown_field_in_action_is_rejected():
     with pytest.raises(ValidationError):
-        parse_action({"action": "vote", "payload": {"target_id": "ana"}, "joueur": "ana"})
+        parse_action({"action": "submit_vote", "payload": {"target_id": "ana"}, "joueur": "ana"})
 
 
 # --- WebSocket /ws/{player_id} ----------------------------------------------------
@@ -184,8 +198,11 @@ def test_websocket_invalid_action_returns_error(client):
 
 def test_websocket_valid_action_sends_no_error(client):
     with client.websocket_connect("/ws/humain") as ws:
-        ws.send_text(json.dumps({"action": "vote", "payload": {"target_id": "ana"}}))
-        # Une action valide ne renvoie rien (pas encore de moteur de jeu).
+        ws.send_text(json.dumps({"action": "submit_vote", "payload": {"target_id": "ana"}}))
+        # Une action valide renvoie une confirmation d'annonce, on vérifie que ce n'est pas une erreur de parsing
+        response = ws.receive_json()
+        assert response["type"] == "announcement"
+        
         # On envoie ensuite un message invalide : la première réponse reçue doit être son erreur.
         ws.send_text("pas du json")
         assert ws.receive_json()["data"] == "Format JSON invalide."
@@ -266,3 +283,56 @@ def test_broadcast_removes_broken_connections_and_keeps_others():
 
 def test_broadcast_without_connections_does_nothing():
     asyncio.run(ConnectionManager().broadcast({"type": "state_update", "data": {}}))
+
+
+def test_websocket_public_chat_broadcast(client):
+    """Vérifie qu'un message public envoyé par un joueur est bien diffusé à tous."""
+    with client.websocket_connect("/ws/joueur1") as ws1, client.websocket_connect("/ws/joueur2") as ws2:
+        # Le joueur 1 envoie un message public
+        ws1.send_text(json.dumps({
+            "action": "send_chat",
+            "payload": {"channel_id": "public", "content": "Bonjour le village"}
+        }))
+        
+        # Les deux joueurs doivent recevoir le message de chat
+        msg1 = ws1.receive_json()
+        msg2 = ws2.receive_json()
+        
+        assert msg1["type"] == "chat"
+        assert msg1["content"] == "Bonjour le village"
+        assert msg1["sender"] == "joueur1"
+        
+        assert msg2 == msg1
+
+
+def test_websocket_request_whisper(client):
+    """Vérifie qu'une demande de chuchotement prévient le public puis ouvre le canal privé."""
+    with client.websocket_connect("/ws/humain") as ws:
+        ws.send_text(json.dumps({
+            "action": "request_whisper",
+            "payload": {"targets": ["agent_1"]}
+        }))
+        
+        # 1. Le premier message est l'annonce publique dans le chat
+        public_msg = ws.receive_json()
+        assert public_msg["type"] == "chat"
+        assert public_msg["channel_id"] == "public"
+        
+        # 2. Le second message est l'ouverture effective du canal privé
+        private_msg = ws.receive_json()
+        assert private_msg["type"] == "private_channel_opened"
+        assert "agent_1" in private_msg["members"]
+        assert private_msg["channel_id"].startswith("whisper_")
+
+
+def test_websocket_trigger_vote_phase(client):
+    """Vérifie que déclencher le vote diffuse bien l'information à tout le monde."""
+    with client.websocket_connect("/ws/humain") as ws:
+        ws.send_text(json.dumps({
+            "action": "trigger_vote_phase",
+            "payload": {}
+        }))
+        
+        response = ws.receive_json()
+        assert response["type"] == "phase_update"
+        assert response["phase"] == "vote"
