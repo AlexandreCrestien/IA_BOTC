@@ -27,15 +27,111 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
             
             try:
                 data_dict = json.loads(raw_data)
-                
                 action_packet = action_validator.validate_python(data_dict)
                 
-                logger.info(f"Action reçue de {player_id} -> Type: {action_packet.action}")
+                action = action_packet.action
+                payload = action_packet.payload
                 
-                # TODO: Relayer l'action validée vers le backend/game_engine.py
-                # Exemple : 
-                # response = game_engine.handle_player_action(player_id, action_packet)
-                # await manager.send_to_player(player_id, response)
+                logger.info(f"Action reçue de {player_id} -> Type: {action} | Payload: {payload}")
+                
+                # 1. GESTION DU CHAT
+                if action == "send_chat":
+                    channel_id = payload.channel_id
+                    content = payload.content
+                    
+                    chat_packet = {
+                        "type": "chat",
+                        "channel_id": channel_id,
+                        "sender": player_id,
+                        "content": content
+                    }
+                    
+                    if channel_id == "public":
+                        # Diffusion à tout le monde
+                        await manager.broadcast(chat_packet)
+                    else:
+                        # Salon privé / Chuchotement (envoyé aux participants du canal)
+                        await manager.send_to_player(player_id, chat_packet)
+                        if channel_id != player_id:
+                            await manager.send_to_player(channel_id, chat_packet)
+
+                # 2. DEMANDE DE CONVERSATION PRIVÉE
+                elif action == "request_whisper":
+                    targets = payload.targets
+                        
+                    logger.info(f"Joueur {player_id} souhaite chuchoter avec les agents : {targets}")
+                    
+                    # Validation : 1 ou 2 agents maximum (déjà filtré par Pydantic, mais sécurité supplémentaire)
+                    if len(targets) == 0 or len(targets) > 2:
+                        await manager.send_to_player(
+                            player_id,
+                            {"type": "error", "data": "Vous devez sélectionner 1 ou 2 agents maximum pour un chuchotement."}
+                        )
+                    else:
+                        await manager.send_to_player(
+                            player_id,
+                            {
+                                "type": "announcement",
+                                "text": f"Proposition d'entretien transmise à {', '.join(targets)}."
+                            }
+                        )
+                        # TODO: Transmettre la demande groupée au game_engine / aux agents IA concernés
+
+                # 3. RÉPONSE À UNE INVITATION DE CONVERSATION PRIVÉE
+                elif action == "respond_whisper_invitation":
+                    target_agent_id = payload.target_agent_id
+                    accepted = payload.accepted
+                    
+                    logger.info(f"Joueur {player_id} a répondu à l'invitation de {target_agent_id} -> Accepté: {accepted}")
+                    
+                    if accepted:
+                        await manager.send_to_player(
+                            player_id,
+                            {
+                                "type": "announcement",
+                                "text": f"Canal privé ouvert avec {target_agent_id}."
+                            }
+                        )
+                        # TODO: Notifier le moteur de jeu / l'agent IA de démarrer la conversation privée
+                    else:
+                        pass
+
+                # 4. SOUMISSION DU VOTE
+                elif action == "submit_vote":
+                    target_id = payload.target_id
+                    logger.info(f"Vote enregistré pour {player_id} -> Cible : {target_id}")
+                    
+                    await manager.send_to_player(
+                        player_id, 
+                        {
+                            "type": "announcement", 
+                            "text": f"Votre vote pour '{target_id or 'personne'}' a bien été pris en compte."
+                        }
+                    )
+                    # TODO: Transmettre au game_engine pour centraliser les votes du village
+
+                # 5. ACTIONS DE NUIT
+                elif action == "submit_night_action":
+                    targets = payload.targets # Liste de cibles de nuit
+                    logger.info(f"Action de nuit reçue de {player_id} avec {len(targets)} cible(s) : {targets}")
+                    
+                    if len(targets) > 2:
+                        await manager.send_to_player(
+                            player_id,
+                            {"type": "error", "data": "Vous ne pouvez pas cibler plus de 2 joueurs."}
+                        )
+                    else:
+                        await manager.send_to_player(
+                            player_id,
+                            {
+                                "type": "announcement",
+                                "text": "Vos choix nocturnes ont été enregistrés."
+                            }
+                        )
+                        # TODO: Transmettre les cibles au game_engine pour la résolution nocturne
+
+                else:
+                    logger.warning(f"Action non reconnue reçue de {player_id}: {action}")
 
             except json.JSONDecodeError:
                 logger.warning(f"Message JSON invalide reçu de {player_id}")
