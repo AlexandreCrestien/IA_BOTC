@@ -73,18 +73,21 @@ def test_game_master_id_is_reserved():
 
 
 def test_events_keep_chronological_order_and_phase(memory):
+    memory.set_moment(1, Phase.NUIT)
     memory.add_public(EventType.announcement, game_master, "Nuit 1")
-    memory.advance_phase()
-    memory.add_public(EventType.announcement, game_master, "Jour 1")
-    memory.advance_phase()
+    memory.set_moment(1, Phase.DISCUSSION)
+    memory.add_public(EventType.announcement, game_master, "Discussion 1")
+    memory.set_moment(1, Phase.VOTE)
     memory.add_public(EventType.announcement, game_master, "Vote 1")
-    memory.advance_phase()
+    memory.set_moment(2, Phase.NUIT)
     memory.add_public(EventType.announcement, game_master, "Nuit 2")
 
     events = memory.events_for("ana")
-    assert contents(events) == ["Nuit 1", "Jour 1", "Vote 1", "Nuit 2"]
     assert [(e.turn, e.phase) for e in events] == [
-        (1, Phase.NUIT), (1, Phase.DISCUSSION), (1, Phase.VOTE), (2, Phase.NUIT),
+        (1, Phase.NUIT),
+        (1, Phase.DISCUSSION),
+        (1, Phase.VOTE),
+        (2, Phase.NUIT),
     ]
 
 def test_returned_list_does_not_change_memory(memory):
@@ -129,11 +132,12 @@ def test_private_partners(memory):
     assert memory.private_partners("carla") == set()  # un message public n'est pas une conversation privée
 
 
-# --- Noms affichés ----------------------------------------------------------------
+
+# --- Noms affichés (complète tests/test_memory_names.py) ---------------------------
 
 def test_names_replace_ids_in_context():
     """Les agents connaissent les joueurs par leur nom : l'historique ne doit pas montrer les ids."""
-    memory = MemoryManager({"p1": "Ana", "p2": "Bruno", "p3": "Carla"})
+    memory = MemoryManager(["p1", "p2", "p3"], names={"p1": "Ana", "p2": "Bruno", "p3": "Carla"})
     memory.add_private(EventType.private_summary, "p2", "On soupçonne Carla.", {"p1", "p2"})
     memory.add_public(EventType.public_message, "p3", "Bonjour !")
     memory.add_public(EventType.announcement, game_master, "Le jour se lève.")
@@ -145,18 +149,5 @@ def test_names_replace_ids_in_context():
     ]
 
 
-def test_ids_from_dict_are_the_players():
-    memory = MemoryManager({"p1": "Ana", "p2": "Bruno"})
-    assert memory.player_ids == {"p1", "p2"}
-    memory.add_public(EventType.public_message, "p1", "Salut")  # l'auteur est bien reconnu par son id
-
-
 def test_name_of_falls_back_to_id():
-    memory = MemoryManager(["ana"])
-    assert memory.name_of("ana") == "ana"
-    assert memory.name_of(game_master) == "Maître du Jeu"
-
-
-def test_duplicate_check_still_applies_with_names():
-    with pytest.raises(ValueError):
-        MemoryManager({"p1": "Ana", game_master: "MJ"})
+    assert MemoryManager(["ana"]).name_of("ana") == "ana"

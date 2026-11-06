@@ -206,7 +206,7 @@ def test_human_cannot_talk_privately_with_himself(memory):
 
 
 def test_meeting_announcement_uses_names(fake_llm):
-    memory = MemoryManager({i: i.capitalize() for i in IDS})
+    memory = MemoryManager(IDS, names={i: i.capitalize() for i in IDS})
     agents = make_agents(memory, ["clown"])
     asyncio.run(start_private_conversation("eva", agents, memory))
     assert memory.events_for("dan")[0].content == "Conversation privée entre Eva, Ana."

@@ -1,39 +1,39 @@
+from typing import Optional
+
 from backend.models import EventType, GameEvent, Phase
 
-Event = GameEvent  # le modèle d'événement vit maintenant dans backend.models
+Event = GameEvent  # le modèle d'événement vit dans backend.models
 
 game_master = "game_master"
 
 
 class MemoryManager:
-    def __init__(self, player_ids: list[str] | dict[str, str]):
-        """player_ids : liste d'ids, ou dict {id: nom affiché}.
-        Avec le dict, l'historique montre les noms (ce que les agents connaissent) au lieu des ids."""
-        if isinstance(player_ids, dict):
-            self.names = dict(player_ids)
-            player_ids = list(player_ids)
-        else:
-            self.names = {}
+    """Mémoire des événements visibles par les IA.
+    L'horloge (tour, phase) n'est pas ici : elle vient toujours de GameState."""
+
+    def __init__(self, player_ids: list[str], names: Optional[dict[str, str]] = None):
         duplicates = sorted({p for p in player_ids if player_ids.count(p) > 1})
         if duplicates:
             raise ValueError(f"Identifiants de joueurs en double : {duplicates}")
         if game_master in player_ids:
             raise ValueError(f"'{game_master}' est réservé au Maître du Jeu, pas à un joueur")
+        if names is not None and set(names) != set(player_ids):
+            raise ValueError("names doit contenir exactement les identifiants des joueurs")
         self.player_ids = frozenset(player_ids)
+        # Noms affichés aux IA ; sans dictionnaire, on affiche les identifiants.
+        self._names = dict(names) if names is not None else {p: p for p in player_ids}
         self._events: list[Event] = []
-        # Moment actuel de la partie : la partie commence par la nuit 1
-        self.day = 1
+        # Moment courant, fixé par l'orchestrateur via set_moment (il vient de GameState).
+        self.turn = 1
         self.phase = Phase.NUIT
 
-    def advance_phase(self) -> None:
-        """Nuit N -> Jour N -> Nuit N+1. Appelé par l'orchestrateur à chaque changement de phase."""
-        if self.phase == Phase.NUIT:
-            self.phase = Phase.DISCUSSION
-        elif self.phase == Phase.DISCUSSION:
-            self.phase = Phase.VOTE
-        else:
-            self.phase = Phase.NUIT
-            self.day += 1
+    def name_of(self, player_id: str) -> str:
+        return self._names[player_id]
+
+    def set_moment(self, turn: int, phase: Phase) -> None:
+        """Appelé par l'orchestrateur à chaque changement de phase. Ne calcule rien."""
+        self.turn = turn
+        self.phase = phase
 
     def _check_readers(self, visible_to: frozenset[str] | None) -> None:
         if visible_to is None:
@@ -51,22 +51,21 @@ class MemoryManager:
     def add_event(self, type: EventType, author: str, content: str, visible_to: set[str] | None) -> Event:
         """Valide et enregistre un événement au moment actuel de la partie.
 
-        Si l'auteur est un joueur, il est ajouté automatiquement aux lecteurs.
-        """
+        Si l'auteur est un joueur, il est ajouté automatiquement aux lecteurs."""
         self._check_author(author)
         if visible_to is not None:
             visible_to = frozenset(visible_to)
             self._check_readers(visible_to)
             if author != game_master:
                 visible_to = visible_to | {author}
-        event = Event(turn=self.day, phase=self.phase, type=type,
+        event = Event(turn=self.turn, phase=self.phase, type=type,
                       author_id=None if author == game_master else author,
                       content=content, visible_to=visible_to)
         self._events.append(event)
         return event
 
     def add_public(self, type: EventType, author: str, content: str) -> Event:
-        """Visible par tous : annonce, mort, salon public, nomination, vote, "A et B ont discuté"."""
+        """Visible par tous : annonce, mort, salon public, vote, « A et B ont discuté »."""
         return self.add_event(type, author, content, visible_to=None)
 
     def add_private(self, type: EventType, author: str, content: str, participants: set[str]) -> Event:
@@ -91,12 +90,6 @@ class MemoryManager:
                 partners |= e.visible_to - {player}
         return partners
 
-    def name_of(self, player: str) -> str:
-        """Nom affiché d'un joueur (son id si aucun nom n'a été donné)."""
-        if player == game_master:
-            return "Maître du Jeu"
-        return self.names.get(player, player)
-
     def context_for(self, player: str) -> str:
         """Texte à injecter dans le prompt de l'agent : tout ce que ce joueur sait, en français."""
         lines = []
@@ -112,7 +105,7 @@ class MemoryManager:
                 channel = f"privé avec {', '.join(others)}"
 
             if e.author_id is None:
-                author = self.name_of(game_master)
+                author = "Maître du Jeu"
             elif e.author_id == player:
                 author = "Toi"
             else:

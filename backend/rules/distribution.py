@@ -49,6 +49,8 @@ def assign_players(
     names : {id_joueur: nom_affiché}. L'humain reçoit un rôle mais aucune personnalité."""
     if human_id not in names:
         raise ValueError(f"l'humain {human_id} n'est pas dans la liste des joueurs")
+    if len(set(names.values())) != len(names):
+        raise ValueError("noms de joueurs en double")
     ids = list(names)
     roles = distribute_roles(ids, rng)
     ai_ids = [player_id for player_id in ids if player_id != human_id]

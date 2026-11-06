@@ -33,3 +33,10 @@ def test_unknown_human_raises():
 
     with pytest.raises(ValueError):
         assign_players(NAMES, "zz", PERSONALITIES, random.Random(1))
+
+def test_duplicate_names_are_refused():
+    import pytest
+
+    with pytest.raises(ValueError):
+        assign_players({"h": "Ada", "p1": "Ada", "p2": "Bob", "p3": "Cléo", "p4": "Dan", "p5": "Eva"},
+                       "h", PERSONALITIES, random.Random(1))

@@ -310,7 +310,7 @@ def test_create_all_agents_requires_human(fake_skills_env, sample_role_data, sam
 
 @pytest.fixture
 def named_agent(sample_role_data):
-    memory = MemoryManager({"p1": "Ana", "p2": "Bruno", "p3": "Carla"})
+    memory = MemoryManager(["p1", "p2", "p3"], names={"p1": "Ana", "p2": "Bruno", "p3": "Carla"})
     player = Player(id="p1", name="Ana", role=Role(**sample_role_data))
     return Agent(player=player, personality="Provocateur", memory=memory, system_prompt="prompt",
                  personality_key="agitator")

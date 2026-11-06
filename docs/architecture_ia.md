@@ -27,6 +27,8 @@ conversations ──► agent_factory ──► memory_manager ──► models 
 
 `memory_manager` et `llm_client` ne se connaissent pas. Seul `agent_factory` les relie.
 
+Ces modules sont appelés par le moteur : `game_engine` (mise en place), `ai_turns` et `human_turns` (déroulement d'un tour), voir section 5.
+
 ---
 
 ## 1. `llm_client.py` : la seule porte vers les LLM
@@ -104,30 +106,33 @@ Pour écrire au nom du Maître du Jeu, on passe l'auteur `game_master` : la mém
 
 La mémoire **ne décide pas** si une information est vraie ou fausse (empoisonnement, fausse piste) : elle enregistre ce que l'orchestrateur lui donne.
 
-### Méthodes de `MemoryManager(player_ids)`
+### Méthodes de `MemoryManager(player_ids, names=None)`
 
-`player_ids` est une liste d'ids, ou un dictionnaire `{id: nom affiché}`. Avec le dictionnaire, l'historique montre les **noms** (ceux que les agents connaissent) ; sans lui, il montre les ids. Les ids restent la seule façon de désigner un joueur dans les méthodes.
+`names` est un dictionnaire `{id: nom affiché}`. Avec lui, l'historique montre les **noms** (ceux que les agents connaissent) ; sans lui, il montre les ids. Les ids restent la seule façon de désigner un joueur dans les méthodes.
+
+L'horloge n'est **pas** calculée par la mémoire : elle vient de `GameState`. Le moteur appelle `set_moment(turn, phase)` à chaque changement de phase, et chaque événement est daté avec ce moment.
 
 | Méthode | Rôle |
 |---|---|
-| `advance_phase()` | Nuit N → Discussion N → Vote N → Nuit N+1. La partie commence à la nuit 1. |
+| `set_moment(turn, phase)` | Fixe le moment courant (tour et phase), recopié depuis `GameState`. La partie commence à la nuit 1. |
 | `add_event(type, author, content, visible_to)` | Fonction générique. Si l'auteur est un joueur, il est ajouté automatiquement aux lecteurs. |
 | `add_public` / `add_private` / `add_personal` | Raccourcis qui fixent `visible_to`. |
 | `events_for(player)` | **Seule façon de lire la mémoire** : les événements visibles par ce joueur, dans l'ordre. Renvoie une nouvelle liste. |
 | `private_partners(player)` | Les joueurs avec qui ce joueur a déjà eu une conversation privée (lu à partir des événements `private_summary`). |
 | `context_for(player)` | Les événements visibles, sous forme de texte en français pour le prompt. Auteurs et participants y sont écrits avec leur nom. |
-| `name_of(player)` | Nom affiché d'un joueur (son id si aucun nom n'a été donné ; « Maître du Jeu » pour `game_master`). |
+| `name_of(player)` | Nom affiché d'un joueur (son id si aucun nom n'a été donné). |
 
 ### Protections (lèvent `ValueError`)
 
 - ids de joueurs en double, ou joueur nommé `game_master` ;
+- `names` qui ne contient pas exactement les ids des joueurs ;
 - auteur inconnu ;
 - lecteur inconnu, ou liste de lecteurs vide ;
 - lecture par un joueur inconnu.
 
 ### Exemple de `context_for("p1")`
 
-Avec `MemoryManager({"p1": "Ana", "p2": "Bruno", "p3": "Carla", "p5": "Eva"})` :
+Avec `MemoryManager(["p1", "p2", "p3", "p5"], names={"p1": "Ana", "p2": "Bruno", "p3": "Carla", "p5": "Eva"})` :
 
 ```
 [Nuit 1] (personnel) Maître du Jeu : Tu es le Moine.
@@ -220,62 +225,42 @@ Une personnalité absente du tableau parle en dernier, sans obligation.
 
 ## 5. Comment tout s'enchaîne
 
-### Mise en place (`game_engine.setup_game`)
+### Mise en place : `game_engine.setup_game`
 
-`setup_game(names, human_id, personality_names, rng)` tire les rôles et les personnalités (`assign_players`), choisit la fausse piste de la Voyante, crée la mémoire et les agents (`create_all_agents`), puis enregistre les informations de première nuit (`first_night_info`) en `role_info`, visibles du seul joueur concerné. Elle renvoie `(state, agents, memory)`.
+`setup_game(names, human_id, personality_names, rng)` tire les rôles et les personnalités (`assign_players`), choisit la fausse piste de la Voyante, crée la mémoire avec les noms (`MemoryManager(ids, names=names)`) et les agents (`create_all_agents`), puis enregistre les informations de première nuit (`first_night_info`) en `role_info`, visibles du seul joueur concerné. Elle renvoie `(state, agents, memory)`.
 
-### Un jour de discussion
+### Un tour
+
+Deux versions du tour, qui suivent le même schéma :
+
+- `ai_turns.play_turn_with_ai(state, rng, agents, memory)` : les IA jouent ; l'humain reçoit un choix aléatoire ou s'abstient.
+- `human_turns.play_turn_with_human(state, rng, agents, memory, human_id, human)` : l'humain joue aussi. `human` respecte le protocole `HumanPort` (choix de nuit, message public, salon privé, vote…), ce qui permet de brancher le terminal aujourd'hui et le WebSocket plus tard.
 
 ```
-game_engine
-   │  memory.advance_phase()  → Discussion
-   │  memory.add_public(announcement, game_master, "Le jour 1 se lève…")
-   ▼
-public_conversation(agents, memory) ─────────── conversations
-   │ pour chaque agent, dans l'ordre des personnalités :
-   │   1. agent.speak_public(optional=…)     → agent_factory → llm_client
-   │   2. memory.add_public(public_message)  → memory_manager
-   ▼
-   renvoie les messages pour l'affichage
+NUIT        memory.set_moment(tour, NUIT)
+            collect_ai_night_choices        agent.night_action(noms) → ids     (2 appels LLM en parallèle au plus)
+            (humain : human.night_choice)
+            play_night                      choix invalide ou absent → choix légal au hasard
+            reveal_psychic_answer           réponse de la Voyante → sa mémoire (role_info)
+            victoire ? → fin
+DISCUSSION  memory.set_moment(tour, DISCUSSION)
+            public_conversation(agents)     conversations.py, un agent après l'autre
+            (humain : message public, puis salon privé avec 1 ou 2 agents vivants, 3 messages au plus)
+VOTE        memory.set_moment(tour, VOTE)
+            collect_ai_votes                agent.vote(noms) → id ou None
+            (humain : human.vote)
+            play_day                        vote pour un mort ou un inconnu → abstention
+            victoire ? → fin, sinon nuit suivante
 ```
 
-En code :
+- **Noms et ids** : les agents reçoivent les **noms** des joueurs comme options, et `ai_turns` traduit leur réponse en **id** (les noms doivent donc être uniques).
+- **Échecs** : un agent dont l'appel échoue rend un choix vide (remplacé par un choix au hasard) ou s'abstient.
+- **Ordre** : chaque étape attend la précédente ; l'humain n'écrit jamais pendant un appel IA. Les morts peuvent encore parler et voter (vote fantôme).
+- **Qui écrit dans la mémoire** : `conversations.py` pour les messages, `reveal_psychic_answer` pour la Voyante, `setup_game` pour la première nuit. Les agents, eux, n'écrivent jamais dans la mémoire : ils renvoient un résultat.
 
-```python
-memory = MemoryManager(ids)
-agents = create_all_agents(assignments, memory, human_id="humain")
+### Parties dans le terminal
 
-memory.add_personal(EventType.role_info, game_master, "Tu es le Diablotin.", "ana")
-memory.advance_phase()  # discussion, jour 1
-
-said = await public_conversation(list(agents.values()), memory)
-
-# L'humain a choisi ana pour une conversation privée
-await start_private_conversation("humain", [agents["ana"]], memory)
-replies = await private_message("humain", "Tu soupçonnes qui ?", [agents["ana"]], memory)
-```
-
-### Une nuit
-
-Dans `game_engine`, `play_night(state, rng, choose)` et `play_day(state, choose)` reçoivent une fonction de choix ; un choix invalide ou absent devient un choix légal au hasard (nuit) ou une abstention (vote). Les agents ne sont pas encore branchés sur ces fonctions (voir section 7). Le principe du branchement :
-
-```python
-from backend.rules import legal_actions, random_legal_choice, resolve_night
-
-choices = {}
-for player_id, agent in agents.items():
-    action = legal_actions(state, player_id)
-    if not action.targets:
-        continue
-    try:
-        choices[player_id] = tuple(await agent.night_action(list(action.targets), action.count))
-    except Exception:
-        choices[player_id] = random_legal_choice(state, player_id, rng)  # filet de sécurité
-    memory.add_personal(EventType.night_action, player_id, f"J'ai choisi {', '.join(choices[player_id])}.", player_id)
-state = resolve_night(state, choices)
-```
-
-**C'est l'orchestrateur qui enregistre les actions de nuit et les votes dans la mémoire**, pas l'agent. Pour les conversations, c'est `conversations.py` qui s'en charge.
+`scripts/play_real_game.py` (les IA seules) et `scripts/play_with_human.py` (avec un humain au clavier) jouent des parties complètes avec les vrais modèles.
 
 ---
 
@@ -286,26 +271,23 @@ state = resolve_night(state, choices)
 | Choix légaux, effets des pouvoirs, nuit, vote, Majordome, victoire, informations de la première nuit | `backend/rules` |
 | État de la partie (vivants / morts, rôles réels, effets) | `backend/models` (`GameState`, `Player`, `Role`) |
 | Tirage des rôles et des personnalités | `backend/rules` (`assign_players`) |
-| Boucle de jeu (mise en place, nuit, vote, tours jusqu'à la victoire), timer, enregistrement des actions de nuit et des votes | `game_engine` |
+| Mise en place, nuit, vote, victoire | `game_engine` |
+| Déroulement d'un tour avec les IA / avec l'humain | `ai_turns`, `human_turns` |
 | Chargement des skills | `prompt_loader` |
-| Lien avec le front, choix de l'humain | `server` |
+| Lien avec le front, choix de l'humain | `server`, `static/` |
 
-## 7. Points à aligner avec le moteur de jeu
+## 7. Points encore ouverts
 
-- **Id et nom des joueurs** : la mémoire et les prompts savent afficher les noms, à condition de créer la mémoire avec le dictionnaire `{id: nom}`. Aujourd'hui `setup_game` appelle `MemoryManager(list(names))` (ids seulement) ; il suffit de passer `MemoryManager(names)`.
-- **Fonctions de choix synchrones** : `play_night` et `play_day` attendent des fonctions normales (`ChoiceFn`, `VoteFn`), alors que `agent.night_action` et `agent.vote` sont `async`. Il faut soit rendre la boucle `async`, soit recueillir les choix des agents avant d'appeler la boucle.
-- **Deux horloges** : `MemoryManager` (`day`, `phase`) et `GameState` (`turn`, `phase`) doivent avancer ensemble. La boucle n'appelle pas encore `memory.advance_phase()` : tous les événements sont datés « Nuit 1 ».
-- **Nuits et votes absents de la mémoire** : à part la première nuit, rien n'est enregistré (morts annoncées, réponse de la Voyante, votes, exécution). Sans cela, les agents ne savent pas ce qui s'est passé.
-- **Information du Détective** : le texte de `_info_text` dit « l'un d'eux est le Diablotin », alors que le Détective voit un **sbire**.
+- **Morts, votes et exécution absents de la mémoire** : seul l'humain est prévenu des morts de la nuit (`show_night_deaths`). Les agents ne reçoivent ni l'annonce des morts, ni les votes, ni le résultat de l'exécution.
+- **Agent qui vient parler à l'humain** : quand l'humain n'ouvre pas de salon privé, aucun agent ne vient vers lui. `choose_agent_for_human` et `start_private_conversation(..., agent_speaks_first=True)` existent mais ne sont pas encore appelées.
+- **Conversations privées entre agents** : pendant le salon privé de l'humain, les autres agents ne discutent pas entre eux (prévu dans le sujet sous forme d'un échange simulé).
 - **Nom affiché des personnalités** : `assign_players` met le nom anglais aussi comme nom français (`agent.personality` vaut `"agitator"` et non `"Provocateur"`). Les conversations ne sont pas touchées : elles utilisent `personality_key`.
-- **Historique** : `GameState.log` et `Channel` ont un rôle proche de la mémoire. Il faut décider si les messages des conversations y sont aussi copiés (par exemple pour le front).
 - **Agent et état du joueur** : `Player` est immuable, donc `agent.player` reste celui de la création (il ne voit pas sa mort). Pour l'état actuel, lire `GameState`.
 
-## 8. Limites connues / à faire
+## 8. Limites connues
 
 - Le contexte grandit à chaque événement (environ 1 900 à 2 800 tokens par appel dans une phase de discussion) : prévoir un **résumé par jour** pour les longues parties.
-- Les personnalités non obligées passaient rarement leur tour : l'instruction a été renforcée, à vérifier dans une vraie partie.
-- Conversation privée : pas de limite de messages pour l'instant (le serveur ou le timer décide de la fin). Quand l'humain refuse, c'est un agent qui vient lui parler ; les conversations entre agents seuls ne sont pas encore faites.
+- Les personnalités non obligées passent rarement leur tour, même avec l'instruction renforcée (essai avec les vrais modèles : 1 tour passé sur 8 tours facultatifs). Si l'Observateur doit parler moins, le code devra décider à sa place (par exemple lui donner la parole un tour sur deux).
 
 ## 9. Tests
 
@@ -315,8 +297,9 @@ python -m pytest tests/ -q
 
 | Fichier | Vérifie surtout |
 |---|---|
-| `tests/test_memory_manager.py` | L'**isolation** : un joueur ne voit jamais un événement qui ne lui est pas destiné ; noms affichés à la place des ids |
+| `tests/test_memory_manager.py`, `tests/test_memory_names.py` | L'**isolation** : un joueur ne voit jamais un événement qui ne lui est pas destiné ; datation par `set_moment` ; noms affichés à la place des ids |
 | `tests/test_agent_factory.py` | Prompt (noms des joueurs), actions de nuit, votes, choix illégaux redemandés, `PASSE` et ses variantes |
 | `tests/test_conversations.py` | Ordre de parole, limite de 10 messages, fin quand tout le monde passe, secret du privé, agent en échec |
+| `tests/test_ai_turns.py` | Traduction noms ↔ ids, agent en échec, tour complet avec les IA |
 
 Les tests utilisent un **faux LLM** : aucun appel réseau. Lancer depuis la racine du projet.
