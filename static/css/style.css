@@ -1,52 +1,120 @@
 /* ==========================================================
-   Blood on the AI Clocktower - Styles Personnalisés
+   Blood on the AI Clocktower - Design System Lovable (Vanilla)
    ========================================================== */
 
-/* Personnalisation de la barre de défilement (style sombre/gothique) */
+/* Variables du Thème Lovable */
+:root {
+  --radius: 0.5rem;
+  --background: oklch(0.145 0.018 295);
+  --foreground: oklch(0.91 0.02 85);
+  --card: oklch(0.18 0.022 295);
+  --card-foreground: oklch(0.91 0.02 85);
+  --popover: oklch(0.2 0.025 295);
+  --popover-foreground: oklch(0.91 0.02 85);
+  --primary: oklch(0.47 0.16 315);
+  --primary-foreground: oklch(0.96 0.012 85);
+  --border: oklch(0.3 0.025 290);
+  --input: oklch(0.29 0.025 290);
+
+  --gold: oklch(0.76 0.115 80);
+  --gold-dim: oklch(0.56 0.085 72);
+  --blood: oklch(0.5 0.18 22);
+
+  --gradient-seal: linear-gradient(135deg, oklch(0.52 0.17 318), oklch(0.34 0.13 300));
+  --gradient-gilt: linear-gradient(135deg, oklch(0.84 0.12 88), oklch(0.62 0.1 66));
+  --gradient-veil: linear-gradient(
+    180deg,
+    oklch(0.145 0.018 295 / 35%) 0%,
+    oklch(0.145 0.018 295 / 70%) 55%,
+    oklch(0.12 0.018 295 / 96%) 100%
+  );
+
+  --shadow-panel: 0 20px 50px -20px oklch(0.05 0.02 295 / 80%);
+  --shadow-seal: 0 8px 24px -8px oklch(0.47 0.16 315 / 70%);
+}
+
+/* Polices Gothiques / Victoriennes */
+.font-display {
+  font-family: "IM Fell English SC", "Cormorant Garamond", Georgia, serif;
+}
+
+.font-serif {
+  font-family: "Cormorant Garamond", Georgia, serif;
+}
+
+.font-sans {
+  font-family: "Alegreya Sans", system-ui, sans-serif;
+}
+
+/* Scrollbar sombre */
 ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+  width: 6px;
+  height: 6px;
 }
-
 ::-webkit-scrollbar-track {
-    background: #07080a;
+  background: var(--background);
 }
-
 ::-webkit-scrollbar-thumb {
-    background: #232733;
-    border-radius: 4px;
+  background: var(--border);
+  border-radius: 4px;
 }
 
-::-webkit-scrollbar-thumb:hover {
-    background: #b48a3d;
-}
-
-/* Styles globaux complémentaires */
+/* Base Body */
 body {
-    background-color: #07080a;
-    color: #e5e7eb;
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Effets de lueur subtils pour l'ambiance mystérieuse */
-.glow-gold {
-    box-shadow: 0 0 15px rgba(180, 138, 61, 0.15);
+/* Arrière-plan général avec fond Lovable */
+.bg-game-background {
+  background-image: var(--gradient-veil), url('../img/background.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 
-.glow-red {
-    box-shadow: 0 0 15px rgba(129, 29, 29, 0.25);
+/* Composant Carte / Panneau translucide */
+.panel {
+  background-color: color-mix(in oklab, var(--card) 88%, transparent);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-panel);
+  backdrop-filter: blur(10px);
 }
 
-/* Fond d'écran général ou de l'accueil */
-#screen-welcome, #screen-game {
-    background-image: linear-gradient(rgba(7, 8, 10, 0.5), rgba(7, 8, 10, 0.5)), url('../img/background.jpg');
-    background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
+/* Titres Dorés (Gilt) */
+.text-gilt {
+  background-image: var(--gradient-gilt);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
+.text-gold-dim {
+  color: var(--gold-dim);
+}
 
-/* Rendre les panneaux du jeu légèrement translucides (semi-opaques) */
-.bg-clock-panel {
-    background-color: rgba(17, 19, 24, 0.85) !important;
-    backdrop-filter: blur(4px);
+/* Boutons Sceau Pourpre */
+.bg-seal {
+  background-image: var(--gradient-seal);
+  box-shadow: var(--shadow-seal);
+}
+.bg-seal:hover {
+  opacity: 0.92;
+}
+
+/* Ornements (Lignes de séparation avec losange ou texte) */
+.ornament {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--gold-dim);
+}
+.ornament::before,
+.ornament::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--gold-dim), transparent);
 }

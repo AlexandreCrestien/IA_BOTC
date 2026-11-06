@@ -869,9 +869,11 @@ window.switchGrimoireTab = switchGrimoireTab;
 
 // ================= FERMETURE DES MODALES AU CLIC SUR LE FOND (BACKDROP) =================
 document.addEventListener('click', function(event) {
-    // Vérifier si l'élément cliqué est un fond de modale (qui possède la classe "fixed inset-0")
+    if (event.target.id === 'screen-welcome' || event.target.closest('#screen-welcome')) {
+        return;
+    }
+
     if (event.target.classList.contains('fixed') && event.target.classList.contains('inset-0')) {
-        // Masquer la modale cliquée
         event.target.classList.add('hidden');
     }
 });
