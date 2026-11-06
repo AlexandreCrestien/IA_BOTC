@@ -1,3 +1,5 @@
+from typing import Optional
+
 from backend.models import EventType, GameEvent, Phase
 
 Event = GameEvent  # le modèle d'événement vit dans backend.models
@@ -6,17 +8,27 @@ game_master = "game_master"
 
 
 class MemoryManager:
-    def __init__(self, player_ids: list[str]):
+    """Mémoire des événements visibles par les IA.
+    L'horloge (tour, phase) n'est pas ici : elle vient toujours de GameState."""
+
+    def __init__(self, player_ids: list[str], names: Optional[dict[str, str]] = None):
         duplicates = sorted({p for p in player_ids if player_ids.count(p) > 1})
         if duplicates:
             raise ValueError(f"Identifiants de joueurs en double : {duplicates}")
         if game_master in player_ids:
             raise ValueError(f"'{game_master}' est réservé au Maître du Jeu, pas à un joueur")
+        if names is not None and set(names) != set(player_ids):
+            raise ValueError("names doit contenir exactement les identifiants des joueurs")
         self.player_ids = frozenset(player_ids)
+        # Noms affichés aux IA ; sans dictionnaire, on affiche les identifiants.
+        self._names = dict(names) if names is not None else {p: p for p in player_ids}
         self._events: list[Event] = []
         # Moment courant, fixé par l'orchestrateur via set_moment (il vient de GameState).
         self.turn = 1
         self.phase = Phase.NUIT
+
+    def name_of(self, player_id: str) -> str:
+        return self._names[player_id]
 
     def set_moment(self, turn: int, phase: Phase) -> None:
         """Appelé par l'orchestrateur à chaque changement de phase. Ne calcule rien."""
@@ -39,8 +51,7 @@ class MemoryManager:
     def add_event(self, type: EventType, author: str, content: str, visible_to: set[str] | None) -> Event:
         """Valide et enregistre un événement au moment actuel de la partie.
 
-        Si l'auteur est un joueur, il est ajouté automatiquement aux lecteurs.
-        """
+        Si l'auteur est un joueur, il est ajouté automatiquement aux lecteurs."""
         self._check_author(author)
         if visible_to is not None:
             visible_to = frozenset(visible_to)
@@ -54,7 +65,7 @@ class MemoryManager:
         return event
 
     def add_public(self, type: EventType, author: str, content: str) -> Event:
-        """Visible par tous : annonce, mort, salon public, nomination, vote, "A et B ont discuté"."""
+        """Visible par tous : annonce, mort, salon public, vote, « A et B ont discuté »."""
         return self.add_event(type, author, content, visible_to=None)
 
     def add_private(self, type: EventType, author: str, content: str, participants: set[str]) -> Event:
@@ -90,7 +101,7 @@ class MemoryManager:
             elif e.visible_to == {player}:
                 channel = "personnel"
             else:
-                others = sorted(e.visible_to - {player})
+                others = sorted(self.name_of(p) for p in e.visible_to - {player})
                 channel = f"privé avec {', '.join(others)}"
 
             if e.author_id is None:
@@ -98,7 +109,7 @@ class MemoryManager:
             elif e.author_id == player:
                 author = "Toi"
             else:
-                author = e.author_id
+                author = self.name_of(e.author_id)
 
             lines.append(f"[{moment}] ({channel}) {author} : {e.content}")
 

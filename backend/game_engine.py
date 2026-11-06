@@ -18,7 +18,7 @@ from backend.rules import (
     vote_result,
     winner,
 )
-from backend.rules.powers import FALSE_LEAD_KEY
+from backend.rules.powers import FALSE_LEAD_KEY, psychic_answer
 
 # Fonction optionnelle qui renvoie le choix d'un joueur (ou () si elle n'en a pas).
 ChoiceFn = Callable[[GameState, str], tuple[str, ...]]
@@ -66,7 +66,7 @@ def setup_game(
     psychic = next(player for player in players if player.role.name_EN == "psychic")
     state = state.replace_player(set_link(psychic, FALSE_LEAD_KEY, false_lead))
 
-    memory = MemoryManager(list(names))
+    memory = MemoryManager(list(names), names=names)
     agents = create_all_agents(assignments, memory, human_id, prompt_loader)
 
     memory.set_moment(state.turn, state.phase)
@@ -189,3 +189,25 @@ def play_game(
         if result.game_winner is not None:
             return state
     raise RuntimeError(f"partie non terminée après {max_turns} tours")
+
+def reveal_psychic_answer(
+    state: GameState,
+    choices: dict[str, tuple[str, ...]],
+    memory: MemoryManager,
+    rng: random.Random,
+) -> None:
+    """Écrit dans la mémoire de la Voyante le résultat de son sondage de la nuit.
+    À appeler après la résolution de la nuit (state = état après la nuit), avant la discussion."""
+    for player in state.players:
+        if player.role.name_EN != "psychic" or player.id not in choices:
+            continue
+        probed = choices[player.id]
+        found = psychic_answer(state, player.id, probed, rng)
+        names = " et ".join(state.player(pid).name for pid in probed)
+        verdict = "au moins un est un démon" if found else "aucun n'est un démon"
+        memory.add_event(
+            EventType.role_info,
+            game_master,
+            f"Parmi {names}, {verdict}.",
+            frozenset({player.id}),
+        )
