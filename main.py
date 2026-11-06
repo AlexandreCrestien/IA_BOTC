@@ -1,13 +1,4 @@
-from backend.server.game_runner import start_game
+import uvicorn
 
-GAME_CONFIG = {
-    "names": {"player_human_1": "Alex", "ia_1": "Ariel", "ia_2": "Bob"},  # à compléter
-    "human_id": "player_human_1",
-    "personality_names": [],  # à remplir avec les personnalités de tests/test_human_turns.py
-}
-
-
-@app.post("/game/start", tags=["Partie"])
-async def demarrer_partie():
-    start_game(**GAME_CONFIG)
-    return {"status": "started"}
+if __name__ == "__main__":
+    uvicorn.run("backend.server.app:app", host="127.0.0.1", port=8000, reload=True)
