@@ -36,6 +36,7 @@ def mock_memory():
     """Mock du MemoryManager pour fournir les joueurs et le contexte."""
     memory = MagicMock(spec=MemoryManager)
     memory.player_ids = {"agent_1", "agent_2", "human_id"}
+    memory.name_of.side_effect = lambda pid: pid
     memory.context_for.return_value = "Historique fictif de la partie."
     return memory
 

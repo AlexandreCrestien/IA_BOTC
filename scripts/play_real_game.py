@@ -21,7 +21,7 @@ from backend.models import EventType  # noqa: E402
 
 litellm.suppress_debug_info = True
 
-NAMES = {"h": "moi", "p1": "marIA", "p2": "tobIAs", "p3": "mAIsie", "p4": "adrIAn", "p5": "dIAne"}
+NAMES = {"h": "alex", "p1": "marIA", "p2": "tobIAs", "p3": "mAIsie", "p4": "adrIAn", "p5": "dIAne"}
 HUMAN_ID = "h"  # pas d'agent : reçoit un choix aléatoire pour l'instant
 PERSONALITIES = ["agitator", "clown", "observer", "paranoid", "strategist"]
 MAX_TURNS = 5

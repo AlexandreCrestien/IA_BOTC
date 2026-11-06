@@ -1,11 +1,13 @@
 """Partie avec toi comme joueur humain, dans le terminal.
 Lancement : python scripts/play_with_human.py
-Les IA font de vrais appels (coût et lenteur). Tu tapes tes choix quand on te les demande."""
+Les IA font de vrais appels (coût et lenteur). Tu tapes tes choix quand on te les demande.
+Après chaque tour, l'historique de chaque joueur est sauvegardé dans historiques/."""
 import asyncio
 import logging
 import os
 import random
 import sys
+from datetime import datetime
 from pathlib import Path
 
 os.environ.setdefault("LITELLM_LOG", "ERROR")
@@ -16,15 +18,17 @@ import litellm  # noqa: E402
 from backend.game_engine import setup_game  # noqa: E402
 from backend.human_turns import play_turn_with_human  # noqa: E402
 from backend.rules import legal_actions  # noqa: E402
+from historique import RecordingAgent, save_histories  # noqa: E402
 
 litellm.suppress_debug_info = True
 
-NAMES = {"h": "moi", "p1": "marIA", "p2": "tobIAs", "p3": "mAIsie", "p4": "adrIAn", "p5": "dIAne"}
+NAMES = {"h": "alex", "p1": "marIA", "p2": "tobIAs", "p3": "mAIsie", "p4": "adrIAn", "p5": "dIAne"}
 HUMAN_ID = "h"
 PERSONALITIES = ["agitator", "clown", "observer", "paranoid", "strategist"]
 MAX_TURNS = 5
 # Les logs de télémétrie LiteLLM sont coupés : seules nos erreurs et nos réponses comptent.
 LITELLM_LOGGERS = ("LiteLLM", "LiteLLM Router", "LiteLLM Proxy")
+HISTORY_ROOT = Path(__file__).resolve().parent.parent / "historiques"
 
 
 def _ask_numbers(prompt, options):
@@ -105,11 +109,14 @@ async def main():
     rng = random.Random()
     state, agents, memory = setup_game(NAMES, HUMAN_ID, PERSONALITIES, rng)
     human = TerminalHuman(memory)
+    run_dir = HISTORY_ROOT / datetime.now().strftime("%Y%m%d_%H%M%S")
+    agents = {pid: RecordingAgent(agent, memory, run_dir / "appels") for pid, agent in agents.items()}
 
     me = state.player(HUMAN_ID)
     print(f"\nTu es {me.name}, rôle : {me.role.name_FR}")
+    print(f"Historiques de cette partie : {run_dir}")
 
-    for _ in range(MAX_TURNS):
+    for turn_number in range(1, MAX_TURNS + 1):
         print(f"\n=== Tour {state.turn} ===")
         result = await play_turn_with_human(state, rng, agents, memory, HUMAN_ID, human)
         print("-- Votes --")
@@ -118,6 +125,7 @@ async def main():
             print(f"  {state.player(voter).name} -> {cible}")
         print(f"-- Exécuté : {_names(state, [result.executed]) if result.executed else 'personne'}")
         state = result.state
+        save_histories(memory, state, run_dir / f"tour_{turn_number}")
         if result.game_winner is not None:
             print(f"\n=== Fin de partie : victoire {result.game_winner.value} ===")
             return

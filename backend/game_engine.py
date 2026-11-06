@@ -38,10 +38,13 @@ class TurnResult(NamedTuple):
 def _info_text(state: GameState, info) -> str:
     subjects = ", ".join(state.player(pid).name for pid in info.subject_ids)
     if info.kind == "demon":
-        return f"Première nuit : tu es le Diablotin. Tes alliés sont : {subjects}."
-    if info.kind == "minion":
+        # Le sbire voit le démon
         return f"Première nuit : tu es l'Empoisonneur. Le Diablotin est : {subjects}."
-    return f"Première nuit : parmi {subjects}, l'un d'eux est le Diablotin."
+    if info.kind == "minion":
+        # Le démon voit le sbire
+        return f"Première nuit : tu es le Diablotin. Tes alliés sont : {subjects}."
+    # Le Détective voit un sbire parmi deux joueurs
+    return f"Première nuit : parmi {subjects}, l'un d'eux est l'Empoisonneur."
 
 
 def setup_game(

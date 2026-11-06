@@ -1,17 +1,22 @@
 """Tour complet avec l'humain et les IA.
 Ordre : nuit (IA puis humain), morts de la nuit affichées, discussion publique des IA,
-message public de l'humain, salon privé facultatif (3 messages max), vote (IA puis humain).
+message public de l'humain, salon privé facultatif (3 messages max, 1 ou 2 IA répondant
+en parallèle), vote (IA puis humain).
 Chaque étape attend la précédente : l'humain n'écrit jamais pendant un appel IA.
 Un joueur mort peut encore parler et voter."""
+import asyncio
+import logging
 import random
 from typing import Optional, Protocol
 
 from backend.ai_turns import collect_ai_night_choices, collect_ai_votes
-from backend.conversations import private_message, public_conversation, start_private_conversation
+from backend.conversations import public_conversation, start_private_conversation
 from backend.game_engine import TurnResult, _deaths, play_day, play_night, reveal_psychic_answer
 from backend.memory_manager import MemoryManager
 from backend.models import EventType, GameState, Phase
 from backend.rules import night_steps, winner
+
+logger = logging.getLogger(__name__)
 
 MAX_HUMAN_PRIVATE_MESSAGES = 3
 MAX_PRIVATE_PARTNERS = 2
@@ -34,6 +39,34 @@ def _human_must_choose(state: GameState, player_id: str) -> bool:
     return any(pid == player_id and needs for pid, needs in night_steps(state))
 
 
+async def _parallel_replies(
+    human_id: str,
+    partners: list,
+    memory: MemoryManager,
+) -> list[tuple[str, str]]:
+    """Chaque partenaire répond à la fois, à partir du même contexte.
+    Les réponses sont enregistrées ensuite, dans l'ordre des partenaires."""
+    participants = {human_id} | {agent.player_id for agent in partners}
+
+    async def ask(agent):
+        others = [memory.name_of(pid) for pid in sorted(participants - {agent.player_id})]
+        try:
+            return agent.player_id, await agent.speak_private(others)
+        except Exception:
+            # Filet de sécurité : cet agent ne répond pas, les autres répondent quand même.
+            logger.exception("%s n'a pas pu répondre en privé", agent.player_id)
+            return agent.player_id, None
+
+    results = await asyncio.gather(*(ask(agent) for agent in partners))
+    replies = []
+    for pid, text in results:
+        if text is None:
+            continue
+        memory.add_private(EventType.private_summary, pid, text, participants)
+        replies.append((pid, text))
+    return replies
+
+
 async def _private_channel(
     state: GameState,
     agents: dict,
@@ -42,19 +75,22 @@ async def _private_channel(
     human: HumanPort,
 ) -> None:
     """Salon privé facultatif : l'humain choisit 1 ou 2 agents vivants, puis échange
-    au plus MAX_HUMAN_PRIVATE_MESSAGES messages. Chaque réponse est attendue avant le message suivant."""
+    au plus MAX_HUMAN_PRIVATE_MESSAGES messages. À chaque message de l'humain, les agents
+    répondent en parallèle."""
     partner_ids = await human.private_partners(state, human_id)
     partners = [agents[pid] for pid in partner_ids[:MAX_PRIVATE_PARTNERS]
                 if pid in agents and state.player(pid).alive]
     if not partners:
         return
 
+    participants = {human_id} | {agent.player_id for agent in partners}
     await start_private_conversation(human_id, partners, memory)
     for _ in range(MAX_HUMAN_PRIVATE_MESSAGES):
         text = await human.private_message(state, human_id)
         if not text:
             break
-        replies = await private_message(human_id, text, partners, memory)
+        memory.add_private(EventType.private_summary, human_id, text, participants)
+        replies = await _parallel_replies(human_id, partners, memory)
         await human.show_private_replies(replies)
 
 

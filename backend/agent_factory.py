@@ -38,8 +38,8 @@ class Agent:
         return self.player.role.name_FR
 
     def _build_system_prompt(self) -> str:
-        """Injecte dynamiquement la liste des joueurs vivants/présents sans dupliquer le general_rules."""
-        players = ", ".join(sorted(self.memory.player_ids))
+        """Injecte dynamiquement la liste des joueurs présents, par leur nom, sans dupliquer le general_rules."""
+        players = ", ".join(sorted(self.memory.name_of(pid) for pid in self.memory.player_ids))
         return f"{self.system_prompt.strip()}\n\n# CONTEXTE DE LA PARTIE\nJoueurs présents dans la partie : {players}."
 
     def _messages(self, instruction: str) -> list[dict]:
@@ -174,14 +174,14 @@ def create_all_agents(assignments: dict[str, tuple[str, dict, dict]], memory: Me
     """
     if human_id not in assignments:
         raise ValueError(f"Le joueur humain {human_id} n'est pas dans la répartition")
-        
+
     factory = AgentFactory(prompt_loader=prompt_loader)
     agents = {}
-    
+
     for player_id, (agent_name, role_data, personality_data) in assignments.items():
         if player_id == human_id:
             continue
-            
+
         agent = factory.create_agent(
             agent_id=player_id,
             agent_name=agent_name,
@@ -190,5 +190,5 @@ def create_all_agents(assignments: dict[str, tuple[str, dict, dict]], memory: Me
             memory=memory
         )
         agents[player_id] = agent
-        
+
     return agents
