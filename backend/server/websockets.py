@@ -143,6 +143,19 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
                         )
                         # TODO: Transmettre les cibles au game_engine pour la résolution nocturne
 
+
+                # 6. DÉCLENCHEMENT DU VOTE (SI REFUS DE WHISPER)
+                elif action == "trigger_vote_phase":
+                    logger.info(f"Le joueur {player_id} a déclenché le passage à la phase de vote.")
+                    
+                    # Broadcaster à tous les clients connectés le changement de phase
+                    await manager.broadcast({
+                        "type": "phase_update",
+                        "phase": "vote",
+                        "announcement": f"Le village (sur l'initiative de {player_id}) passe à la phase de vote."
+                    })
+
+
                 else:
                     logger.warning(f"Action non reconnue reçue de {player_id}: {action}")
 
