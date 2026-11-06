@@ -10,7 +10,9 @@ let gameState = {
     messages: { public: [] }, // channel_id -> [messages]
     currentChannel: "public",
     announcement: "En attente du début de la partie...",
-    roleInfo: { name: "En attente...", description: "La partie va démarrer." }
+    roleInfo: { name: "En attente...", description: "La partie va démarrer." },
+    vote_history: [],
+    night_info_history: []
 };
 
 // ================= INITIALISATION & CONNEXION =================
@@ -93,7 +95,10 @@ function handleServerMessage(data) {
             showVoteResultModal(data.turn, data.executed, data.votes);
             break;
         case "night_result":
-            showNightResultModal(data.dead_player); // data.dead_player peut être le nom du joueur ou null/undefined si personne n'est mort
+            showNightResultModal(data.turn, data.dead_player); // data.turn et data.dead_player
+            break;
+        case "night_info":
+            showNightInfoModal(data.turn, data.info); // Information spécifique reçue la nuit selon le rôle
             break;
         default:
             console.log("Message non géré :", data);
@@ -128,10 +133,7 @@ function sendChatMessage() {
         }
     };
 
-    // On envoie au serveur. C'est le message reçu du serveur qui l'affichera proprement.
     ws.send(JSON.stringify(packet));
-
-    // On vide simplement l'input
     input.value = "";
 }
 
@@ -163,12 +165,10 @@ function appendSystemMessage(text) {
 function handlePrivateChannelOpened(channelId, text, members = []) {
     appendSystemMessage(text);
     
-    // 1. Initialiser le stockage des messages pour ce salon s'il n'existe pas
     if (!gameState.messages[channelId]) {
         gameState.messages[channelId] = [];
     }
 
-    // 2. Créer l'onglet dans la barre de chat s'il n'existe pas encore
     const channelsContainer = document.getElementById('chat-channels');
     if (channelsContainer && !document.getElementById(`tab-${channelId}`)) {
         const tabTitle = members.length > 0 ? `🔒 ${members.join(', ')}` : `🔒 Privé`;
@@ -182,17 +182,14 @@ function handlePrivateChannelOpened(channelId, text, members = []) {
         channelsContainer.appendChild(tabButton);
     }
     
-    // 3. Basculer automatiquement sur ce nouveau canal privé
     switchChannel(channelId);
 }
 
 function switchChannel(channelId) {
     gameState.currentChannel = channelId;
     
-    // Mettre à jour l'apparence de tous les boutons de salons
     const allButtons = document.querySelectorAll('#chat-channels button');
     allButtons.forEach(btn => {
-        // On vérifie si c'est le bouton actif en comparant son ID (ex: "tab-public" ou "tab-whisper_...")
         const isPublicBtnActive = (channelId === 'public' && btn.getAttribute('onclick')?.includes("'public'"));
         const isPrivateBtnActive = (btn.id === `tab-${channelId}`);
         
@@ -205,7 +202,6 @@ function switchChannel(channelId) {
         }
     });
 
-    // Rafraîchir l'affichage des messages dans la boîte de chat
     renderChatMessages();
 }
 
@@ -213,7 +209,6 @@ function renderVoteHistory() {
     const container = document.getElementById('tab-content-votes');
     if (!container) return;
 
-    // Si l'historique est vide
     if (!gameState.vote_history || gameState.vote_history.length === 0) {
         container.innerHTML = `
             <div class="text-center text-gray-500 py-8 text-xs italic">
@@ -223,7 +218,6 @@ function renderVoteHistory() {
         return;
     }
 
-    // Grouper les votes par Jour / Tour
     const turnsMap = {};
     gameState.vote_history.forEach(record => {
         if (!turnsMap[record.turn]) {
@@ -234,7 +228,6 @@ function renderVoteHistory() {
 
     let html = '';
     
-    // Parcourir chaque tour du plus récent au plus ancien
     Object.keys(turnsMap).sort((a, b) => b - a).forEach(turn => {
         const data = turnsMap[turn];
         const executionText = data.executed ? `${data.executed} exécuté` : "pas d'exécution";
@@ -265,11 +258,42 @@ function renderVoteHistory() {
     container.innerHTML = html;
 }
 
+// Rendu de l'historique des infos et événements de la nuit
+function renderNightInfoHistory() {
+    const container = document.getElementById('tab-content-night');
+    if (!container) return;
+
+    if (!gameState.night_info_history || gameState.night_info_history.length === 0) {
+        container.innerHTML = `
+            <div class="text-center text-gray-500 py-8 text-xs italic">
+                Aucun événement nocturne pour le moment.
+            </div>
+        `;
+        return;
+    }
+
+    let html = '';
+    // Trier par tour décroissant si nécessaire, ou afficher l'ordre chronologique
+    gameState.night_info_history.forEach(item => {
+        const isResult = item.type === "result";
+        const borderColor = isResult ? "border-clock-red/40" : "border-clock-gold/40";
+        const titleColor = isResult ? "text-clock-red" : "text-clock-gold";
+
+        html += `
+            <div class="bg-clock-darker border ${borderColor} rounded-lg p-3 mb-2 text-xs font-mono">
+                <span class="${titleColor} font-bold">NUIT (Tour ${item.turn})</span>
+                <p class="text-gray-300 mt-1">${item.info}</p>
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
+}
+
 // ================= TABLE RONDE & ÉTAT DU JEU =================
 function updateGameState(newState) {
     gameState = { ...gameState, ...newState };
     
-    // MAJ Header
     document.getElementById('game-day').innerText = gameState.day;
     document.getElementById('game-phase').innerText = gameState.phase === 'night' ? 'Nuit' : (gameState.phase === 'vote' ? 'Vote' : 'Jour');
     document.getElementById('alive-count').innerText = gameState.aliveCount;
@@ -287,14 +311,14 @@ function renderRoundTable() {
         return;
     }
 
-    const radius = 130; // Rayon du cercle en pixels
+    const radius = 130;
     const centerX = table.offsetWidth / 2 || 192;
     const centerY = table.offsetHeight / 2 || 192;
 
     let html = '';
     players.forEach((p, index) => {
         const angle = (index / players.length) * 2 * Math.PI - Math.PI / 2;
-        const x = centerX + radius * Math.cos(angle) - 36; // Centrage avatar
+        const x = centerX + radius * Math.cos(angle) - 36;
         const y = centerY + radius * Math.sin(angle) - 36;
 
         const statusColor = p.alive ? 'border-green-600 bg-clock-panel' : 'border-red-900 bg-red-950/40 opacity-70';
@@ -419,7 +443,6 @@ function setAnnouncement(text) {
     document.getElementById('game-announcement').innerText = `Annonce : ${text}`;
 }
 
-// Demande initiée par le joueur vers un agent
 function requestWhisper() {
     const target1 = document.getElementById('whisper-target-1').value;
     const target2 = document.getElementById('whisper-target-2').value;
@@ -445,7 +468,6 @@ function requestWhisper() {
             payload: { targets: targets }
         }));
         
-        // Masquer/réinitialiser le panneau de sélection (ou afficher un message de confirmation dans le panneau)
         const panel = document.getElementById('dynamic-action-panel');
         panel.innerHTML = `<div class="text-green-400 text-xs italic text-center py-2">✓ Proposition de discussion privée transmise. Ouverture du salon.</div>`;
     }
@@ -453,18 +475,16 @@ function requestWhisper() {
 
 let currentWhisperAgent = null;
 
-// 1. Afficher la modale initiale de proposition
 function showAgentWhisperModal(agentId) {
     currentWhisperAgent = agentId;
     const modal = document.getElementById('modal-agent-whisper');
     const textEl = document.getElementById('agent-whisper-text');
-    const actionsEl = modal.querySelector('.flex'); // Le conteneur des boutons
+    const actionsEl = modal.querySelector('.flex');
 
     if (textEl) {
         textEl.innerText = `${agentId} souhaite s'entretenir discrètement avec vous dans l'ombre.`;
     }
 
-    // Remettre les boutons Oui / Non d'origine
     if (actionsEl) {
         actionsEl.innerHTML = `
             <button onclick="acceptAgentWhisper()" class="flex-1 bg-green-900/50 text-green-300 border border-green-700 py-2 rounded-xl text-xs font-semibold">Accepter</button>
@@ -475,13 +495,11 @@ function showAgentWhisperModal(agentId) {
     if (modal) modal.classList.remove('hidden');
 }
 
-// 2. Si l'humain clique sur "NON" (Refuser)
 function refuseAgentWhisper() {
     const modal = document.getElementById('modal-agent-whisper');
     const textEl = document.getElementById('agent-whisper-text');
     const actionsEl = modal.querySelector('.flex');
 
-    // Changer le texte et les boutons de la modale pour proposer les deux choix
     if (textEl) {
         textEl.innerText = `Vous avez refusé l'entretien avec ${currentWhisperAgent || 'l\'agent'}. Que souhaitez-vous faire ?`;
     }
@@ -493,7 +511,6 @@ function refuseAgentWhisper() {
         `;
     }
 
-    // Informer éventuellement le serveur du refus
     if (ws && ws.readyState === WebSocket.OPEN && currentWhisperAgent) {
         ws.send(JSON.stringify({
             action: "respond_whisper_invitation",
@@ -502,38 +519,32 @@ function refuseAgentWhisper() {
     }
 }
 
-// Option A du Refus : Juste fermer la modale (rien ne se passe, l'humain initie sa propre action)
 function closeAgentWhisperModalOnly() {
     const modal = document.getElementById('modal-agent-whisper');
     if (modal) modal.classList.add('hidden');
     currentWhisperAgent = null;
 }
 
-// Option B du Refus : Lancer la phase de vote
 function triggerVotePhaseFromModal() {
     const modal = document.getElementById('modal-agent-whisper');
     if (modal) modal.classList.add('hidden');
     
-    // Envoyer l'action au serveur pour déclencher le vote
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({
-            action: "trigger_vote_phase", // ou l'action gérée par ton back
+            action: "trigger_vote_phase",
             payload: {}
         }));
     }
 
-    console.log("🗳️ Demande de passage à la phase de vote envoyée au serveur.");
     currentWhisperAgent = null;
 }
 
-// 3. Si l'humain clique sur "OUI" (Accepter)
 function acceptAgentWhisper() {
     const modal = document.getElementById('modal-agent-whisper');
     if (modal) modal.classList.add('hidden');
 
     const agentId = currentWhisperAgent || "tobIAs";
 
-    // A. Envoyer l'acceptation au serveur
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({
             action: "respond_whisper_invitation",
@@ -541,7 +552,6 @@ function acceptAgentWhisper() {
         }));
     }
 
-    // B. Annonce publique dans le chat
     handleServerMessage({
         type: "chat",
         channel_id: "public",
@@ -549,7 +559,6 @@ function acceptAgentWhisper() {
         content: `💬 Un entretien privé a débuté entre vous et ${agentId}.`
     });
 
-    // C. Ouverture automatique de l'onglet privé et basculement
     const channelId = "whisper_human_" + agentId;
     if (typeof handlePrivateChannelOpened === 'function') {
         handlePrivateChannelOpened(channelId, `Salon privé ouvert avec ${agentId}`, [agentId]);
@@ -557,7 +566,6 @@ function acceptAgentWhisper() {
 
     currentWhisperAgent = null;
 }
-
 
 function showVoteResultModal(turnNumber, executedPlayer, votesArray) {
     const modal = document.getElementById('modal-vote-result');
@@ -567,10 +575,8 @@ function showVoteResultModal(turnNumber, executedPlayer, votesArray) {
 
     if (!modal || !headerEl || !listEl) return;
 
-    // Récupérer le pseudo du joueur connecté
     const currentUsername = typeof playerId !== 'undefined' ? playerId : null;
 
-    // 1. Gérer l'affichage du message personnel si le joueur est exécuté
     if (deathNoticeEl) {
         if (executedPlayer && executedPlayer === currentUsername) {
             deathNoticeEl.classList.remove('hidden');
@@ -579,11 +585,9 @@ function showVoteResultModal(turnNumber, executedPlayer, votesArray) {
         }
     }
 
-    // 2. 🔄 METTRE À JOUR AUTOMATIQUEMENT L'HISTORIQUE GLOBAL
     if (typeof gameState !== 'undefined') {
         if (!gameState.vote_history) gameState.vote_history = [];
 
-        // Transformer le tableau reçu pour qu'il corresponde au format de l'historique
         votesArray.forEach(v => {
             gameState.vote_history.push({
                 turn: turnNumber,
@@ -593,13 +597,11 @@ function showVoteResultModal(turnNumber, executedPlayer, votesArray) {
             });
         });
 
-        // Rafraîchir l'onglet des votes en arrière-plan si la fonction existe
         if (typeof renderVoteHistory === 'function') {
             renderVoteHistory();
         }
     }
 
-    // 3. Afficher le contenu dans la modale
     const executionText = executedPlayer ? `${executedPlayer} exécuté` : "pas d'exécution";
     headerEl.innerText = `JOUR ${turnNumber} - ${executionText}`;
 
@@ -618,28 +620,25 @@ function showVoteResultModal(turnNumber, executedPlayer, votesArray) {
     }
     listEl.innerHTML = html;
 
-    // 4. Ouvrir la modale
     modal.classList.remove('hidden');
 }
 
-// Fonction pour fermer la modale de vote
 function closeVoteResultModal() {
     const modal = document.getElementById('modal-vote-result');
     if (modal) modal.classList.add('hidden');
 }
 
-
-function showNightResultModal(deadPlayerName) {
+// Modale résultat de la nuit (mise à jour avec intégration dans l'historique de nuit)
+function showNightResultModal(turnNumber, deadPlayerName) {
     const modal = document.getElementById('modal-night-result');
     const messageEl = document.getElementById('night-result-message');
     const deathNoticeEl = document.getElementById('night-death-notice');
 
     if (!modal || !messageEl) return;
 
-    // Récupérer le pseudo du joueur connecté
     const currentUsername = typeof playerId !== 'undefined' ? playerId : null;
+    let nightLogText = "";
 
-    // Définir le message selon si quelqu'un est mort ou non (et si c'est l'humain)
     if (deadPlayerName) {
         if (deadPlayerName === currentUsername) {
             messageEl.innerHTML = `L'obscurité a frappé cette nuit...`;
@@ -648,16 +647,31 @@ function showNightResultModal(deadPlayerName) {
             messageEl.innerHTML = `Les ténèbres ont frappé...<br><br><span class="text-red-400 font-bold text-sm">${deadPlayerName}</span> est mort cette nuit.`;
             if (deathNoticeEl) deathNoticeEl.classList.add('hidden');
         }
+        nightLogText = `${deadPlayerName} est mort cette nuit.`;
     } else {
         messageEl.innerHTML = `Les esprits ont protégé le village...<br><br><span class="text-green-400 font-bold text-sm">Personne n'est mort</span> cette nuit !`;
         if (deathNoticeEl) deathNoticeEl.classList.add('hidden');
+        nightLogText = "Personne n'est mort cette nuit.";
     }
 
-    // Afficher la modale
+    // Enregistrer automatiquement le résultat de nuit dans l'historique global de nuit
+    if (typeof gameState !== 'undefined') {
+        if (!gameState.night_info_history) gameState.night_info_history = [];
+        
+        gameState.night_info_history.push({
+            turn: turnNumber || gameState.day,
+            type: "result",
+            info: nightLogText
+        });
+
+        if (typeof renderNightInfoHistory === 'function') {
+            renderNightInfoHistory();
+        }
+    }
+
     modal.classList.remove('hidden');
 }
 
-// Fonction pour fermer la modale de nuit
 function closeNightResultModal() {
     const modal = document.getElementById('modal-night-result');
     if (modal) {
@@ -665,9 +679,45 @@ function closeNightResultModal() {
     }
 }
 
+// Modale d'information nocturne (spécifique au rôle)
+function showNightInfoModal(turnNumber, infoText) {
+    const modal = document.getElementById('modal-night-info');
+    const contentEl = document.getElementById('night-info-content');
+
+    if (!modal || !contentEl) return;
+
+    contentEl.innerHTML = `
+        <span class="text-clock-gold font-bold block mb-2">Tour ${turnNumber}</span>
+        <p class="text-gray-200">${infoText}</p>
+    `;
+
+    // Enregistrer l'information de rôle dans l'historique global de nuit
+    if (typeof gameState !== 'undefined') {
+        if (!gameState.night_info_history) gameState.night_info_history = [];
+        
+        gameState.night_info_history.push({
+            turn: turnNumber,
+            type: "role_info",
+            info: infoText
+        });
+
+        if (typeof renderNightInfoHistory === 'function') {
+            renderNightInfoHistory();
+        }
+    }
+
+    modal.classList.remove('hidden');
+}
+
+function closeNightInfoModal() {
+    const modal = document.getElementById('modal-night-info');
+    if (modal) modal.classList.add('hidden');
+}
+
 // Assurer la visibilité globale pour les onclick du HTML
 window.closeVoteResultModal = closeVoteResultModal;
 window.closeNightResultModal = closeNightResultModal;
+window.closeNightInfoModal = closeNightInfoModal;
 
 
 function triggerGameOver(winner, details) {

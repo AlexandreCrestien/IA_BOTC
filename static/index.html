@@ -212,58 +212,77 @@
         </div>
     </div>
 
-<!-- Modale Résultat des Votes -->
-<div id="modal-vote-result" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 hidden">
-    <div class="bg-clock-dark border border-clock-border rounded-2xl p-6 w-[420px] shadow-2xl font-mono">
-        <!-- En-tête -->
-        <div id="vote-result-header" class="font-bold text-clock-gold uppercase tracking-wider mb-4 text-center text-sm border-b border-clock-border/40 pb-2">
-            JOUR X - EXÉCUTION
-        </div>
+    <!-- Modale Résultat des Votes -->
+    <div id="modal-vote-result" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 hidden">
+        <div class="bg-clock-dark border border-clock-border rounded-2xl p-6 w-[420px] shadow-2xl font-mono">
+            <!-- En-tête -->
+            <div id="vote-result-header" class="font-bold text-clock-gold uppercase tracking-wider mb-4 text-center text-sm border-b border-clock-border/40 pb-2">
+                JOUR X - EXÉCUTION
+            </div>
 
-        <!-- MESSAGE SI LE JOUEUR MEURT -->
-        <div id="vote-death-notice" class="hidden bg-clock-red/20 border border-clock-red/50 rounded-xl p-3 mb-4 text-xs text-center text-red-300">
-            <strong class="text-red-400 block mb-1">Vous avez été exécuté par le village.</strong>
-            La partie n'est pas finie, vous pouvez encore faire gagner votre camp. Vous pouvez continuer à discuter avec les autres joueurs et il vous reste un vote pour le reste de la partie.
-        </div>
-        
-        <!-- Liste des votes -->
-        <ul id="vote-result-list" class="space-y-1.5 pl-2 border-l border-clock-border/40 mb-6 text-xs max-h-48 overflow-y-auto">
-            <!-- Injecté dynamiquement par JS -->
-        </ul>
+            <!-- MESSAGE SI LE JOUEUR MEURT -->
+            <div id="vote-death-notice" class="hidden bg-clock-red/20 border border-clock-red/50 rounded-xl p-3 mb-4 text-xs text-center text-red-300">
+                <strong class="text-red-400 block mb-1">Vous avez été exécuté par le village.</strong>
+                La partie n'est pas finie, vous pouvez encore faire gagner votre camp. Vous pouvez continuer à discuter avec les autres joueurs et il vous reste un vote pour le reste de la partie.
+            </div>
+            
+            <!-- Liste des votes -->
+            <ul id="vote-result-list" class="space-y-1.5 pl-2 border-l border-clock-border/40 mb-6 text-xs max-h-48 overflow-y-auto">
+                <!-- Injecté dynamiquement par JS -->
+            </ul>
 
-        <!-- Bouton de fermeture -->
-        <button onclick="closeVoteResultModal()" class="w-full bg-clock-red text-white py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-red-700 transition-colors">
-            Continuer la partie
-        </button>
+            <!-- Bouton de fermeture -->
+            <button onclick="closeVoteResultModal()" class="w-full bg-clock-red text-white py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-red-700 transition-colors">
+                Continuer la partie
+            </button>
+        </div>
     </div>
-</div>
 
-<!-- Modale Résultat de la Nuit -->
-<div id="modal-night-result" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 hidden">
-    <div class="bg-clock-dark border border-clock-border rounded-2xl p-6 w-[420px] shadow-2xl font-mono text-center">
-        <!-- En-tête -->
-        <div class="font-bold text-clock-gold uppercase tracking-wider mb-4 text-sm border-b border-clock-border/40 pb-2">
-            RÉVEIL DU VILLAGE
-        </div>
-        
-        <!-- Message de la nuit -->
-        <div id="night-result-message" class="text-white text-xs mb-4">
-            <!-- Injecté dynamiquement par JS -->
-        </div>
+    <!-- Modale Résultat de la Nuit -->
+    <div id="modal-night-result" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 hidden">
+        <div class="bg-clock-dark border border-clock-border rounded-2xl p-6 w-[420px] shadow-2xl font-mono text-center">
+            <!-- En-tête -->
+            <div class="font-bold text-clock-gold uppercase tracking-wider mb-4 text-sm border-b border-clock-border/40 pb-2">
+                RÉVEIL DU VILLAGE
+            </div>
+            
+            <!-- Message de la nuit -->
+            <div id="night-result-message" class="text-white text-xs mb-4">
+                <!-- Injecté dynamiquement par JS -->
+            </div>
 
-        <!-- MESSAGE SI LE JOUEUR MEURT -->
-        <div id="night-death-notice" class="hidden bg-clock-red/20 border border-clock-red/50 rounded-xl p-3 mb-6 text-xs text-center text-red-300">
-            <strong class="text-red-400 block mb-1">Vous avez été tué par le démon.</strong>
-            La partie n'est pas finie, vous pouvez encore faire gagner les Villageois. Vous pouvez continuer à discuter avec les autres joueurs et il vous reste un vote pour le reste de la partie.
-        </div>
+            <!-- MESSAGE SI LE JOUEUR MEURT -->
+            <div id="night-death-notice" class="hidden bg-clock-red/20 border border-clock-red/50 rounded-xl p-3 mb-6 text-xs text-center text-red-300">
+                <strong class="text-red-400 block mb-1">Vous avez été tué par le Diablotin.</strong>
+                La partie n'est pas finie, vous pouvez encore faire gagner les Villageois. Vous pouvez continuer à discuter avec les autres joueurs et il vous reste un vote pour le reste de la partie.
+            </div>
 
-        <!-- Bouton de fermeture -->
-        <button onclick="closeNightResultModal()" class="w-full bg-clock-red text-white py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-red-700 transition-colors">
-            Commencer la journée
-        </button>
+            <!-- Bouton de fermeture -->
+            <button onclick="closeNightResultModal()" class="w-full bg-clock-red text-white py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-red-700 transition-colors">
+                Commencer la journée
+            </button>
+        </div>
     </div>
-</div>
 
+    <!-- Modale d'Information Nocturne -->
+    <div id="modal-night-info" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 hidden">
+        <div class="bg-clock-dark border border-clock-border rounded-2xl p-6 w-[420px] shadow-2xl font-mono text-center">
+            <!-- En-tête -->
+            <div class="font-bold text-clock-gold uppercase tracking-wider mb-4 text-sm border-b border-clock-border/40 pb-2">
+                RÉVÉLATION DE LA NUIT
+            </div>
+            
+            <!-- Contenu de l'information reçue -->
+            <div id="night-info-content" class="text-white text-xs mb-6 py-4 bg-clock-darker border border-clock-border/30 rounded-xl px-4">
+                <!-- Injecté dynamiquement par JS selon le rôle -->
+            </div>
+
+            <!-- Bouton de fermeture -->
+            <button onclick="closeNightInfoModal()" class="w-full bg-clock-gold text-clock-dark py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-yellow-600 transition-colors">
+                Compris, laisse-moi dormir maintenant.
+            </button>
+        </div>
+    </div>
 
     <script src="/js/app.js"></script>
 </body>
