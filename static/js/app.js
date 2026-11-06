@@ -295,8 +295,17 @@ function updateGameState(newState) {
     gameState = { ...gameState, ...newState };
     
     document.getElementById('game-day').innerText = gameState.day;
-    document.getElementById('game-phase').innerText = gameState.phase === 'night' ? 'Nuit' : (gameState.phase === 'vote' ? 'Vote' : 'Jour');
+    document.getElementById('game-phase').innerText = gameState.phase === 'nuit' ? 'Nuit' : (gameState.phase === 'vote' ? 'Vote' : 'Discussion');
     document.getElementById('alive-count').innerText = gameState.aliveCount;
+
+    // Mise à jour contextuelle de l'annonce si le serveur ne donne pas d'annonce explicite dans le paquet
+    if (newState.announcement) {
+        setAnnouncement(newState.announcement);
+    } else if (newState.phase === 'night') {
+        setAnnouncement("La nuit tombe... Reposez-vous pendant que les autres joueurs vaquent à leurs occupations.");
+    } else if (newState.phase === 'vote') {
+        setAnnouncement("Phase de vote : réflexion et choix des joueurs en cours...");
+    }
 
     renderRoundTable();
     renderPlayersList();
@@ -439,8 +448,45 @@ function closeRoleRevealModal() {
     document.getElementById('modal-role-reveal').classList.add('hidden');
 }
 
+
+// ================= BANDEAU D'ANNONCE & EFFET VISIBLE =================
+let announcementTimer = null;
+
 function setAnnouncement(text) {
-    document.getElementById('game-announcement').innerText = `Annonce : ${text}`;
+    const announcementEl = document.getElementById('game-announcement');
+    if (!announcementEl) return;
+
+    // 1. Mettre à jour le texte
+    announcementEl.innerText = `Annonce : ${text}`;
+
+    // 2. Détecter si c'est un état d'attente / chargement
+    const lowerText = text.toLowerCase();
+    const isWaitingState = lowerText.includes("attente") || 
+                           lowerText.includes("cours") || 
+                           lowerText.includes("patienter") || 
+                           lowerText.includes("réflexion") ||
+                           lowerText.includes("endort");
+
+    // Nettoyer un éventuel timer précédent
+    if (announcementTimer) {
+        clearTimeout(announcementTimer);
+        announcementTimer = null;
+    }
+
+    // 3. Appliquer l'effet visuel sans toucher au positionnement
+    if (isWaitingState) {
+        // Effet lumineux pulsé (sans bounce pour ne pas décaler l'affichage)
+        announcementEl.className = "bg-clock-accent border border-yellow-500 px-4 py-1.5 rounded-lg text-sm text-yellow-300 truncate italic max-w-md text-center font-bold animate-pulse shadow-[0_0_12px_rgba(234,179,8,0.5)] transition-all duration-300";
+
+        // Retirer l'effet au bout de 3 secondes
+        announcementTimer = setTimeout(() => {
+            announcementEl.className = "bg-clock-accent border border-clock-border px-4 py-1.5 rounded-lg text-sm text-clock-gold truncate italic max-w-md text-center transition-all duration-300";
+        }, 3000);
+
+    } else {
+        // Style classique d'origine
+        announcementEl.className = "bg-clock-accent border border-clock-border px-4 py-1.5 rounded-lg text-sm text-clock-gold truncate italic max-w-md text-center transition-all duration-300";
+    }
 }
 
 function requestWhisper() {
