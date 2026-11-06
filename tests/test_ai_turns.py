@@ -31,11 +31,11 @@ class FakeAgent:
         self.speak_reply = speak
         self.seen_options = None
 
-    async def night_action(self, options, number_of_targets=1):
+    async def night_action(self, options, count=1, situation=""):
         self.seen_options = options
         if self.night_reply is None:
             raise RuntimeError("panne")
-        return self.night_reply(options, number_of_targets)
+        return self.night_reply(options, count)
 
     async def vote(self, options):
         if self.vote_reply is None:
