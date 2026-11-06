@@ -214,3 +214,12 @@ def reveal_psychic_answer(
             f"Parmi {names}, {verdict}.",
             frozenset({player.id}),
         )
+
+def record_night_choices(state: GameState, choices: dict[str, tuple[str, ...]], memory: MemoryManager) -> None:
+    """Chaque joueur qui a agi garde une trace privée de sa cible. Un joueur mort pendant la nuit n'en garde pas."""
+    for player_id, target_ids in choices.items():
+        if not target_ids or not state.player(player_id).alive:
+            continue
+        names = " et ".join(state.player(pid).name for pid in target_ids)
+        memory.add_event(EventType.night_action, game_master,
+                         f"Nuit {state.turn} : tu as choisi {names}.", frozenset({player_id}))

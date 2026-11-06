@@ -76,12 +76,13 @@ class Agent:
         )
         return await ask_llm("fast", self._messages(instruction))
 
-    async def night_action(self, options: list[str], number_of_targets: int = 1) -> list[str]:
+    async def night_action(self, options: list[str], number_of_targets: int = 1, situation: str = "") -> list[str]:
         """Choix de nuit selon le pouvoir du rôle."""
         if not options:
             raise ValueError("Aucune option légale fournie")
+        prefix = f"{situation} " if situation else ""
         instruction = (
-            f"C'est la nuit. Utilise ton pouvoir : choisis {number_of_targets} joueur(s) parmi : {', '.join(options)}. Réponds uniquement en JSON : {{\"cibles\": [\"nom\", ...], \"raison\": \"pourquoi, en 5 mots maximum\"}}."
+            f"{prefix}C'est la nuit. Utilise ton pouvoir : choisis {number_of_targets} joueur(s) parmi : {', '.join(options)}. Réponds uniquement en JSON : {{\"cibles\": [\"nom\", ...], \"raison\": \"pourquoi, en 5 mots maximum\"}}."
         )
         result = await ask_llm_json("capable", self._messages(instruction), NightAction,
                                      context={"options": options, "number_of_targets": number_of_targets})

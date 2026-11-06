@@ -11,7 +11,7 @@ from typing import Optional, Protocol
 
 from backend.ai_turns import collect_ai_night_choices, collect_ai_votes
 from backend.conversations import public_conversation, start_private_conversation
-from backend.game_engine import TurnResult, _deaths, play_day, play_night, reveal_psychic_answer
+from backend.game_engine import TurnResult, _deaths, play_day, play_night, record_night_choices, reveal_psychic_answer
 from backend.memory_manager import MemoryManager
 from backend.models import EventType, GameState, Phase
 from backend.rules import night_steps, winner
@@ -115,6 +115,7 @@ async def play_turn_with_human(
         human_night[human_id] = await human.night_choice(state, human_id)
     night_answers = {**ai_night, **human_night}
     after_night, night_choices = play_night(state, rng, lambda s, pid: night_answers.get(pid, ()))
+    record_night_choices(after_night, night_choices, memory)
     reveal_psychic_answer(after_night, night_choices, memory, rng)
 
     night_deaths = _deaths(state, after_night)
