@@ -1,6 +1,6 @@
 # Choix des modèles LLM
 
-*Tests réalisés le 3 novembre 2026 par Edilene avec `backend/test_llm.py` (LiteLLM, 3 exécutions par modèle, appels séquentiels).*
+*Tests réalisés le 3 novembre 2026 par Edilene avec un script LiteLLM (3 exécutions par modèle, appels séquentiels).*
 
 ## Fournisseurs retenus
 

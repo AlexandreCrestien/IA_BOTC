@@ -38,6 +38,7 @@ def mock_memory():
     memory.player_ids = {"agent_1", "agent_2", "human_id"}
     memory.name_of.side_effect = lambda pid: pid
     memory.context_for.return_value = "Historique fictif de la partie."
+    memory.name_of.side_effect = lambda player_id: player_id
     return memory
 
 
@@ -269,7 +270,7 @@ def test_vote_retries_after_illegal_target(agent, fake_llm):
     assert asyncio.run(agent.vote(["bruno", "carla"])) == "bruno"
 
 
-@pytest.mark.parametrize("reply", [PASS, "passe", "PASSE.", "  Passe  "])
+@pytest.mark.parametrize("reply", [PASS, "passe", "PASSE.", "  Passe  ", "**PASSE**", "« Passe »", "Passe !"])
 def test_optional_speaker_can_pass(agent, fake_llm, reply):
     fake_llm.replies = [reply]
     assert asyncio.run(agent.speak_public(optional=True)) is None
@@ -304,3 +305,38 @@ def test_create_all_agents_requires_human(fake_skills_env, sample_role_data, sam
         create_all_agents({"agent_1": ("IAn", sample_role_data, sample_personality_data)},
                           mock_memory, human_id="human_id",
                           prompt_loader=PromptLoader(base_dir=fake_skills_env))
+
+
+# --- Noms affichés dans les prompts ------------------------------------------------
+
+@pytest.fixture
+def named_agent(sample_role_data):
+    memory = MemoryManager(["p1", "p2", "p3"], names={"p1": "Ana", "p2": "Bruno", "p3": "Carla"})
+    player = Player(id="p1", name="Ana", role=Role(**sample_role_data))
+    return Agent(player=player, personality="Provocateur", memory=memory, system_prompt="prompt",
+                 personality_key="agitator")
+
+
+def test_system_prompt_lists_player_names(named_agent, fake_llm):
+    fake_llm.replies = ["Salut."]
+    asyncio.run(named_agent.speak_public())
+    system = fake_llm.calls[0][0]["content"]
+    assert "Joueurs présents dans la partie : Ana, Bruno, Carla." in system
+    assert "p2" not in system
+
+
+def test_speak_private_uses_partner_names(named_agent, fake_llm):
+    fake_llm.replies = ["Salut !"]
+    asyncio.run(named_agent.speak_private(["p2", "p3"]))
+    assert "conversation privée avec Bruno, Carla" in fake_llm.calls[0][-1]["content"]
+
+
+def test_optional_instruction_says_passing_is_normal(agent, fake_llm):
+    fake_llm.replies = [PASS]
+    asyncio.run(agent.speak_public(optional=True))
+    assert "passer ton tour est un choix normal" in fake_llm.calls[0][-1]["content"]
+
+
+def test_long_message_starting_with_passe_is_kept(agent, fake_llm):
+    fake_llm.replies = ["Passe-moi le relais : bruno ment."]
+    assert asyncio.run(agent.speak_public(optional=True)) == "Passe-moi le relais : bruno ment."

@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="fr" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blood on the AI Clocktower</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        clock: {
+                            dark: '#07080a',
+                            panel: '#111318',
+                            border: '#232733',
+                            red: '#811d1d',
+                            gold: '#b48a3d',
+                            accent: '#1e222d'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="bg-clock-dark text-gray-200 min-h-screen flex flex-col font-sans select-none overflow-hidden">
+
+    <!-- ================= 1. ÉCRAN D'ACCUEIL (LOGIN) ================= -->
+    <div id="screen-welcome" class="fixed inset-0 z-50 flex items-center justify-center bg-cover bg-center bg-no-repeat">
+        <div class="bg-clock-panel border border-clock-border p-8 rounded-2xl max-w-md w-full mx-4 shadow-2xl flex flex-col items-center space-y-6">
+            <div class="text-center space-y-3">
+                <span class="text-4xl">⏳</span>
+                <h1 class="text-2xl font-bold tracking-widest text-clock-gold uppercase">Blood on the AI Clocktower</h1>
+                <p class="text-s text-gray-400 leading-relaxed font-semibold">
+                    Bienvenue dans Blood on the AI Clocktower !
+                </p>
+                <p class="text-s text-gray-400 leading-relaxed">
+                    Jouez à une variante du loup-garou en affrontant des agents IA autonomes. Faites gagner votre camp en démasquant les démons ou en bluffant pour éviter d'être exécuté par les villageois.
+                </p>
+            </div>
+
+            <div class="w-full space-y-3">
+                <label class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Votre pseudo</label>
+                <input type="text" id="welcome-player-id" placeholder="ex: Enqueteur_Arthur" value="Sasha"
+                    class="w-full bg-clock-dark border border-clock-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-clock-gold text-center font-mono">
+            </div>
+
+            <button onclick="joinGame()" class="w-full bg-clock-red hover:bg-red-800 text-white font-bold py-3 rounded-xl transition shadow-lg uppercase tracking-wider text-sm">
+                Rejoindre la partie
+            </button>
+        </div>
+    </div>
+
+    <!-- ================= 2. INTERFACE GÉNÉRALE DU JEU ================= -->
+    <div id="screen-game" class="hidden flex-1 flex flex-col h-screen">
+        
+        <!-- Top bar / Annonces & état du jeu -->
+        <header class="bg-clock-panel border-b border-clock-border px-6 py-3 relative flex justify-between items-center shadow-md z-10">
+            <!-- Gauche : Titre et Stats -->
+            <div class="flex items-center space-x-6 z-10">
+                <div class="flex items-center space-x-2">
+                    <span class="text-xl">⏳</span>
+                    <span class="font-bold tracking-wider text-clock-gold text-base">CLOCKTOWER</span>
+                </div>
+                <div class="bg-clock-dark border border-clock-border px-3 py-1 rounded-lg text-sm flex items-center space-x-3 font-mono">
+                    <span>Tour <strong id="game-day" class="text-clock-gold">1</strong></span>
+                    <span class="text-gray-600">|</span>
+                    <span id="game-phase" class="uppercase text-blue-400 font-semibold">Jour</span>
+                    <span class="text-gray-600">|</span>
+                    <span>Vivants : <strong id="alive-count" class="text-green-400">--</strong></span>
+                </div>
+            </div>
+
+            <!-- Centre : Annonces rigoureusement centrées sur l'écran -->
+            <div id="game-announcement" class="absolute left-1/2 -translate-x-1/2 bg-clock-accent border border-clock-border px-4 py-1.5 rounded-lg text-sm text-clock-gold truncate italic max-w-md text-center">
+                Annonce : En attente du début de la partie...
+            </div>
+
+            <!-- Droite : Badge statut à taille normale -->
+            <div id="connection-status" class="px-3 py-1 rounded-full text-xs font-semibold bg-green-900/50 text-green-400 border border-green-700 whitespace-nowrap z-10">
+                Connecté
+            </div>
+        </header>
+
+        <!-- Grille principale à 3 colonnes (Sidebar gauche | Table ronde Centrale | Sidebar droite) -->
+        <main class="flex-1 grid grid-cols-1 md:grid-cols-12 gap-4 p-4 overflow-hidden">
+            
+            <!-- SIDEBAR GAUCHE : Conversations & historiques (3 colonnes) -->
+            <section class="md:col-span-3 bg-clock-panel border border-clock-border rounded-2xl flex flex-col overflow-hidden shadow-xl">
+                <!-- Onglets de la sidebar gauche -->
+                <div class="flex border-b border-clock-border bg-clock-dark text-sm">
+                    <button onclick="switchLeftTab('chat')" id="tab-btn-chat" class="flex-1 py-3 font-semibold text-clock-gold border-b-2 border-clock-gold transition">Chat</button>
+                    <button onclick="switchLeftTab('night')" id="tab-btn-night" class="flex-1 py-3 font-medium text-gray-400 hover:text-gray-200 transition">Nuits</button>
+                    <button onclick="switchLeftTab('votes')" id="tab-btn-votes" class="flex-1 py-3 font-medium text-gray-400 hover:text-gray-200 transition">Votes</button>
+                </div>
+
+                <!-- Contenu onglet : Tchats (public + privés) -->
+                <div id="tab-content-chat" class="flex-1 flex flex-col p-3 overflow-hidden">
+                    <div id="chat-channels" class="flex space-x-1 mb-2 overflow-x-auto pb-1 text-xs">
+                        <button id="tab-public" onclick="switchChannel('public')" class="channel-btn bg-clock-accent text-clock-gold px-3 py-1.5 rounded-lg font-medium border border-clock-border whitespace-nowrap text-xs">Public</button>
+                    </div>
+                    <div id="chat-messages" class="flex-1 bg-clock-dark border border-clock-border rounded-xl p-3 overflow-y-auto space-y-2 font-mono text-sm mb-3">
+                        <div class="text-gray-500 italic text-center">Canal public initialisé...</div>
+                    </div>
+                    <div class="flex space-x-2">
+                        <input type="text" id="chat-input" placeholder="Écrire un message..." onkeypress="if(event.key==='Enter') sendChatMessage()"
+                            class="flex-1 bg-clock-dark border border-clock-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-clock-gold">
+                        <button onclick="sendChatMessage()" class="bg-clock-gold hover:bg-yellow-600 text-clock-dark font-bold px-4 py-2 rounded-xl text-xs transition uppercase tracking-wider">Envoyer</button>
+                    </div>
+                </div>
+
+                <!-- Contenu onglet : Historique nuits -->
+                <div id="tab-content-night" class="hidden flex-1 p-3 overflow-y-auto text-sm space-y-2 font-mono">
+                    <div class="text-gray-500 italic">Aucune information nocturne enregistrée.</div>
+                </div>
+
+                <!-- Contenu onglet : Historique votes -->
+                <div id="tab-content-votes" class="hidden flex-1 p-3 overflow-y-auto text-sm space-y-2 font-mono">
+                    <div class="text-gray-500 italic">Aucun historique de vote disponible.</div>
+                </div>
+            </section>
+
+            <!-- ZONE CENTRALE : Table ronde & Grimoire (6 colonnes) -->
+            <section class="md:col-span-6 bg-clock-panel border border-clock-border rounded-2xl flex flex-col items-center justify-between p-6 relative shadow-xl overflow-hidden">
+                <div class="absolute top-4 left-4 text-xs font-semibold text-gray-400 uppercase tracking-widest">Table ronde & Grimoire</div>
+                
+                <!-- Représentation visuelle de la table ronde -->
+                <div id="round-table" class="relative w-80 h-80 sm:w-96 sm:h-96 rounded-full border-2 border-dashed border-clock-border flex items-center justify-center my-auto">
+                    <div class="text-center text-gray-500 text-sm italic">
+                        Chargement des places du village...
+                    </div>
+                </div>
+
+                <!-- Encadré fixe du rôle en bas de la zone centrale -->
+                <div class="w-full bg-clock-dark border border-clock-border rounded-xl p-3 flex items-center justify-between mt-4">
+                    <div class="flex items-center space-x-3">
+                        <span class="text-2xl">📜</span>
+                        <div>
+                            <div class="text-xs text-gray-500 uppercase tracking-widest font-semibold">Votre rôle secret</div>
+                            <div id="player-role-name" class="text-clock-gold font-bold text-sm">En attente d'attribution...</div>
+                        </div>
+                    </div>
+                    <div id="player-role-desc" class="text-s text-gray-400 italic max-w-sm text-right truncate">
+                        Le destin du village se prépare.
+                    </div>
+                </div>
+            </section>
+
+            <!-- SIDEBAR DROITE : Actions dynamiques & Liste des joueurs (3 colonnes) -->
+            <section class="md:col-span-3 bg-clock-panel border border-clock-border rounded-2xl flex flex-col overflow-hidden shadow-xl">
+                
+                <!-- Haut : Encadré dynamique des actions de phase -->
+                <div class="p-4 border-b border-clock-border bg-clock-dark/50">
+                    <h3 class="text-xs font-semibold text-clock-gold uppercase tracking-wider mb-2">Actions & Décisions</h3>
+                    <div id="dynamic-action-panel" class="space-y-2 text-sm">
+                        <div class="text-gray-500 italic">En attente de la phase d'action...</div>
+                    </div>
+                </div>
+
+                <!-- Bas : Liste des joueurs, statuts & notes de soupçon -->
+                <div class="flex-1 p-4 flex flex-col overflow-hidden">
+                    <h3 class="text-xs font-semibold text-clock-gold uppercase tracking-wider mb-2">Villageois & Notes</h3>
+                    <div id="players-notes-list" class="flex-1 overflow-y-auto space-y-2 pr-1">
+                        <div class="text-gray-500 italic text-sm">Chargement des joueurs...</div>
+                    </div>
+                </div>
+
+            </section>
+
+        </main>
+    </div>
+
+    <!-- ================= 3. POPINS & MODALES DYNAMIQUES ================= -->
+
+    <!-- Modale de fin de partie (victoire / défaite) -->
+    <div id="modal-gameover" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+        <div class="bg-clock-panel border border-clock-border p-8 rounded-2xl max-w-md w-full mx-4 text-center space-y-4">
+            <h2 id="gameover-title" class="text-2xl font-bold text-clock-gold">Fin de la Partie</h2>
+            <p id="gameover-desc" class="text-base text-gray-300">Le village a rendu son verdict.</p>
+            <button onclick="location.reload()" class="bg-clock-red text-white px-6 py-2 rounded-xl text-xs font-bold uppercase tracking-wider">Recommencer</button>
+        </div>
+    </div>
+
+    <!-- Modale d'attribution du rôle de l'humain (début de partie) -->
+    <div id="modal-role-reveal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md">
+        <div class="bg-clock-panel border-2 border-clock-gold p-8 rounded-2xl max-w-md w-full mx-4 text-center space-y-4 shadow-2xl">
+            <span class="text-4xl">📜</span>
+            <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-widest">Le Grimoire s'ouvre</h3>
+            <h2 id="modal-role-title" class="text-2xl font-bold text-clock-gold">Votre rôle secret</h2>
+            <p id="modal-role-description" class="text-sm text-gray-300 leading-relaxed italic">
+                Description de votre rôle et de votre capacité spéciale dans l'ombre du village.
+            </p>
+            <button onclick="closeRoleRevealModal()" class="w-full bg-clock-gold hover:bg-yellow-600 text-clock-dark font-bold py-3 rounded-xl text-xs uppercase tracking-wider transition">
+                Compris, commençons à jouer !
+            </button>
+        </div>
+    </div>
+
+    <!-- Modale d'interaction Agent - Humain (proposition de conversation) -->
+    <div id="modal-agent-whisper" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+        <div class="bg-clock-panel border border-clock-border p-6 rounded-2xl max-w-sm w-full mx-4 space-y-4">
+            <h3 class="text-xs font-semibold text-clock-gold uppercase tracking-wider">Demande d'entretien</h3>
+            <p id="agent-whisper-text" class="text-sm text-gray-300 italic">Un agent souhaite s'entretenir discrètement avec vous.</p>
+            <div class="flex space-x-2">
+                <button onclick="acceptAgentWhisper()" class="flex-1 bg-green-900/50 text-green-300 border border-green-700 py-2 rounded-xl text-xs font-semibold">Accepter</button>
+                <button onclick="closeAgentWhisper()" class="flex-1 bg-gray-800 text-gray-400 py-2 rounded-xl text-xs">Ignorer</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/app.js"></script>
+</body>
+</html>
