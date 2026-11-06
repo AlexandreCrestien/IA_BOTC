@@ -356,7 +356,6 @@ function renderRoundTable() {
         html += `
             <div class="absolute w-28 h-28 rounded-full border-2 ${statusColor} flex flex-col items-center justify-center p-2.5 text-center shadow-2xl transition-all duration-300 cursor-pointer hover:scale-110 z-10"
                  style="left: ${x}px; top: ${y}px;" title="${p.name} (${p.alive ? 'Vivant' : 'Mort'})">
-                <span class="text-3xl mb-1">${p.alive ? '👤' : '💀'}</span>
                 <span class="text-xs font-bold truncate w-full text-gray-200 px-1">${p.name}</span>
                 <span class="text-[11px] ${p.alive ? 'text-green-400 font-semibold' : 'text-red-400 font-semibold'}">${p.alive ? 'Vivant' : 'Mort'}</span>
             </div>
@@ -394,7 +393,7 @@ function renderPlayersList() {
                         <option value="voyante" ${p.suspicion === 'voyante' ? 'selected' : ''}>Voyante (Villageois)</option>
                         <option value="moine" ${p.suspicion === 'moine' ? 'selected' : ''}>Moine (Villageois)</option>
                         <option value="detective" ${p.suspicion === 'detective' ? 'selected' : ''}>Détective (Villageois)</option>
-                        <option value="majordome" ${p.suspicion === 'majordome' ? 'selected' : ''}>Majordome (Villageois - Étranger)</option>
+                        <option value="majordome" ${p.suspicion === 'majordome' ? 'selected' : ''}>Majordome (Villageois - Outsider)</option>
                     </optgroup>
                 </select>
             </div>
