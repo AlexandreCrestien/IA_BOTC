@@ -89,6 +89,9 @@ function handleServerMessage(data) {
         case "private_channel_opened":
             handlePrivateChannelOpened(data.channel_id, data.text);
             break;
+        case "vote_result":
+            showVoteResultModal(data.turn, data.executed, data.votes);
+            break;
         default:
             console.log("Message non géré :", data);
     }
@@ -317,7 +320,7 @@ function renderPlayersList() {
                     ${p.alive ? 'Vivant' : 'Mort'}
                 </span>
             </div>
-            ${!p.alive ? `<div class="text-xs text-gray-400">Dernier vote : ${p.lastVote !== null ? p.lastVote : 'Non utilisé'}</div>` : ''}
+            ${!p.alive ? `<div class="text-xs text-gray-400">Dernier vote : ${p.has_vote ? 'Disponible' : 'Utilisé'}</div>` : ''}
             <div class="flex items-center">
                 <select onchange="updateSuspicion('${p.id}', this.value)" class="w-full bg-clock-panel border border-clock-border text-xs rounded px-2 py-1.5 text-gray-300 focus:outline-none focus:border-clock-gold">
                     <option value="">-- Rôle soupçonné --</option>
@@ -552,8 +555,66 @@ function acceptAgentWhisper() {
     currentWhisperAgent = null;
 }
 
+
+function showVoteResultModal(turnNumber, executedPlayer, votesArray) {
+    const modal = document.getElementById('modal-vote-result');
+    const headerEl = document.getElementById('vote-result-header');
+    const listEl = document.getElementById('vote-result-list');
+
+    if (!modal || !headerEl || !listEl) return;
+
+    // 1. 🔄 METTRE À JOUR AUTOMATIQUEMENT L'HISTORIQUE GLOBAL
+    if (typeof gameState !== 'undefined') {
+        if (!gameState.vote_history) gameState.vote_history = [];
+
+        // Transformer le tableau reçu pour qu'il corresponde au format de l'historique
+        votesArray.forEach(v => {
+            gameState.vote_history.push({
+                turn: turnNumber,
+                voter: v.voter,
+                target: v.target,
+                executed: executedPlayer
+            });
+        });
+
+        // Rafraîchir l'onglet des votes en arrière-plan si la fonction existe
+        if (typeof renderVoteHistory === 'function') {
+            renderVoteHistory();
+        }
+    }
+
+    // 2. Afficher le contenu dans la modale
+    const executionText = executedPlayer ? `${executedPlayer} exécuté` : "pas d'exécution";
+    headerEl.innerText = `JOUR ${turnNumber} - ${executionText}`;
+
+    let html = '';
+    if (!votesArray || votesArray.length === 0) {
+        html = `<li class="text-gray-500 italic">Aucun vote enregistré.</li>`;
+    } else {
+        votesArray.forEach(v => {
+            const targetText = v.target ? v.target : "vote blanc";
+            html += `
+                <li class="text-gray-300">
+                    - <span class="font-semibold text-white">${v.voter}</span> : ${targetText}
+                </li>
+            `;
+        });
+    }
+    listEl.innerHTML = html;
+
+    // 3. Ouvrir la modale
+    modal.classList.remove('hidden');
+}
+
+// Fonction pour fermer la modale
+function closeVoteResultModal() {
+    const modal = document.getElementById('modal-vote-result');
+    if (modal) modal.classList.add('hidden');
+}
+
+
 function triggerGameOver(winner, details) {
-    document.getElementById('gameover-title').innerText = `Victoire : ${winner}`;
+    document.getElementById('gameover-title').innerText = `Victoire des ${winner}`;
     document.getElementById('gameover-desc').innerText = details;
     document.getElementById('modal-gameover').classList.remove('hidden');
 }
