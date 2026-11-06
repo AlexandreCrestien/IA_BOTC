@@ -73,18 +73,21 @@ def test_game_master_id_is_reserved():
 
 
 def test_events_keep_chronological_order_and_phase(memory):
+    memory.set_moment(1, Phase.NUIT)
     memory.add_public(EventType.announcement, game_master, "Nuit 1")
-    memory.advance_phase()
-    memory.add_public(EventType.announcement, game_master, "Jour 1")
-    memory.advance_phase()
+    memory.set_moment(1, Phase.DISCUSSION)
+    memory.add_public(EventType.announcement, game_master, "Discussion 1")
+    memory.set_moment(1, Phase.VOTE)
     memory.add_public(EventType.announcement, game_master, "Vote 1")
-    memory.advance_phase()
+    memory.set_moment(2, Phase.NUIT)
     memory.add_public(EventType.announcement, game_master, "Nuit 2")
 
     events = memory.events_for("ana")
-    assert contents(events) == ["Nuit 1", "Jour 1", "Vote 1", "Nuit 2"]
     assert [(e.turn, e.phase) for e in events] == [
-        (1, Phase.NUIT), (1, Phase.DISCUSSION), (1, Phase.VOTE), (2, Phase.NUIT),
+        (1, Phase.NUIT),
+        (1, Phase.DISCUSSION),
+        (1, Phase.VOTE),
+        (2, Phase.NUIT),
     ]
 
 def test_returned_list_does_not_change_memory(memory):

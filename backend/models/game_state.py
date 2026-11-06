@@ -2,7 +2,6 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from backend.models.channel import Channel
 from backend.models.enums import Phase
-from backend.models.game_event import GameEvent
 from backend.models.player import Player
 
 
@@ -15,7 +14,6 @@ class GameState(BaseModel):
     phase: Phase = Phase.NUIT
     players: tuple[Player, ...] = ()
     channels: tuple[Channel, ...] = ()
-    log: tuple[GameEvent, ...] = ()
 
     @model_validator(mode="after")
     def _check_unique_ids(self):
@@ -57,12 +55,6 @@ class GameState(BaseModel):
             update={"channels": tuple(channel if c.id == channel.id else c for c in self.channels)}
         )
 
-    def add_event(self, event: GameEvent) -> "GameState":
-        return self.model_copy(update={"log": self.log + (event,)})
-
-    def log_visible_to(self, player_id: str) -> tuple[GameEvent, ...]:
-        return tuple(e for e in self.log if e.is_visible_to(player_id))
-
     def next_phase(self) -> "GameState":
         """Nuit -> discussion -> vote dans le même tour ; vote -> nuit au tour suivant.
         Au passage à la nuit : retire les effets arrivés à leur fin et remet les pouvoirs à zéro."""
@@ -73,7 +65,7 @@ class GameState(BaseModel):
         if new_phase == Phase.NUIT:
             players = tuple(p.reset_power() for p in players)
         return self.model_copy(update={"turn": new_turn, "phase": new_phase, "players": players})
-    
+
     def __str__(self) -> str:
         """Résumé lisible de la partie, pour le débogage et les tests."""
         def summary(p: Player) -> str:
@@ -90,5 +82,4 @@ class GameState(BaseModel):
         for c in self.channels:
             state = "ouvert" if c.open else "fermé"
             lines.append(f"Salon {c.name} ({state}, {len(c.members)} membres, {len(c.messages)} messages)")
-        lines.append(f"Journal : {len(self.log)} événements")
         return "\n".join(lines)
