@@ -10,7 +10,9 @@ let gameState = {
     messages: { public: [] }, // channel_id -> [messages]
     currentChannel: "public",
     announcement: "En attente du début de la partie...",
-    roleInfo: { name: "En attente...", description: "La partie va démarrer." }
+    roleInfo: { name: "En attente...", description: "La partie va démarrer." },
+    vote_history: [],
+    night_info_history: []
 };
 
 // ================= INITIALISATION & CONNEXION =================
@@ -89,6 +91,15 @@ function handleServerMessage(data) {
         case "private_channel_opened":
             handlePrivateChannelOpened(data.channel_id, data.text);
             break;
+        case "vote_result":
+            showVoteResultModal(data.turn, data.executed, data.votes);
+            break;
+        case "night_result":
+            showNightResultModal(data.turn, data.dead_player); // data.turn et data.dead_player
+            break;
+        case "night_info":
+            showNightInfoModal(data.turn, data.info); // Information spécifique reçue la nuit selon le rôle
+            break;
         default:
             console.log("Message non géré :", data);
     }
@@ -122,10 +133,7 @@ function sendChatMessage() {
         }
     };
 
-    // On envoie au serveur. C'est le message reçu du serveur qui l'affichera proprement.
     ws.send(JSON.stringify(packet));
-
-    // On vide simplement l'input
     input.value = "";
 }
 
@@ -157,12 +165,10 @@ function appendSystemMessage(text) {
 function handlePrivateChannelOpened(channelId, text, members = []) {
     appendSystemMessage(text);
     
-    // 1. Initialiser le stockage des messages pour ce salon s'il n'existe pas
     if (!gameState.messages[channelId]) {
         gameState.messages[channelId] = [];
     }
 
-    // 2. Créer l'onglet dans la barre de chat s'il n'existe pas encore
     const channelsContainer = document.getElementById('chat-channels');
     if (channelsContainer && !document.getElementById(`tab-${channelId}`)) {
         const tabTitle = members.length > 0 ? `🔒 ${members.join(', ')}` : `🔒 Privé`;
@@ -176,17 +182,14 @@ function handlePrivateChannelOpened(channelId, text, members = []) {
         channelsContainer.appendChild(tabButton);
     }
     
-    // 3. Basculer automatiquement sur ce nouveau canal privé
     switchChannel(channelId);
 }
 
 function switchChannel(channelId) {
     gameState.currentChannel = channelId;
     
-    // Mettre à jour l'apparence de tous les boutons de salons
     const allButtons = document.querySelectorAll('#chat-channels button');
     allButtons.forEach(btn => {
-        // On vérifie si c'est le bouton actif en comparant son ID (ex: "tab-public" ou "tab-whisper_...")
         const isPublicBtnActive = (channelId === 'public' && btn.getAttribute('onclick')?.includes("'public'"));
         const isPrivateBtnActive = (btn.id === `tab-${channelId}`);
         
@@ -199,18 +202,110 @@ function switchChannel(channelId) {
         }
     });
 
-    // Rafraîchir l'affichage des messages dans la boîte de chat
     renderChatMessages();
+}
+
+function renderVoteHistory() {
+    const container = document.getElementById('tab-content-votes');
+    if (!container) return;
+
+    if (!gameState.vote_history || gameState.vote_history.length === 0) {
+        container.innerHTML = `
+            <div class="text-center text-gray-500 py-8 text-xs italic">
+                Aucun vote enregistré pour le moment.
+            </div>
+        `;
+        return;
+    }
+
+    const turnsMap = {};
+    gameState.vote_history.forEach(record => {
+        if (!turnsMap[record.turn]) {
+            turnsMap[record.turn] = { votes: [], executed: record.executed };
+        }
+        turnsMap[record.turn].votes.push(record);
+    });
+
+    let html = '';
+    
+    Object.keys(turnsMap).sort((a, b) => b - a).forEach(turn => {
+        const data = turnsMap[turn];
+        const executionText = data.executed ? `${data.executed} exécuté` : "pas d'exécution";
+
+        html += `
+            <div class="mb-5 text-xs text-gray-300 font-mono">
+                <div class="font-bold text-clock-gold uppercase tracking-wider mb-2">
+                    JOUR ${turn} - ${executionText}
+                </div>
+                <ul class="space-y-1 pl-2 border-l border-clock-border/40">
+        `;
+
+        data.votes.forEach(v => {
+            const targetText = v.target ? v.target : "vote blanc";
+            html += `
+                <li class="text-gray-300">
+                    - <span class="font-semibold text-white">${v.voter}</span> : ${targetText}
+                </li>
+            `;
+        });
+
+        html += `
+                </ul>
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
+}
+
+// Rendu de l'historique des infos et événements de la nuit
+function renderNightInfoHistory() {
+    const container = document.getElementById('tab-content-night');
+    if (!container) return;
+
+    if (!gameState.night_info_history || gameState.night_info_history.length === 0) {
+        container.innerHTML = `
+            <div class="text-center text-gray-500 py-8 text-xs italic">
+                Aucun événement nocturne pour le moment.
+            </div>
+        `;
+        return;
+    }
+
+    let html = '';
+    // Trier par tour décroissant si nécessaire, ou afficher l'ordre chronologique
+    gameState.night_info_history.forEach(item => {
+        const isResult = item.type === "result";
+        const borderColor = isResult ? "border-clock-red/40" : "border-clock-gold/40";
+        const titleColor = isResult ? "text-clock-red" : "text-clock-gold";
+
+        html += `
+            <div class="bg-clock-darker border ${borderColor} rounded-lg p-3 mb-2 text-xs font-mono">
+                <span class="${titleColor} font-bold">NUIT (Tour ${item.turn})</span>
+                <p class="text-gray-300 mt-1">${item.info}</p>
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
 }
 
 // ================= TABLE RONDE & ÉTAT DU JEU =================
 function updateGameState(newState) {
     gameState = { ...gameState, ...newState };
     
-    // MAJ Header
     document.getElementById('game-day').innerText = gameState.day;
-    document.getElementById('game-phase').innerText = gameState.phase === 'night' ? 'Nuit' : (gameState.phase === 'vote' ? 'Vote' : 'Jour');
+    document.getElementById('game-phase').innerText = gameState.phase === 'nuit' ? 'Nuit' : (gameState.phase === 'vote' ? 'Vote' : 'Discussion');
     document.getElementById('alive-count').innerText = gameState.aliveCount;
+
+    // Mise à jour contextuelle de l'annonce si le serveur ne donne pas d'annonce explicite dans le paquet
+    if (newState.announcement) {
+        setAnnouncement(newState.announcement);
+    } else if (newState.phase === 'night') {
+        setAnnouncement("La nuit tombe... Reposez-vous pendant que les autres joueurs vaquent à leurs occupations.");
+    } else if (newState.phase === 'vote') {
+        setAnnouncement("Phase de vote : réflexion et choix des joueurs en cours...");
+    }
 
     renderRoundTable();
     renderPlayersList();
@@ -220,28 +315,50 @@ function updateGameState(newState) {
 function renderRoundTable() {
     const table = document.getElementById('round-table');
     const players = gameState.players || [];
+    
+    // Bouton Grimoire central
+    const grimoireBtnHtml = `
+        <button onclick="openGrimoireModal()" class="z-10 group bg-clock-dark/90 hover:bg-clock-gold/20 border-2 border-clock-gold/60 hover:border-clock-gold text-clock-gold p-5 rounded-full shadow-2xl transition-all duration-300 transform hover:scale-110 flex flex-col items-center justify-center">
+            <span class="text-4xl group-hover:rotate-12 transition-transform duration-300">📖</span>
+            <span class="text-xs font-mono uppercase tracking-widest mt-1 font-bold">Grimoire</span>
+        </button>
+    `;
+
     if (players.length === 0) {
-        table.innerHTML = `<div class="text-center text-gray-500 text-sm italic">En attente des joueurs...</div>`;
+        table.innerHTML = `
+            ${grimoireBtnHtml}
+            <div class="absolute text-center text-gray-500 text-xs italic pointer-events-none mt-32">
+                En attente des joueurs...
+            </div>
+        `;
         return;
     }
 
-    const radius = 130; // Rayon du cercle en pixels
-    const centerX = table.offsetWidth / 2 || 192;
-    const centerY = table.offsetHeight / 2 || 192;
+    // 💡 Rayon augmenté à 200px pour décaler les cercles vers l'extérieur 
+    // (le conteneur faisant ~420px, un rayon de 200 place le centre des cercles pile sur le trait de la table)
+    const radius = 200; 
+    const centerX = table.offsetWidth / 2 || 210;
+    const centerY = table.offsetHeight / 2 || 210;
 
-    let html = '';
+    let html = grimoireBtnHtml;
+
     players.forEach((p, index) => {
         const angle = (index / players.length) * 2 * Math.PI - Math.PI / 2;
-        const x = centerX + radius * Math.cos(angle) - 36; // Centrage avatar
-        const y = centerY + radius * Math.sin(angle) - 36;
+        
+        // Offset à 56px (moitié de la taille de l'avatar w-28 = 112px)
+        const x = centerX + radius * Math.cos(angle) - 56;
+        const y = centerY + radius * Math.sin(angle) - 56;
 
-        const statusColor = p.alive ? 'border-green-600 bg-clock-panel' : 'border-red-900 bg-red-950/40 opacity-70';
+        const statusColor = p.alive 
+            ? 'border-green-500/80 bg-clock-panel shadow-green-950/40' 
+            : 'border-red-900 bg-red-950/50 opacity-70 shadow-red-950/40';
         
         html += `
-            <div class="absolute w-20 h-20 rounded-full border-2 ${statusColor} flex flex-col items-center justify-center p-1 text-center shadow-lg transition-all duration-300 cursor-pointer hover:scale-105"
+            <div class="absolute w-28 h-28 rounded-full border-2 ${statusColor} flex flex-col items-center justify-center p-2.5 text-center shadow-2xl transition-all duration-300 cursor-pointer hover:scale-110 z-10"
                  style="left: ${x}px; top: ${y}px;" title="${p.name} (${p.alive ? 'Vivant' : 'Mort'})">
+                <span class="text-3xl mb-1">${p.alive ? '👤' : '💀'}</span>
                 <span class="text-xs font-bold truncate w-full text-gray-200 px-1">${p.name}</span>
-                <span class="text-xs ${p.alive ? 'text-green-400 font-semibold' : 'text-red-500 font-semibold'}">${p.alive ? 'Vivant' : 'Mort'}</span>
+                <span class="text-[11px] ${p.alive ? 'text-green-400 font-semibold' : 'text-red-400 font-semibold'}">${p.alive ? 'Vivant' : 'Mort'}</span>
             </div>
         `;
     });
@@ -261,7 +378,7 @@ function renderPlayersList() {
                     ${p.alive ? 'Vivant' : 'Mort'}
                 </span>
             </div>
-            ${!p.alive ? `<div class="text-xs text-gray-400">Dernier vote : ${p.lastVote !== null ? p.lastVote : 'Non utilisé'}</div>` : ''}
+            ${!p.alive ? `<div class="text-xs text-gray-400">Dernier vote : ${p.has_vote ? 'Disponible' : 'Utilisé'}</div>` : ''}
             <div class="flex items-center">
                 <select onchange="updateSuspicion('${p.id}', this.value)" class="w-full bg-clock-panel border border-clock-border text-xs rounded px-2 py-1.5 text-gray-300 focus:outline-none focus:border-clock-gold">
                     <option value="">-- Rôle soupçonné --</option>
@@ -353,11 +470,47 @@ function closeRoleRevealModal() {
     document.getElementById('modal-role-reveal').classList.add('hidden');
 }
 
+
+// ================= BANDEAU D'ANNONCE & EFFET VISIBLE =================
+let announcementTimer = null;
+
 function setAnnouncement(text) {
-    document.getElementById('game-announcement').innerText = `Annonce : ${text}`;
+    const announcementEl = document.getElementById('game-announcement');
+    if (!announcementEl) return;
+
+    // 1. Mettre à jour le texte
+    announcementEl.innerText = `Annonce : ${text}`;
+
+    // 2. Détecter si c'est un état d'attente / chargement
+    const lowerText = text.toLowerCase();
+    const isWaitingState = lowerText.includes("attente") || 
+                           lowerText.includes("cours") || 
+                           lowerText.includes("patienter") || 
+                           lowerText.includes("réflexion") ||
+                           lowerText.includes("endort");
+
+    // Nettoyer un éventuel timer précédent
+    if (announcementTimer) {
+        clearTimeout(announcementTimer);
+        announcementTimer = null;
+    }
+
+    // 3. Appliquer l'effet visuel sans toucher au positionnement
+    if (isWaitingState) {
+        // Effet lumineux pulsé (sans bounce pour ne pas décaler l'affichage)
+        announcementEl.className = "bg-clock-accent border border-yellow-500 px-4 py-1.5 rounded-lg text-sm text-yellow-300 truncate italic max-w-md text-center font-bold animate-pulse shadow-[0_0_12px_rgba(234,179,8,0.5)] transition-all duration-300";
+
+        // Retirer l'effet au bout de 3 secondes
+        announcementTimer = setTimeout(() => {
+            announcementEl.className = "bg-clock-accent border border-clock-border px-4 py-1.5 rounded-lg text-sm text-clock-gold truncate italic max-w-md text-center transition-all duration-300";
+        }, 3000);
+
+    } else {
+        // Style classique d'origine
+        announcementEl.className = "bg-clock-accent border border-clock-border px-4 py-1.5 rounded-lg text-sm text-clock-gold truncate italic max-w-md text-center transition-all duration-300";
+    }
 }
 
-// Demande initiée par le joueur vers un agent
 function requestWhisper() {
     const target1 = document.getElementById('whisper-target-1').value;
     const target2 = document.getElementById('whisper-target-2').value;
@@ -383,58 +536,260 @@ function requestWhisper() {
             payload: { targets: targets }
         }));
         
-        // Masquer/réinitialiser le panneau de sélection (ou afficher un message de confirmation dans le panneau)
         const panel = document.getElementById('dynamic-action-panel');
         panel.innerHTML = `<div class="text-green-400 text-xs italic text-center py-2">✓ Proposition de discussion privée transmise. Ouverture du salon.</div>`;
     }
 }
 
-// Réception d'une proposition de chuchotement venant d'un agent
-function triggerAgentWhisper(agentId, agentName, message) {
-    currentWhisperAgentId = agentId;
+let currentWhisperAgent = null;
+
+function showAgentWhisperModal(agentId) {
+    currentWhisperAgent = agentId;
+    const modal = document.getElementById('modal-agent-whisper');
     const textEl = document.getElementById('agent-whisper-text');
-    textEl.innerHTML = `<strong>${agentName || agentId}</strong> souhaite s'entretenir discrètement avec vous.<br><em class="text-xs text-gray-400">"${message || ''}"</em>`;
-    document.getElementById('modal-agent-whisper').classList.remove('hidden');
+    const actionsEl = modal.querySelector('.flex');
+
+    if (textEl) {
+        textEl.innerText = `${agentId} souhaite s'entretenir discrètement avec vous dans l'ombre.`;
+    }
+
+    if (actionsEl) {
+        actionsEl.innerHTML = `
+            <button onclick="acceptAgentWhisper()" class="flex-1 bg-green-900/50 text-green-300 border border-green-700 py-2 rounded-xl text-xs font-semibold">Accepter</button>
+            <button onclick="refuseAgentWhisper()" class="flex-1 bg-gray-800 text-gray-400 py-2 rounded-xl text-xs">Ignorer</button>
+        `;
+    }
+
+    if (modal) modal.classList.remove('hidden');
 }
 
-// L'humain accepte la proposition de l'agent
+function refuseAgentWhisper() {
+    const modal = document.getElementById('modal-agent-whisper');
+    const textEl = document.getElementById('agent-whisper-text');
+    const actionsEl = modal.querySelector('.flex');
+
+    if (textEl) {
+        textEl.innerText = `Vous avez refusé l'entretien avec ${currentWhisperAgent || 'l\'agent'}. Que souhaitez-vous faire ?`;
+    }
+
+    if (actionsEl) {
+        actionsEl.innerHTML = `
+            <button onclick="closeAgentWhisperModalOnly()" class="flex-1 bg-clock-dark border border-clock-border text-gray-300 py-2 rounded-xl text-xs hover:border-clock-gold">Lancer une discussion</button>
+            <button onclick="triggerVotePhaseFromModal()" class="flex-1 bg-clock-red text-white py-2 rounded-xl text-xs font-bold uppercase">Lancer le vote</button>
+        `;
+    }
+
+    if (ws && ws.readyState === WebSocket.OPEN && currentWhisperAgent) {
+        ws.send(JSON.stringify({
+            action: "respond_whisper_invitation",
+            payload: { target_agent_id: currentWhisperAgent, accepted: false }
+        }));
+    }
+}
+
+function closeAgentWhisperModalOnly() {
+    const modal = document.getElementById('modal-agent-whisper');
+    if (modal) modal.classList.add('hidden');
+    currentWhisperAgent = null;
+}
+
+function triggerVotePhaseFromModal() {
+    const modal = document.getElementById('modal-agent-whisper');
+    if (modal) modal.classList.add('hidden');
+    
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+            action: "trigger_vote_phase",
+            payload: {}
+        }));
+    }
+
+    currentWhisperAgent = null;
+}
+
 function acceptAgentWhisper() {
-    document.getElementById('modal-agent-whisper').classList.add('hidden');
-    
-    if (ws && ws.readyState === WebSocket.OPEN && currentWhisperAgentId) {
+    const modal = document.getElementById('modal-agent-whisper');
+    if (modal) modal.classList.add('hidden');
+
+    const agentId = currentWhisperAgent || "tobIAs";
+
+    if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({
             action: "respond_whisper_invitation",
-            payload: {
-                target_agent_id: currentWhisperAgentId,
-                accepted: true
-            }
+            payload: { target_agent_id: agentId, accepted: true }
         }));
-        appendSystemMessage(`Vous avez accepté l'entretien avec ${currentWhisperAgentId}.`);
-        // Basculer vers un onglet ou créer un canal privé si besoin
-        switchChannel(currentWhisperAgentId);
     }
-    currentWhisperAgentId = null;
+
+    handleServerMessage({
+        type: "chat",
+        channel_id: "public",
+        sender: "Grimoire",
+        content: `💬 Un entretien privé a débuté entre vous et ${agentId}.`
+    });
+
+    const channelId = "whisper_human_" + agentId;
+    if (typeof handlePrivateChannelOpened === 'function') {
+        handlePrivateChannelOpened(channelId, `Salon privé ouvert avec ${agentId}`, [agentId]);
+    }
+
+    currentWhisperAgent = null;
 }
 
-// L'humain refuse la proposition de l'agent
-function closeAgentWhisper() {
-    document.getElementById('modal-agent-whisper').classList.add('hidden');
-    
-    if (ws && ws.readyState === WebSocket.OPEN && currentWhisperAgentId) {
-        ws.send(JSON.stringify({
-            action: "respond_whisper_invitation",
-            payload: {
-                target_agent_id: currentWhisperAgentId,
-                accepted: false
-            }
-        }));
-        appendSystemMessage(`Vous avez refusé l'entretien.`);
+function showVoteResultModal(turnNumber, executedPlayer, votesArray) {
+    const modal = document.getElementById('modal-vote-result');
+    const headerEl = document.getElementById('vote-result-header');
+    const listEl = document.getElementById('vote-result-list');
+    const deathNoticeEl = document.getElementById('vote-death-notice');
+
+    if (!modal || !headerEl || !listEl) return;
+
+    const currentUsername = typeof playerId !== 'undefined' ? playerId : null;
+
+    if (deathNoticeEl) {
+        if (executedPlayer && executedPlayer === currentUsername) {
+            deathNoticeEl.classList.remove('hidden');
+        } else {
+            deathNoticeEl.classList.add('hidden');
+        }
     }
-    currentWhisperAgentId = null;
+
+    if (typeof gameState !== 'undefined') {
+        if (!gameState.vote_history) gameState.vote_history = [];
+
+        votesArray.forEach(v => {
+            gameState.vote_history.push({
+                turn: turnNumber,
+                voter: v.voter,
+                target: v.target,
+                executed: executedPlayer
+            });
+        });
+
+        if (typeof renderVoteHistory === 'function') {
+            renderVoteHistory();
+        }
+    }
+
+    const executionText = executedPlayer ? `${executedPlayer} exécuté` : "pas d'exécution";
+    headerEl.innerText = `JOUR ${turnNumber} - ${executionText}`;
+
+    let html = '';
+    if (!votesArray || votesArray.length === 0) {
+        html = `<li class="text-gray-500 italic">Aucun vote enregistré.</li>`;
+    } else {
+        votesArray.forEach(v => {
+            const targetText = v.target ? v.target : "vote blanc";
+            html += `
+                <li class="text-gray-300">
+                    - <span class="font-semibold text-white">${v.voter}</span> : ${targetText}
+                </li>
+            `;
+        });
+    }
+    listEl.innerHTML = html;
+
+    modal.classList.remove('hidden');
 }
+
+function closeVoteResultModal() {
+    const modal = document.getElementById('modal-vote-result');
+    if (modal) modal.classList.add('hidden');
+}
+
+// Modale résultat de la nuit (mise à jour avec intégration dans l'historique de nuit)
+function showNightResultModal(turnNumber, deadPlayerName) {
+    const modal = document.getElementById('modal-night-result');
+    const messageEl = document.getElementById('night-result-message');
+    const deathNoticeEl = document.getElementById('night-death-notice');
+
+    if (!modal || !messageEl) return;
+
+    const currentUsername = typeof playerId !== 'undefined' ? playerId : null;
+    let nightLogText = "";
+
+    if (deadPlayerName) {
+        if (deadPlayerName === currentUsername) {
+            messageEl.innerHTML = `L'obscurité a frappé cette nuit...`;
+            if (deathNoticeEl) deathNoticeEl.classList.remove('hidden');
+        } else {
+            messageEl.innerHTML = `Les ténèbres ont frappé...<br><br><span class="text-red-400 font-bold text-sm">${deadPlayerName}</span> est mort cette nuit.`;
+            if (deathNoticeEl) deathNoticeEl.classList.add('hidden');
+        }
+        nightLogText = `${deadPlayerName} est mort cette nuit.`;
+    } else {
+        messageEl.innerHTML = `Les esprits ont protégé le village...<br><br><span class="text-green-400 font-bold text-sm">Personne n'est mort</span> cette nuit !`;
+        if (deathNoticeEl) deathNoticeEl.classList.add('hidden');
+        nightLogText = "Personne n'est mort cette nuit.";
+    }
+
+    // Enregistrer automatiquement le résultat de nuit dans l'historique global de nuit
+    if (typeof gameState !== 'undefined') {
+        if (!gameState.night_info_history) gameState.night_info_history = [];
+        
+        gameState.night_info_history.push({
+            turn: turnNumber || gameState.day,
+            type: "result",
+            info: nightLogText
+        });
+
+        if (typeof renderNightInfoHistory === 'function') {
+            renderNightInfoHistory();
+        }
+    }
+
+    modal.classList.remove('hidden');
+}
+
+function closeNightResultModal() {
+    const modal = document.getElementById('modal-night-result');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+}
+
+// Modale d'information nocturne (spécifique au rôle)
+function showNightInfoModal(turnNumber, infoText) {
+    const modal = document.getElementById('modal-night-info');
+    const contentEl = document.getElementById('night-info-content');
+
+    if (!modal || !contentEl) return;
+
+    contentEl.innerHTML = `
+        <span class="text-clock-gold font-bold block mb-2">Tour ${turnNumber}</span>
+        <p class="text-gray-200">${infoText}</p>
+    `;
+
+    // Enregistrer l'information de rôle dans l'historique global de nuit
+    if (typeof gameState !== 'undefined') {
+        if (!gameState.night_info_history) gameState.night_info_history = [];
+        
+        gameState.night_info_history.push({
+            turn: turnNumber,
+            type: "role_info",
+            info: infoText
+        });
+
+        if (typeof renderNightInfoHistory === 'function') {
+            renderNightInfoHistory();
+        }
+    }
+
+    modal.classList.remove('hidden');
+}
+
+function closeNightInfoModal() {
+    const modal = document.getElementById('modal-night-info');
+    if (modal) modal.classList.add('hidden');
+}
+
+// Assurer la visibilité globale pour les onclick du HTML
+window.closeVoteResultModal = closeVoteResultModal;
+window.closeNightResultModal = closeNightResultModal;
+window.closeNightInfoModal = closeNightInfoModal;
+
 
 function triggerGameOver(winner, details) {
-    document.getElementById('gameover-title').innerText = `Victoire : ${winner}`;
+    document.getElementById('gameover-title').innerText = `Victoire des ${winner}`;
     document.getElementById('gameover-desc').innerText = details;
     document.getElementById('modal-gameover').classList.remove('hidden');
 }
@@ -477,3 +832,47 @@ function escapeHtml(text) {
     if (!text) return '';
     return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
+
+// ================= GESTION DU GRIMOIRE =================
+function openGrimoireModal() {
+    const modal = document.getElementById('modal-grimoire');
+    if (modal) modal.classList.remove('hidden');
+}
+
+function closeGrimoireModal() {
+    const modal = document.getElementById('modal-grimoire');
+    if (modal) modal.classList.add('hidden');
+}
+
+function switchGrimoireTab(tabName) {
+    const rolesSection = document.getElementById('grimoire-tab-roles');
+    const rulesSection = document.getElementById('grimoire-tab-rules');
+    const btnRoles = document.getElementById('grimoire-tab-btn-roles');
+    const btnRules = document.getElementById('grimoire-tab-btn-rules');
+
+    if (tabName === 'roles') {
+        rolesSection.classList.remove('hidden');
+        rulesSection.classList.add('hidden');
+        btnRoles.className = "flex-1 py-2 font-bold text-clock-gold border-b-2 border-clock-gold transition";
+        btnRules.className = "flex-1 py-2 font-medium text-gray-400 hover:text-gray-200 transition";
+    } else {
+        rolesSection.classList.add('hidden');
+        rulesSection.classList.remove('hidden');
+        btnRules.className = "flex-1 py-2 font-bold text-clock-gold border-b-2 border-clock-gold transition";
+        btnRoles.className = "flex-1 py-2 font-medium text-gray-400 hover:text-gray-200 transition";
+    }
+}
+
+// Visibilité globale pour le HTML
+window.openGrimoireModal = openGrimoireModal;
+window.closeGrimoireModal = closeGrimoireModal;
+window.switchGrimoireTab = switchGrimoireTab;
+
+// ================= FERMETURE DES MODALES AU CLIC SUR LE FOND (BACKDROP) =================
+document.addEventListener('click', function(event) {
+    // Vérifier si l'élément cliqué est un fond de modale (qui possède la classe "fixed inset-0")
+    if (event.target.classList.contains('fixed') && event.target.classList.contains('inset-0')) {
+        // Masquer la modale cliquée
+        event.target.classList.add('hidden');
+    }
+});
