@@ -203,6 +203,62 @@ function switchChannel(channelId) {
     renderChatMessages();
 }
 
+function renderVoteHistory() {
+    const container = document.getElementById('tab-content-votes');
+    if (!container) return;
+
+    // Si l'historique est vide
+    if (!gameState.vote_history || gameState.vote_history.length === 0) {
+        container.innerHTML = `
+            <div class="text-center text-gray-500 py-8 text-xs italic">
+                Aucun vote enregistré pour le moment.
+            </div>
+        `;
+        return;
+    }
+
+    // Grouper les votes par Jour / Tour
+    const turnsMap = {};
+    gameState.vote_history.forEach(record => {
+        if (!turnsMap[record.turn]) {
+            turnsMap[record.turn] = { votes: [], executed: record.executed };
+        }
+        turnsMap[record.turn].votes.push(record);
+    });
+
+    let html = '';
+    
+    // Parcourir chaque tour du plus récent au plus ancien
+    Object.keys(turnsMap).sort((a, b) => b - a).forEach(turn => {
+        const data = turnsMap[turn];
+        const executionText = data.executed ? `${data.executed} exécuté` : "pas d'exécution";
+
+        html += `
+            <div class="mb-5 text-xs text-gray-300 font-mono">
+                <div class="font-bold text-clock-gold uppercase tracking-wider mb-2">
+                    JOUR ${turn} - ${executionText}
+                </div>
+                <ul class="space-y-1 pl-2 border-l border-clock-border/40">
+        `;
+
+        data.votes.forEach(v => {
+            const targetText = v.target ? v.target : "vote blanc";
+            html += `
+                <li class="text-gray-300">
+                    - <span class="font-semibold text-white">${v.voter}</span> : ${targetText}
+                </li>
+            `;
+        });
+
+        html += `
+                </ul>
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
+}
+
 // ================= TABLE RONDE & ÉTAT DU JEU =================
 function updateGameState(newState) {
     gameState = { ...gameState, ...newState };

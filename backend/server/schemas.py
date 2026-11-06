@@ -116,6 +116,14 @@ class NightLogDTO(BaseModel):
     content: str
 
 
+class VoteRecordDTO(BaseModel):
+    """Représente un vote enregistré lors de la phase de jugement."""
+    turn: int
+    voter: str
+    target: Optional[str] = Field(default=None, description="Nom/ID du joueur visé ou None si vote blanc")
+    executed: Optional[str] = Field(default=None, description="Nom du joueur exécuté ce jour-là, s'il y en a un")
+  
+
 class GameStateDTO(BaseModel):
     """L'état global de la partie, envoyé à un joueur spécifique."""
     turn: int
@@ -126,6 +134,10 @@ class GameStateDTO(BaseModel):
     night_history: List[NightLogDTO] = Field(
         default_factory=list, 
         description="Historique de toutes les révélations nocturnes reçues depuis le début de la partie"
+    )
+    vote_history: List[VoteRecordDTO] = Field(
+        default_factory=list,
+        description="Historique complet des votes passés"
     )
 
 
