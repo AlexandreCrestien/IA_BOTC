@@ -7,8 +7,10 @@ import random
 from typing import Optional, Protocol
 
 from backend.ai_turns import collect_ai_night_choices, collect_ai_votes
-from backend.conversations import private_message, public_conversation, start_private_conversation
-from backend.game_engine import TurnResult, _deaths, play_day, play_night, reveal_psychic_answer
+from backend.conversations import (choose_agent_for_human, private_message, public_conversation,
+                                   start_private_conversation)
+from backend.game_engine import (TurnResult, _deaths, announce_night, announce_vote, play_day, play_night,
+                                 reveal_psychic_answer)
 from backend.memory_manager import MemoryManager
 from backend.models import EventType, GameState, Phase
 from backend.rules import night_steps, winner
@@ -41,15 +43,22 @@ async def _private_channel(
     human_id: str,
     human: HumanPort,
 ) -> None:
-    """Salon privé facultatif : l'humain choisit 1 ou 2 agents vivants, puis échange
-    au plus MAX_HUMAN_PRIVATE_MESSAGES messages. Chaque réponse est attendue avant le message suivant."""
+    """Salon privé : l'humain choisit 1 ou 2 agents vivants. S'il ne choisit personne, un agent
+    vient lui parler (choose_agent_for_human) et ouvre la conversation.
+    Ensuite, au plus MAX_HUMAN_PRIVATE_MESSAGES messages de l'humain, chaque réponse attendue avant le suivant."""
     partner_ids = await human.private_partners(state, human_id)
     partners = [agents[pid] for pid in partner_ids[:MAX_PRIVATE_PARTNERS]
                 if pid in agents and state.player(pid).alive]
-    if not partners:
+    alive_agents = [agent for pid, agent in agents.items() if state.player(pid).alive]
+    if partners:
+        await start_private_conversation(human_id, partners, memory)
+    elif alive_agents:
+        partners = [choose_agent_for_human(alive_agents, human_id, memory)]
+        replies = await start_private_conversation(human_id, partners, memory, agent_speaks_first=True)
+        await human.show_private_replies(replies)
+    else:
         return
 
-    await start_private_conversation(human_id, partners, memory)
     for _ in range(MAX_HUMAN_PRIVATE_MESSAGES):
         text = await human.private_message(state, human_id)
         if not text:
@@ -82,6 +91,8 @@ async def play_turn_with_human(
     reveal_psychic_answer(after_night, night_choices, memory, rng)
 
     night_deaths = _deaths(state, after_night)
+    memory.set_moment(after_night.turn, Phase.DISCUSSION)  # l'annonce du matin est datée du jour
+    announce_night(memory, after_night, night_deaths)
     await human.show_night_deaths(after_night, night_deaths)
     if winner(after_night) is not None:
         return TurnResult(after_night, night_choices, {}, None, night_deaths, winner(after_night))
@@ -106,6 +117,7 @@ async def play_turn_with_human(
         human_vote[human_id] = await human.vote(day_state, human_id)
     vote_answers = {**ai_votes, **human_vote}
     after_day, votes, executed = play_day(day_state, lambda s, pid: vote_answers.get(pid))
+    announce_vote(memory, day_state, votes, executed)
     game_winner = winner(after_day)
     if game_winner is None:
         after_day = after_day.next_phase()

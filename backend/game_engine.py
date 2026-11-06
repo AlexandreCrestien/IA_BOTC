@@ -36,12 +36,40 @@ class TurnResult(NamedTuple):
 
 
 def _info_text(state: GameState, info) -> str:
+    """Texte de l'information de première nuit (voir FirstNightInfo).
+    kind='demon' : le sbire voit le démon ; kind='minion' : le démon voit son sbire ;
+    kind='pair' : le Détective voit deux joueurs dont l'un est un sbire."""
     subjects = ", ".join(state.player(pid).name for pid in info.subject_ids)
+    viewer_role = state.player(info.viewer_id).role.name_FR
     if info.kind == "demon":
-        return f"Première nuit : tu es le Diablotin. Tes alliés sont : {subjects}."
+        return f"Première nuit : tu es {viewer_role}, du côté du mal. Le démon est : {subjects}."
     if info.kind == "minion":
-        return f"Première nuit : tu es l'Empoisonneur. Le Diablotin est : {subjects}."
-    return f"Première nuit : parmi {subjects}, l'un d'eux est le Diablotin."
+        return f"Première nuit : tu es {viewer_role}, le démon. Ton sbire est : {subjects}."
+    return f"Première nuit : parmi {subjects}, l'un d'eux est un sbire."
+
+
+def announce_night(memory: MemoryManager, state: GameState, deaths: tuple[str, ...]) -> None:
+    """Annonce publique du matin : qui est mort cette nuit. state = état après la nuit."""
+    if deaths:
+        names = ", ".join(state.player(pid).name for pid in deaths)
+        text = f"Le jour {state.turn} se lève. Mort cette nuit : {names}."
+    else:
+        text = f"Le jour {state.turn} se lève. Personne n'est mort cette nuit."
+    memory.add_public(EventType.death if deaths else EventType.announcement, game_master, text)
+
+
+def announce_vote(memory: MemoryManager, state: GameState, votes: dict[str, Optional[str]],
+                  executed: Optional[str]) -> None:
+    """Annonce publique des votes et de l'exécution. state = état au moment du vote."""
+    def label(pid: Optional[str]) -> str:
+        return "personne" if pid is None else state.player(pid).name
+
+    detail = ", ".join(f"{label(voter)} → {label(target)}" for voter, target in votes.items())
+    memory.add_public(EventType.vote, game_master, f"Votes : {detail or 'aucun vote'}.")
+    if executed is None:
+        memory.add_public(EventType.announcement, game_master, "Personne n'est exécuté.")
+    else:
+        memory.add_public(EventType.death, game_master, f"{label(executed)} est exécuté.")
 
 
 def setup_game(

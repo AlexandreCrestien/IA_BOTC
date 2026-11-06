@@ -99,10 +99,11 @@ Le serveur démarre sur `http://127.0.0.1:8000` :
 | `GET /` | Interface web (fichiers de `static/`) |
 | `GET /health` | Vérifie que le serveur tourne |
 | `GET /docs` | Documentation automatique de l'API (FastAPI) |
-| `ws://127.0.0.1:8000/ws/{player_id}` | WebSocket du joueur : reçoit et valide ses actions |
+| `ws://127.0.0.1:8000/ws/{pseudo}` | WebSocket du joueur : lance la partie et reçoit ses actions |
 | `GET /admin/debug/all-states` | Route de débogage, protégée par le header `x-admin-token` |
 
-Actions acceptées sur le WebSocket (JSON) : `send_chat`, `create_channel`, `night_action`, `vote`.
+Actions envoyées par le navigateur (JSON) : `start_game`, `send_chat`, `create_channel`, `night_action`, `vote`, `pass`.
+Messages envoyés par le serveur : `state` (tour, phase, joueurs, rôle de l'humain), `event` (message ou annonce visible par l'humain), `request` (le moteur attend une action), `game_over`, `error`. Le lien entre le moteur et le WebSocket est fait par `backend/server/game_session.py`.
 
 ## Interface web
 
@@ -113,13 +114,13 @@ Ouvrir `http://127.0.0.1:8000/` une fois le serveur lancé. L'interface (`static
 - un chat par salon (public et privés), avec des onglets pour l'historique des nuits et des votes ;
 - un panneau d'actions qui change selon la phase (discussion, vote, nuit) ;
 - la liste des joueurs, avec une note de soupçon pour chacun ;
-- des fenêtres pour la révélation du rôle, la demande de conversation d'un agent et la fin de partie.
+- des fenêtres pour la révélation du rôle et la fin de partie (rôles de tous les joueurs, bouton « Rejouer »).
 
-C'est une première version : elle n'est pas encore reliée au moteur de jeu.
+Déroulement côté joueur : le pseudo lance une partie contre les 5 IA. Le panneau d'actions affiche ce que le moteur attend (choix de nuit, message public, choix d'un salon privé, message privé, vote) ; le reste du temps, les IA réfléchissent et leurs messages arrivent au fur et à mesure. Si le joueur ne choisit personne pour le salon privé, un agent vient lui parler.
 
 ## Jouer dans le terminal
 
-En attendant que l'interface soit reliée au moteur, deux scripts lancent une partie avec les vrais modèles (clés d'API nécessaires, appels payants et plus lents) :
+Deux scripts lancent une partie avec les vrais modèles (clés d'API nécessaires, appels payants et plus lents) :
 
 ```bash
 python scripts/play_with_human.py   # tu joues contre les 5 IA : tu tapes tes choix
@@ -144,14 +145,16 @@ Les tests n'appellent jamais de vrai LLM : ils utilisent un faux LLM. À lancer 
 - Serveur : WebSocket, validation des actions, route admin
 - Boucle de jeu (`game_engine.py`) : mise en place (rôles, personnalités, fausse piste de la Voyante, agents, infos de première nuit), tours nuit → vote, arrêt à la victoire
 - Tours avec les IA (`ai_turns.py`) et avec l'humain (`human_turns.py`) : choix de nuit, réponse de la Voyante, discussion publique, salon privé, votes
-- Première version de l'interface web (`static/`) : écrans et affichage, pas encore reliés au moteur
+- Interface web (`static/`) reliée au moteur par le WebSocket : une partie complète se joue dans le navigateur
 - Parties dans le terminal (`scripts/`)
 
+- Annonces publiques des morts de la nuit, des votes et de l'exécution, enregistrées dans la mémoire des agents
+- Un agent vient parler à l'humain quand celui-ci n'ouvre pas de salon privé
+
 **À faire :**
-- Enregistrer dans la mémoire des agents les morts de la nuit, les votes et l'exécution (aujourd'hui, seul l'humain est prévenu des morts)
-- Quand l'humain n'ouvre pas de salon privé, faire venir un agent vers lui (`choose_agent_for_human` existe mais n'est pas encore appelée)
-- Relier le moteur au serveur et à l'interface (actions de l'humain reçues par le WebSocket, envoi de l'état). Les types de messages utilisés par l'interface ne sont pas encore ceux de `backend/server/schemas.py` : à aligner
-- Contenu de la route admin (en attente du moteur de jeu)
+- Timer de la phase de jour et désignation d'un joueur à tout moment (prévus dans le sujet)
+- Conversations privées entre agents pendant le salon privé de l'humain
+- Contenu de la route admin
 
 ## Documentation
 

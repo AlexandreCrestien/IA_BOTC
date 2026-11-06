@@ -44,3 +44,9 @@ def test_poisoned_imp_kills_nothing():
 def test_no_choice_no_change():
     state = night_game()
     assert resolve_night(state, {}) == state
+
+def test_butler_killed_tonight_does_not_choose_a_master():
+    """Régression : le Diablotin tue le Majordome avant son tour ; la partie ne doit pas planter."""
+    state = resolve_night(night_game(), {"a": ("f",), "f": ("b",)})
+    assert not state.player("f").alive
+    assert "maitre" not in state.player("f").links

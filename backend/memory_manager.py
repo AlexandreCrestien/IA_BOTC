@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Callable, Optional
 
 from backend.models import EventType, GameEvent, Phase
 
@@ -23,9 +23,15 @@ class MemoryManager:
         # Noms affichés aux IA ; sans dictionnaire, on affiche les identifiants.
         self._names = dict(names) if names is not None else {p: p for p in player_ids}
         self._events: list[Event] = []
+        # Fonctions appelées à chaque nouvel événement (ex. le serveur, pour l'envoyer à l'humain).
+        self._listeners: list[Callable[[Event], None]] = []
         # Moment courant, fixé par l'orchestrateur via set_moment (il vient de GameState).
         self.turn = 1
         self.phase = Phase.NUIT
+
+    def subscribe(self, listener: Callable[[Event], None]) -> None:
+        """Appelle listener(événement) à chaque nouvel événement enregistré."""
+        self._listeners.append(listener)
 
     def name_of(self, player_id: str) -> str:
         return self._names[player_id]
@@ -62,6 +68,8 @@ class MemoryManager:
                       author_id=None if author == game_master else author,
                       content=content, visible_to=visible_to)
         self._events.append(event)
+        for listener in self._listeners:
+            listener(event)
         return event
 
     def add_public(self, type: EventType, author: str, content: str) -> Event:

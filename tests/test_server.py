@@ -182,13 +182,15 @@ def test_websocket_invalid_action_returns_error(client):
         assert message["data"].startswith("Action non valide")
 
 
-def test_websocket_valid_action_sends_no_error(client):
+def test_websocket_action_without_game_is_refused(client):
     with client.websocket_connect("/ws/humain") as ws:
         ws.send_text(json.dumps({"action": "vote", "payload": {"target_id": "ana"}}))
-        # Une action valide ne renvoie rien (pas encore de moteur de jeu).
-        # On envoie ensuite un message invalide : la première réponse reçue doit être son erreur.
-        ws.send_text("pas du json")
-        assert ws.receive_json()["data"] == "Format JSON invalide."
+        assert ws.receive_json() == {"type": "error", "data": "Aucune partie en cours : lance une partie."}
+
+
+@pytest.mark.parametrize("packet", [{"action": "start_game"}, {"action": "pass", "payload": {}}])
+def test_parse_start_game_and_pass(packet):
+    assert parse_action(packet).action == packet["action"]
 
 
 def test_websocket_connection_stays_open_after_error(client):

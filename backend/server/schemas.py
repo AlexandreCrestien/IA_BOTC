@@ -51,6 +51,22 @@ class VoteAction(BaseAction):
     payload: VotePayload
 
 
+class EmptyPayload(StrictInput):
+    pass
+
+
+class StartGameAction(BaseAction):
+    """Lancer une nouvelle partie (remplace la partie en cours)."""
+    action: Literal["start_game"] = "start_game"
+    payload: EmptyPayload = Field(default_factory=EmptyPayload)
+
+
+class PassAction(BaseAction):
+    """Ne rien faire pour la demande en cours : pas de message, pas de salon privé, choix de nuit au hasard."""
+    action: Literal["pass"] = "pass"
+    payload: EmptyPayload = Field(default_factory=EmptyPayload)
+
+
 # Le type d'action est choisi uniquement d'après le champ "action" (obligatoire dans le paquet reçu).
 ClientActionPacket = Annotated[
     Union[
@@ -58,6 +74,8 @@ ClientActionPacket = Annotated[
         CreateChannelAction,
         NightAction,
         VoteAction,
+        StartGameAction,
+        PassAction,
     ],
     Field(discriminator="action"),
 ]
@@ -110,5 +128,5 @@ class GameStateDTO(BaseModel):
 
 class ServerMessage(BaseModel):
     """Format standard des messages envoyés par le serveur vers le client via WebSocket."""
-    type: Literal["state_update", "chat_message", "night_request", "vote_request", "error"]
+    type: Literal["state", "event", "request", "game_over", "error"]
     data: Union[GameStateDTO, dict, str]
