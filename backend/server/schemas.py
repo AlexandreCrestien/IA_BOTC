@@ -24,40 +24,51 @@ class SendChatAction(BaseAction):
     payload: SendChatPayload
 
 
-class CreateChannelPayload(StrictInput):
-    target_ids: List[str] = Field(..., min_length=1, max_length=2, description="1 ou 2 agents avec qui lancer la conversation privée")
+class RequestWhisperPayload(StrictInput):
+    targets: List[str] = Field(..., min_length=1, max_length=2, description="1 ou 2 agents avec qui lancer la conversation privée")
 
-class CreateChannelAction(BaseAction):
-    """Lancer une conversation privée avec 1 ou 2 agents."""
-    action: Literal["create_channel"] = "create_channel"
-    payload: CreateChannelPayload
-
-
-class NightActionPayload(StrictInput):
-    targets: List[str] = Field(default_factory=list, description="Cible(s) choisie(s) pour le pouvoir de nuit")
-
-class NightAction(BaseAction):
-    """Effectuer l'action de nuit selon le rôle du joueur."""
-    action: Literal["night_action"] = "night_action"
-    payload: NightActionPayload
+class RequestWhisperAction(BaseAction):
+    """Demander un entretien/chuchotement avec 1 ou 2 agents."""
+    action: Literal["request_whisper"] = "request_whisper"
+    payload: RequestWhisperPayload
 
 
-class VotePayload(StrictInput):
+class RespondWhisperPayload(StrictInput):
+    target_agent_id: str = Field(..., description="ID de l'agent dont on répond à l'invitation")
+    accepted: bool = Field(..., description="Vrai si accepté, Faux si refusé")
+
+class RespondWhisperInvitationAction(BaseAction):
+    """Accepter ou refuser une invitation de chuchotement d'un agent."""
+    action: Literal["respond_whisper_invitation"] = "respond_whisper_invitation"
+    payload: RespondWhisperPayload
+
+
+class SubmitVotePayload(StrictInput):
     target_id: Optional[str] = Field(default=None, description="ID du joueur visé pour l'exécution, ou None pour voter blanc/personne")
 
-class VoteAction(BaseAction):
+class SubmitVoteAction(BaseAction):
     """Choisir contre qui voter lors de la phase d'exécution."""
-    action: Literal["vote"] = "vote"
-    payload: VotePayload
+    action: Literal["submit_vote"] = "submit_vote"
+    payload: SubmitVotePayload
+
+
+class SubmitNightActionPayload(StrictInput):
+    targets: List[str] = Field(default_factory=list, description="Cible(s) choisie(s) pour le pouvoir de nuit")
+
+class SubmitNightAction(BaseAction):
+    """Effectuer l'action de nuit selon le rôle du joueur."""
+    action: Literal["submit_night_action"] = "submit_night_action"
+    payload: SubmitNightActionPayload
 
 
 # Le type d'action est choisi uniquement d'après le champ "action" (obligatoire dans le paquet reçu).
 ClientActionPacket = Annotated[
     Union[
         SendChatAction,
-        CreateChannelAction,
-        NightAction,
-        VoteAction,
+        RequestWhisperAction,
+        RespondWhisperInvitationAction,
+        SubmitVoteAction,
+        SubmitNightAction,
     ],
     Field(discriminator="action"),
 ]
