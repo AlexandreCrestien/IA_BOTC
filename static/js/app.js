@@ -92,6 +92,9 @@ function handleServerMessage(data) {
         case "vote_result":
             showVoteResultModal(data.turn, data.executed, data.votes);
             break;
+        case "night_result":
+            showNightResultModal(data.dead_player); // data.dead_player peut être le nom du joueur ou null/undefined si personne n'est mort
+            break;
         default:
             console.log("Message non géré :", data);
     }
@@ -611,6 +614,34 @@ function closeVoteResultModal() {
     const modal = document.getElementById('modal-vote-result');
     if (modal) modal.classList.add('hidden');
 }
+
+
+function showNightResultModal(deadPlayerName) {
+    const modal = document.getElementById('modal-night-result');
+    const messageEl = document.getElementById('night-result-message');
+
+    if (!modal || !messageEl) return;
+
+    // Définir le message selon si quelqu'un est mort ou non
+    if (deadPlayerName) {
+        messageEl.innerHTML = `Les ténèbres ont frappé...<br><br><span class="text-red-400 font-bold text-sm">${deadPlayerName}</span> est mort cette nuit.`;
+    } else {
+        messageEl.innerHTML = `Les esprits ont protégé le village...<br><br><span class="text-green-400 font-bold text-sm">Personne n'est mort</span> cette nuit !`;
+    }
+
+    // Afficher la modale
+    modal.classList.remove('hidden');
+}
+
+function closeNightResultModal() {
+    const modal = document.getElementById('modal-night-result');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+}
+
+// Assurer la visibilité globale pour les onclick du HTML
+window.closeNightResultModal = closeNightResultModal;
 
 
 function triggerGameOver(winner, details) {
