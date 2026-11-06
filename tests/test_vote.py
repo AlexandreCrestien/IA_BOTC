@@ -75,3 +75,79 @@ def test_dead_target_raises():
     state = day_game().replace_player(dead)
     with pytest.raises(ValueError):
         vote_result(state, {"a": "c"})
+
+# --- Vote sur une désignation (pour / contre) -------------------------------------
+
+from backend.rules.vote import check_nomination, nomination_result, resolve_nomination  # noqa: E402
+
+ALL_FOR = {"a": True, "b": True, "c": True, "d": True, "e": False, "f": False}
+
+
+def test_majority_of_voters_for_executes():
+    assert nomination_result(day_game(), "c", ALL_FOR) == "c"
+    assert not resolve_nomination(day_game(), "c", ALL_FOR).player("c").alive
+
+
+def test_half_of_voters_is_not_enough():
+    ballots = {"a": True, "b": True, "c": True, "d": False, "e": False, "f": False}
+    assert nomination_result(day_game(), "c", ballots) is None
+
+
+def test_majority_is_counted_on_living_players():
+    """2 pour sur 6 vivants : pas d'exécution, même si les autres n'ont pas voté."""
+    assert nomination_result(day_game(), "c", {"a": True, "b": True, "d": False}) is None
+
+
+def test_dead_against_does_not_weigh_on_the_vote():
+    """4 vivants + 2 morts : 3 « pour » vivants suffisent, les « contre » des morts ne comptent pas."""
+    state = day_game()
+    for pid in ("e", "f"):
+        state = state.replace_player(state.player(pid).die())
+    ballots = {"a": True, "b": True, "c": False, "d": True, "e": False, "f": False}
+    assert nomination_result(state, "c", ballots) == "c"
+
+
+def test_dead_for_counts_and_uses_the_ghost_vote():
+    """4 vivants : 2 « pour » vivants + 1 « pour » d'un mort = 3 > 2, exécution."""
+    state = day_game()
+    for pid in ("e", "f"):
+        state = state.replace_player(state.player(pid).die())
+    ballots = {"a": True, "b": True, "c": False, "d": False, "e": True, "f": False}
+    after = resolve_nomination(state, "c", ballots)
+    assert not after.player("c").alive
+    assert not after.player("e").can_vote and after.player("f").can_vote
+
+
+def test_no_ballot_no_execution():
+    assert nomination_result(day_game(), "c", {}) is None
+
+
+def test_dead_voter_for_uses_ghost_vote():
+    state = day_game()
+    state = state.replace_player(state.player("e").die())
+    after = resolve_nomination(state, "c", {"a": True, "e": True})
+    assert not after.player("e").can_vote
+
+
+def test_dead_voter_against_keeps_ghost_vote():
+    state = day_game()
+    state = state.replace_player(state.player("e").die())
+    after = resolve_nomination(state, "c", {"a": True, "e": False})
+    assert after.player("e").can_vote
+
+
+def test_butler_for_does_not_count_if_master_votes_against():
+    state = day_game().replace_player(make_player("f", "butler", links={"maitre": "a"}))
+    ballots = {"a": False, "b": True, "c": True, "f": True}
+    # sans le Majordome : 2 pour sur 4 votants -> égalité
+    assert nomination_result(state, "c", ballots) is None
+
+
+def test_dead_cannot_nominate_or_be_nominated():
+    state = day_game()
+    state = state.replace_player(state.player("e").die())
+    with pytest.raises(ValueError):
+        check_nomination(state, "e", "c")
+    with pytest.raises(ValueError):
+        check_nomination(state, "a", "e")
+    check_nomination(state, "a", "c")

@@ -51,6 +51,15 @@ class VoteAction(BaseAction):
     payload: VotePayload
 
 
+class NominatePayload(StrictInput):
+    target_id: str = Field(..., description="ID du joueur désigné pour être exécuté")
+
+class NominateAction(BaseAction):
+    """Désigner un joueur pendant le jour : lance le vote."""
+    action: Literal["nominate"] = "nominate"
+    payload: NominatePayload
+
+
 class EmptyPayload(StrictInput):
     pass
 
@@ -74,6 +83,7 @@ ClientActionPacket = Annotated[
         CreateChannelAction,
         NightAction,
         VoteAction,
+        NominateAction,
         StartGameAction,
         PassAction,
     ],
@@ -128,5 +138,5 @@ class GameStateDTO(BaseModel):
 
 class ServerMessage(BaseModel):
     """Format standard des messages envoyés par le serveur vers le client via WebSocket."""
-    type: Literal["state", "event", "request", "game_over", "error"]
+    type: Literal["state", "event", "request", "wait", "game_over", "error"]
     data: Union[GameStateDTO, dict, str]

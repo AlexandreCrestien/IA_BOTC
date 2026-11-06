@@ -170,7 +170,9 @@ Les phases `DISCUSSION` et `VOTE` s'affichent toutes les deux « Jour ». Le can
 | `await speak_public(optional=False)` | fast | Texte du message. Avec `optional=True`, l'instruction dit que passer est un choix normal et qu'il ne faut parler que pour apporter du nouveau ; si l'agent répond `PASSE` (même avec ponctuation, guillemets ou gras), la méthode renvoie `None`. |
 | `await speak_private(partners)` | fast | Réponse dans une conversation privée. `partners` = ids ; le prompt montre leurs noms. |
 | `await night_action(options, number_of_targets=1)` | capable | Liste des cibles (2 pour la Voyante) |
-| `await vote(options)` | capable | L'id du joueur choisi, ou `None` pour « Personne » |
+| `await vote(options)` | capable | Vote de fin de jour : le nom du joueur qui doit mourir, ou `None` pour « Personne » |
+| `await nominate(options)` | capable | Le nom du joueur que l'agent désigne pour l'exécution, ou `None` |
+| `await vote_on(nominee)` | capable | `True` (pour l'exécution du joueur désigné) ou `False` (contre) |
 
 - `options` = les **choix légaux**, fournis par le moteur de règles (`legal_actions(state, id).targets` pour la nuit). Un choix hors des options est refusé par la validation et redemandé au modèle.
 - La `raison` donnée par le modèle va **seulement dans les logs**, jamais dans la mémoire.
@@ -221,20 +223,29 @@ Une personnalité absente du tableau parle en dernier, sans obligation.
 - 0 ou plus de 2 agents, ou l'humain dans `partners` : `ValueError`.
 - Le choix de l'humain arrive en paramètre : ces fonctions ne posent jamais de question elles-mêmes.
 
+### Conversation simulée entre agents : `await simulate_agents_conversation(agents, memory)`
+
+Pendant la conversation privée de l'humain, les autres agents (2 ou plus) discutent entre eux. Pour limiter les appels, tout l'échange est **simulé en un seul appel LLM** (profil capable), comme le prévoit le sujet :
+
+- le prompt donne, pour chaque agent, son nom, son rôle secret, sa personnalité et **ce qu'il sait** (`context_for`) ;
+- le modèle renvoie un JSON `{"echange": [{"auteur", "message"}], "notes": {nom: "ce qu'il retient"}}` (6 messages au plus), validé (auteurs connus, une note par agent) et redemandé si besoin ;
+- enregistrement : annonce publique « Conversation privée entre … » ; chaque message en `private_summary` visible des seuls participants ; la note de chaque agent dans **sa** mémoire personnelle ;
+- si l'appel échoue, seule l'annonce reste.
+
 ---
 
 ## 5. Comment tout s'enchaîne
 
 ### Mise en place : `game_engine.setup_game`
 
-`setup_game(names, human_id, personality_names, rng)` tire les rôles et les personnalités (`assign_players`), choisit la fausse piste de la Voyante, crée la mémoire avec les noms (`MemoryManager(ids, names=names)`) et les agents (`create_all_agents`), puis enregistre les informations de première nuit (`first_night_info`) en `role_info`, visibles du seul joueur concerné. Elle renvoie `(state, agents, memory)`.
+`setup_game(names, human_id, personality_names, rng)` tire les rôles et les personnalités (`assign_players`, avec le nom français de chaque personnalité lu dans son skill par `PromptLoader.personality_display_name`), choisit la fausse piste de la Voyante, crée la mémoire avec les noms (`MemoryManager(ids, names=names)`) et les agents (`create_all_agents`), puis enregistre les informations de première nuit (`first_night_info`) en `role_info`, visibles du seul joueur concerné. Elle renvoie `(state, agents, memory)`.
 
 ### Un tour
 
 Deux versions du tour, qui suivent le même schéma :
 
-- `ai_turns.play_turn_with_ai(state, rng, agents, memory)` : les IA jouent ; l'humain reçoit un choix aléatoire ou s'abstient.
-- `human_turns.play_turn_with_human(state, rng, agents, memory, human_id, human)` : l'humain joue aussi. `human` respecte le protocole `HumanPort` (choix de nuit, message public, salon privé, vote…), ce qui permet de brancher le terminal aujourd'hui et le WebSocket plus tard.
+- `ai_turns.play_turn_with_ai(state, rng, agents, memory)` : les IA jouent seules ; l'humain reçoit un choix de nuit aléatoire et ne vote pas.
+- `human_turns.play_turn_with_human(state, rng, agents, memory, human_id, human, day_seconds=240)` : l'humain joue aussi. `human` respecte le protocole `HumanPort` (`night_choice`, `day_action`, `private_message`, `vote_on`…). Il est implémenté par le terminal (`scripts/play_with_human.py`) et par le WebSocket (`backend/server/game_session.py`).
 
 ```
 NUIT        memory.set_moment(tour, NUIT)
@@ -242,21 +253,34 @@ NUIT        memory.set_moment(tour, NUIT)
             (humain : human.night_choice)
             play_night                      choix invalide ou absent → choix légal au hasard
             reveal_psychic_answer           réponse de la Voyante → sa mémoire (role_info)
+            announce_night                  « Le jour N se lève. Mort cette nuit : … » (public)
             victoire ? → fin
-DISCUSSION  memory.set_moment(tour, DISCUSSION)
-            public_conversation(agents)     conversations.py, un agent après l'autre
-            (humain : message public, puis salon privé avec 1 ou 2 agents vivants, 3 messages au plus)
+JOUR        memory.set_moment(tour, DISCUSSION)        minuté : day_seconds
+            public_conversation(agents)     les IA ouvrent la discussion
+            boucle jusqu'à la fin du temps, human.day_action(...) :
+              message public                → les IA répondent (public_conversation, 3 messages)
+              conversation privée (1 ou 2)  → start_private_conversation / private_message
+                                              + simulate_agents_conversation pour les autres agents, en parallèle
+              désignation (facultative)     → vote_on_nomination, tout de suite :
+                                              collect_ai_ballots (agent.vote_on) + human.vote_on
+                                              resolve_nomination : exécution si les « pour » dépassent la moitié des vivants (un mort ne compte que s'il vote pour, et utilise alors son vote fantôme)
+                                              announce_nomination : qui a voté pour / contre, résultat
+                                              exécution → fin du jour ; sinon le jour continue
+              fin de journée                → les IA peuvent encore désigner, puis fin du jour
+            à la moitié du temps : collect_ai_nomination (agent.nominate, dans l'ordre de parole)
+                                   et, si l'humain n'a parlé à personne, un agent lui propose une conversation
+            une désignation par joueur et par jour ; un joueur n'est désigné qu'une fois par jour
 VOTE        memory.set_moment(tour, VOTE)
-            collect_ai_votes                agent.vote(noms) → id ou None
-            (humain : human.vote)
-            play_day                        vote pour un mort ou un inconnu → abstention
+            si personne n'a été exécuté     → final_vote : collect_ai_votes (agent.vote) + human.final_vote
+                                              exécution si plus de la moitié des votes exprimés (égalité : personne)
+                                              announce_vote : qui a voté pour qui, résultat
             victoire ? → fin, sinon nuit suivante
 ```
 
 - **Noms et ids** : les agents reçoivent les **noms** des joueurs comme options, et `ai_turns` traduit leur réponse en **id** (les noms doivent donc être uniques).
-- **Échecs** : un agent dont l'appel échoue rend un choix vide (remplacé par un choix au hasard) ou s'abstient.
-- **Ordre** : chaque étape attend la précédente ; l'humain n'écrit jamais pendant un appel IA. Les morts peuvent encore parler et voter (vote fantôme).
-- **Qui écrit dans la mémoire** : `conversations.py` pour les messages, `reveal_psychic_answer` pour la Voyante, `setup_game` pour la première nuit. Les agents, eux, n'écrivent jamais dans la mémoire : ils renvoient un résultat.
+- **Échecs** : un agent dont l'appel échoue rend un choix de nuit vide (remplacé par un choix au hasard), ne désigne personne, vote contre une désignation ou s'abstient au vote de fin de jour.
+- **Ordre** : chaque étape attend la précédente ; l'humain n'écrit jamais pendant un appel IA. Les morts peuvent encore parler et voter (vote fantôme), mais pas désigner.
+- **Qui écrit dans la mémoire** : `conversations.py` pour les messages, `reveal_psychic_answer` pour la Voyante, `announce_*` (`game_engine`) pour les annonces du Maître du Jeu, `vote_on_nomination` (`ai_turns`) pour la désignation, `setup_game` pour la première nuit. Les agents, eux, n'écrivent jamais dans la mémoire : ils renvoient un résultat.
 
 ### Parties dans le terminal
 
@@ -278,10 +302,6 @@ VOTE        memory.set_moment(tour, VOTE)
 
 ## 7. Points encore ouverts
 
-- **Morts, votes et exécution absents de la mémoire** : seul l'humain est prévenu des morts de la nuit (`show_night_deaths`). Les agents ne reçoivent ni l'annonce des morts, ni les votes, ni le résultat de l'exécution.
-- **Agent qui vient parler à l'humain** : quand l'humain n'ouvre pas de salon privé, aucun agent ne vient vers lui. `choose_agent_for_human` et `start_private_conversation(..., agent_speaks_first=True)` existent mais ne sont pas encore appelées.
-- **Conversations privées entre agents** : pendant le salon privé de l'humain, les autres agents ne discutent pas entre eux (prévu dans le sujet sous forme d'un échange simulé).
-- **Nom affiché des personnalités** : `assign_players` met le nom anglais aussi comme nom français (`agent.personality` vaut `"agitator"` et non `"Provocateur"`). Les conversations ne sont pas touchées : elles utilisent `personality_key`.
 - **Agent et état du joueur** : `Player` est immuable, donc `agent.player` reste celui de la création (il ne voit pas sa mort). Pour l'état actuel, lire `GameState`.
 
 ## 8. Limites connues
@@ -298,8 +318,10 @@ python -m pytest tests/ -q
 | Fichier | Vérifie surtout |
 |---|---|
 | `tests/test_memory_manager.py`, `tests/test_memory_names.py` | L'**isolation** : un joueur ne voit jamais un événement qui ne lui est pas destiné ; datation par `set_moment` ; noms affichés à la place des ids |
-| `tests/test_agent_factory.py` | Prompt (noms des joueurs), actions de nuit, votes, choix illégaux redemandés, `PASSE` et ses variantes |
-| `tests/test_conversations.py` | Ordre de parole, limite de 10 messages, fin quand tout le monde passe, secret du privé, agent en échec |
-| `tests/test_ai_turns.py` | Traduction noms ↔ ids, agent en échec, tour complet avec les IA |
+| `tests/test_agent_factory.py` | Prompt (noms des joueurs), actions de nuit, votes, désignation, vote pour/contre, choix illégaux redemandés, `PASSE` et ses variantes |
+| `tests/test_conversations.py` | Ordre de parole, limite de 10 messages, fin quand tout le monde passe, secret du privé, agent en échec, conversation simulée entre agents |
+| `tests/test_vote.py`, `tests/test_announcements.py` | Vote pour/contre une désignation (majorité, Majordome, vote fantôme), annonces du Maître du Jeu, textes de première nuit |
+| `tests/test_game_session.py` | Parties complètes par le WebSocket avec de faux agents : jour minuté, désignation, proposition d'un agent, conversation privée, route admin |
+| `tests/test_ai_turns.py` | Traduction noms ↔ ids, agent en échec, désignation dans l'ordre de parole, vote de fin de jour quand personne n'est exécuté sur désignation, tour complet avec les IA |
 
 Les tests utilisent un **faux LLM** : aucun appel réseau. Lancer depuis la racine du projet.

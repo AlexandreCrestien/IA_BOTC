@@ -98,6 +98,25 @@ class Agent:
         logger.info("%s (vote) -> %s : %s", self.player_id, result.cible, result.raison)
         return None if result.cible == NOBODY else result.cible
 
+    async def nominate(self, options: list[str]) -> str | None:
+        """Désigne un joueur pour qu'il soit exécuté (le village votera ensuite), ou None."""
+        instruction = (
+            f"Phase de jour. Veux-tu désigner un joueur pour qu'il soit exécuté ? Le village votera ensuite pour ou contre. Ne désigne quelqu'un que si tu as de vraies raisons de le soupçonner (ou, si tu es du côté du mal, si cela sert ton camp). Choix possibles : {', '.join(options)}, ou \"{NOBODY}\". Réponds uniquement en JSON : {{\"cible\": \"nom\", \"raison\": \"pourquoi, en 5 mots maximum\"}}."
+        )
+        result = await ask_llm_json("capable", self._messages(instruction), Vote,
+                                     context={"options": options + [NOBODY]})
+        logger.info("%s (désignation) -> %s : %s", self.player_id, result.cible, result.raison)
+        return None if result.cible == NOBODY else result.cible
+
+    async def vote_on(self, nominee: str) -> bool:
+        """Vote pour (True) ou contre (False) l'exécution du joueur désigné."""
+        instruction = (
+            f"Vote : {nominee} a été désigné pour être exécuté. Votes-tu pour son exécution ? Réponds uniquement en JSON : {{\"pour\": true ou false, \"raison\": \"pourquoi, en 5 mots maximum\"}}."
+        )
+        result = await ask_llm_json("capable", self._messages(instruction), Ballot)
+        logger.info("%s (vote sur %s) -> %s : %s", self.player_id, nominee, result.pour, result.raison)
+        return result.pour
+
 NOBODY = "Personne"
 PASS = "PASSE"  # réponse d'un agent qui ne veut pas parler
 
@@ -125,6 +144,11 @@ class NightAction(BaseModel):
         if len(cibles) != expected:
             raise ValueError(f"Il faut exactement {expected} cible(s), pas {len(cibles)}")
         return [_check_in_options(c, info) for c in cibles]
+
+
+class Ballot(BaseModel):
+    pour: bool
+    raison: str
 
 
 class Vote(BaseModel):

@@ -41,10 +41,11 @@ def test_poisoner_cannot_target_himself():
         poison(night_game(), "b", "b")
 
 
-def test_poison_on_dead_target_is_allowed():
+def test_poison_on_dead_target_is_refused():
+    """skills/roles/poisoner.md : l'Empoisonneur doit choisir un joueur vivant."""
     state = night_game().replace_player(make_player("c", "monk", alive=False))
-    result = poison(state, "b", "c")
-    assert result.player("c").has_effect(TypeEffet.EMPOISONNE)
+    with pytest.raises(ValueError):
+        poison(state, "b", "c")
 
 
 def test_poisoned_poisoner_has_no_effect():

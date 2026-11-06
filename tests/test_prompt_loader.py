@@ -134,3 +134,10 @@ def test_every_real_personality_loads_correctly(personality_name):
     assert expected_pers_content in prompt, (
         f"Le contenu de la personnalité '{personality_name}' n'apparaît pas dans le system prompt assemblé."
     )
+
+def test_personality_display_name_is_read_from_the_skill():
+    from backend.prompt_loader import PromptLoader
+    loader = PromptLoader()
+    assert loader.personality_display_name("agitator") == "Provocateur"
+    assert loader.personality_display_name("observer") == "Observateur"
+    assert loader.personality_display_name("inconnue") == "inconnue"

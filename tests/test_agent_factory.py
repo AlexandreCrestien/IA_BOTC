@@ -339,3 +339,28 @@ def test_optional_instruction_says_passing_is_normal(agent, fake_llm):
 def test_long_message_starting_with_passe_is_kept(agent, fake_llm):
     fake_llm.replies = ["Passe-moi le relais : bruno ment."]
     assert asyncio.run(agent.speak_public(optional=True)) == "Passe-moi le relais : bruno ment."
+
+
+# --- Désignation et vote sur une désignation ----------------------------------------
+
+def test_nominate_returns_a_player(agent, fake_llm):
+    fake_llm.replies = ['{"cible": "bruno", "raison": "x"}']
+    assert asyncio.run(agent.nominate(["bruno", "carla"])) == "bruno"
+    assert "désigner" in fake_llm.calls[0][-1]["content"]
+
+
+def test_nominate_nobody(agent, fake_llm):
+    fake_llm.replies = [f'{{"cible": "{NOBODY}", "raison": "x"}}']
+    assert asyncio.run(agent.nominate(["bruno"])) is None
+
+
+def test_nominate_retries_on_illegal_player(agent, fake_llm):
+    fake_llm.replies = ['{"cible": "zoe", "raison": "x"}', '{"cible": "carla", "raison": "x"}']
+    assert asyncio.run(agent.nominate(["bruno", "carla"])) == "carla"
+
+
+@pytest.mark.parametrize("pour", [True, False])
+def test_vote_on_nominee(agent, fake_llm, pour):
+    fake_llm.replies = [f'{{"pour": {str(pour).lower()}, "raison": "x"}}']
+    assert asyncio.run(agent.vote_on("bruno")) is pour
+    assert "bruno a été désigné" in fake_llm.calls[0][-1]["content"]

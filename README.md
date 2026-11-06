@@ -27,11 +27,18 @@ Provocateur, Parano, Bouffon, Stratège et Observateur (fichiers dans `skills/pe
 
 - Chaque tour enchaîne trois phases : **nuit → discussion → vote**.
   - **Nuit :** les IA puis l'humain font leur choix de nuit ; les morts de la nuit sont annoncés. La Voyante reçoit la réponse de son sondage.
-  - **Discussion :** les IA parlent dans le salon public (10 messages au plus, dans un ordre fixé par leur personnalité), puis l'humain peut écrire un message public. Il peut ensuite ouvrir un salon privé avec 1 ou 2 agents vivants (3 messages au plus).
-  - **Vote :** les IA puis l'humain votent. Chaque étape attend la précédente : l'humain n'écrit jamais pendant qu'une IA répond.
+  - **Jour (minuté, 4 minutes) :** les IA ouvrent la discussion dans le salon public (10 messages au plus, dans un ordre fixé par leur personnalité). Ensuite, jusqu'à la fin du temps, l'humain peut :
+    - écrire dans le salon public (les IA lui répondent) ;
+    - ouvrir une conversation privée avec 1 ou 2 agents vivants (3 messages au plus). Pendant ce temps, les autres agents discutent entre eux en privé (échange simulé en un seul appel LLM, chacun note ce qu'il en retient). Le salon public garde la trace de qui parle avec qui ;
+    - désigner un joueur (facultatif) : vote immédiat pour ou contre son exécution. Chacun désigne au plus une fois par jour, et un joueur n'est désigné qu'une fois par jour ;
+    - finir sa journée.
+  - À la moitié du temps, les IA peuvent désigner à leur tour, et si l'humain n'a parlé en privé avec personne, un agent lui propose une conversation.
+  - **Vote sur une désignation :** chacun vote pour ou contre ; le joueur est exécuté si les « pour » sont plus de la moitié des joueurs vivants (égalité : personne). Un mort ne compte que s'il vote « pour ». S'il y a exécution, le jour s'arrête ; sinon, le jour continue.
+  - **Vote de fin de jour :** si personne n'a été exécuté sur désignation, chacun choisit qui doit mourir (ou personne). Le joueur qui a plus de la moitié des votes exprimés est exécuté (égalité : personne).
+  - Chaque étape attend la précédente : l'humain n'écrit jamais pendant qu'une IA répond.
 - La première nuit, personne ne meurt. Le Diablotin et l'Empoisonneur apprennent qui est leur allié, et le Détective reçoit son information.
 - Si un joueur (IA) fait un choix de nuit invalide ou n'en fait pas, un choix légal est tiré au hasard. Un vote pour un joueur mort ou inconnu compte comme une abstention.
-- Les morts restent dans la partie et gardent un dernier vote (vote fantôme).
+- Les morts restent dans la partie : ils parlent encore et gardent un seul vote pour le reste de la partie (vote fantôme), utilisé quand ils votent pour l'exécution de quelqu'un (« contre » ou « personne » ne l'utilisent pas). Ils ne peuvent pas désigner.
 - **Victoire :** le bien gagne si le Diablotin meurt ; le mal gagne s'il ne reste aucun joueur du bien vivant.
 
 ## Stack technique
@@ -100,10 +107,10 @@ Le serveur démarre sur `http://127.0.0.1:8000` :
 | `GET /health` | Vérifie que le serveur tourne |
 | `GET /docs` | Documentation automatique de l'API (FastAPI) |
 | `ws://127.0.0.1:8000/ws/{pseudo}` | WebSocket du joueur : lance la partie et reçoit ses actions |
-| `GET /admin/debug/all-states` | Route de débogage, protégée par le header `x-admin-token` |
+| `GET /admin/debug/all-states` | Débogage, protégé par le header `x-admin-token` : parties en cours avec les rôles, effets et personnalités de tous les joueurs, et l'historique complet (qui pouvait voir quoi) |
 
-Actions envoyées par le navigateur (JSON) : `start_game`, `send_chat`, `create_channel`, `night_action`, `vote`, `pass`.
-Messages envoyés par le serveur : `state` (tour, phase, joueurs, rôle de l'humain), `event` (message ou annonce visible par l'humain), `request` (le moteur attend une action), `game_over`, `error`. Le lien entre le moteur et le WebSocket est fait par `backend/server/game_session.py`.
+Actions envoyées par le navigateur (JSON) : `start_game`, `send_chat`, `create_channel`, `nominate`, `night_action`, `vote`, `pass`.
+Messages envoyés par le serveur : `state` (tour, phase, joueurs, rôle de l'humain), `event` (message ou annonce visible par l'humain), `request` (le moteur attend une action : `night`, `day` avec la fin du jour, une éventuelle proposition d'un agent et les joueurs que l'humain peut désigner, `private_message`, `vote` sur une désignation, `final_vote` en fin de jour), `wait` (le moteur n'attend plus d'action), `game_over`, `error`. Le lien entre le moteur et le WebSocket est fait par `backend/server/game_session.py`.
 
 ## Interface web
 
@@ -112,11 +119,12 @@ Ouvrir `http://127.0.0.1:8000/` une fois le serveur lancé. L'interface (`static
 - un écran d'accueil où le joueur choisit son pseudo, qui sert d'identifiant pour la connexion WebSocket ;
 - une table ronde avec les joueurs vivants et morts ;
 - un chat par salon (public et privés), avec des onglets pour l'historique des nuits et des votes ;
-- un panneau d'actions qui change selon la phase (discussion, vote, nuit) ;
+- un minuteur du jour dans la barre du haut ;
+- un panneau d'actions qui change selon la phase : choix de nuit ; le jour, conversation privée, désignation facultative et « Finir ma journée » ; vote pour ou contre une désignation ; vote de fin de jour ;
 - la liste des joueurs, avec une note de soupçon pour chacun ;
-- des fenêtres pour la révélation du rôle et la fin de partie (rôles de tous les joueurs, bouton « Rejouer »).
+- des fenêtres pour la révélation du rôle, la proposition de conversation d'un agent et la fin de partie (rôles de tous les joueurs, bouton « Rejouer »).
 
-Déroulement côté joueur : le pseudo lance une partie contre les 5 IA. Le panneau d'actions affiche ce que le moteur attend (choix de nuit, message public, choix d'un salon privé, message privé, vote) ; le reste du temps, les IA réfléchissent et leurs messages arrivent au fur et à mesure. Si le joueur ne choisit personne pour le salon privé, un agent vient lui parler.
+Déroulement côté joueur : le pseudo lance une partie contre les 5 IA. Le panneau d'actions affiche ce que le moteur attend ; le reste du temps, les IA réfléchissent et leurs messages arrivent au fur et à mesure.
 
 ## Jouer dans le terminal
 
@@ -144,17 +152,13 @@ Les tests n'appellent jamais de vrai LLM : ils utilisent un faux LLM. À lancer 
 - Phases de conversation publique et privée
 - Serveur : WebSocket, validation des actions, route admin
 - Boucle de jeu (`game_engine.py`) : mise en place (rôles, personnalités, fausse piste de la Voyante, agents, infos de première nuit), tours nuit → vote, arrêt à la victoire
-- Tours avec les IA (`ai_turns.py`) et avec l'humain (`human_turns.py`) : choix de nuit, réponse de la Voyante, discussion publique, salon privé, votes
+- Tours avec les IA (`ai_turns.py`) et avec l'humain (`human_turns.py`) : choix de nuit, réponse de la Voyante, jour minuté, désignation facultative (vote pour ou contre), vote de fin de jour
+- Conversations privées entre agents pendant le salon privé de l'humain (simulées en un appel LLM)
+- Un agent propose une conversation à l'humain qui n'a parlé en privé avec personne
+- Annonces publiques des morts de la nuit, des désignations, des votes et de l'exécution, enregistrées dans la mémoire des agents
 - Interface web (`static/`) reliée au moteur par le WebSocket : une partie complète se joue dans le navigateur
+- Route admin : état caché et historique complet des parties en cours
 - Parties dans le terminal (`scripts/`)
-
-- Annonces publiques des morts de la nuit, des votes et de l'exécution, enregistrées dans la mémoire des agents
-- Un agent vient parler à l'humain quand celui-ci n'ouvre pas de salon privé
-
-**À faire :**
-- Timer de la phase de jour et désignation d'un joueur à tout moment (prévus dans le sujet)
-- Conversations privées entre agents pendant le salon privé de l'humain
-- Contenu de la route admin
 
 ## Documentation
 

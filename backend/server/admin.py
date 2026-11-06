@@ -28,20 +28,55 @@ def verify_admin_token(x_admin_token: Optional[str] = Header(default=None)):
     return x_admin_token
 
 
+def _event_view(memory, event) -> dict:
+    return {
+        "turn": event.turn,
+        "phase": event.phase.value,
+        "type": event.type.value,
+        "author": "Maître du Jeu" if event.author_id is None else memory.name_of(event.author_id),
+        "visible_to": "tous" if event.visible_to is None else sorted(memory.name_of(p) for p in event.visible_to),
+        "content": event.content,
+    }
+
+
+def session_debug_view(player_id: str, session) -> dict:
+    """Tout ce qui est caché aux joueurs : rôles, effets, personnalités et la mémoire complète."""
+    state, memory = session.state, session.memory
+    view = {"player": player_id, "finished": session.finished}
+    if state is None or memory is None:
+        return {**view, "status": "partie en préparation"}
+    agents = session.agents
+    return {
+        **view,
+        "turn": state.turn,
+        "phase": state.phase.value,
+        "players": [
+            {
+                "id": p.id,
+                "name": p.name,
+                "role": p.role.name_FR,
+                "team": p.role.team.value,
+                "alive": p.alive,
+                "can_vote": p.can_vote,
+                "effects": [e.type.value for e in p.effects],
+                "links": dict(p.links),
+                "personality": agents[p.id].personality_key if p.id in agents else "humain",
+            }
+            for p in state.players
+        ],
+        "events": [_event_view(memory, e) for e in memory._events],
+    }
+
+
 @router.get("/debug/all-states", dependencies=[Depends(verify_admin_token)])
 def get_all_debug_states():
     """
-    Route sécurisée pour récupérer l'inspection totale du jeu :
-    - Historique des tchats publics et privés
-    - État interne et mémoire des agents IA
-    - Historique des nuits de tout le monde
+    Route sécurisée pour l'inspection totale des parties en cours :
+    rôles et effets de tous les joueurs, personnalités des agents,
+    et historique complet (public, privé, nuits) avec qui pouvait voir quoi.
     """
-    # TODO: Connecter cette route au moteur de jeu global
-    # Exemple de structure de retour pour le dashboard de débug :
-    # return {
-    #     "status": "success",
-    #     "message": "Bienvenue dans l'espace admin de Blood on the AI Clocktower",
-    #     "public_chat_history": [],
-    #     "private_channels": [],
-    #     "agents_private_logs": {}
-    # }
+    from backend.server.websockets import sessions  # import tardif : évite une importation circulaire
+    return {
+        "status": "success",
+        "games": [session_debug_view(player_id, session) for player_id, session in sessions.items()],
+    }

@@ -7,17 +7,21 @@ elle implémente HumanPort. Chaque fois que le moteur attend l'humain, elle envo
 Messages envoyés au navigateur (champ "type") :
 - "state"     : tour, phase, joueurs (vivants / morts) et rôle de l'humain ;
 - "event"     : un événement de la mémoire visible par l'humain (message public ou privé, annonce, info de nuit) ;
-- "request"   : le moteur attend une action de l'humain (kind, prompt, options, count, can_pass) ;
+- "request"   : le moteur attend une action de l'humain : kind = "night", "day" (jour minuté : deadline,
+                proposal, nominee_options), "private_message", "vote" (pour/contre le joueur désigné)
+                ou "final_vote" (fin du jour : qui doit mourir) ;
+- "wait"      : le moteur n'attend plus d'action (les IA réfléchissent) ;
 - "game_over" : camp gagnant et rôles de tous les joueurs ;
 - "error"     : action refusée, ou erreur du serveur.
 """
 import asyncio
 import logging
 import random
+import time
 from typing import Any, Awaitable, Callable, Optional
 
 from backend.game_engine import setup_game
-from backend.human_turns import play_turn_with_human
+from backend.human_turns import DAY_SECONDS, MAX_PRIVATE_PARTNERS, DayAction, play_turn_with_human
 from backend.memory_manager import Event
 from backend.models import Alignement, GameState
 from backend.rules import legal_actions
@@ -47,14 +51,17 @@ def player_names(human_name: str) -> dict[str, str]:
 
 class GameSession:
     def __init__(self, human_name: str, send: Send, rng: Optional[random.Random] = None,
-                 max_turns: int = MAX_TURNS):
+                 max_turns: int = MAX_TURNS, day_seconds: float = DAY_SECONDS):
         self.names = player_names(human_name)
         self.send = send
         self.rng = rng or random.Random()
         self.max_turns = max_turns
         self.inbox: asyncio.Queue = asyncio.Queue()
         self._outbox: asyncio.Queue = asyncio.Queue()
+        self.day_seconds = day_seconds
         self.memory = None
+        self.state: Optional[GameState] = None  # dernier état connu (route admin)
+        self.agents: dict = {}
         self.finished = False
         self._partners: list[str] = []  # agents choisis par l'humain pour le salon privé du jour
 
@@ -77,6 +84,7 @@ class GameSession:
                 "can_vote": player.can_vote, "is_me": player.id == HUMAN_ID}
 
     def _emit_state(self, state: GameState) -> None:
+        self.state = state
         me = state.player(HUMAN_ID)
         self._emit({"type": "state", "data": {
             "turn": state.turn,
@@ -86,6 +94,7 @@ class GameSession:
                 "id": me.id,
                 "name": me.name,
                 "alive": me.alive,
+                "can_vote": me.can_vote,  # mort : vrai tant que le vote fantôme n'est pas utilisé
                 "role": me.role.name_FR,
                 "description": me.role.description,
                 "team": TEAM_LABELS.get(me.role.team.value, me.role.team.value),
@@ -147,9 +156,23 @@ class GameSession:
     def _error(self, text: str) -> None:
         self._emit({"type": "error", "data": text})
 
+    def _drain(self) -> None:
+        """Jette les actions arrivées alors qu'aucune demande n'était ouverte (trop tard)."""
+        dropped = 0
+        while not self.inbox.empty():
+            self.inbox.get_nowait()
+            dropped += 1
+        if dropped:
+            self._error("Action ignorée : elle est arrivée trop tard.")
+
+    def _close_request(self) -> None:
+        """Prévient le navigateur que le moteur n'attend plus d'action (les IA réfléchissent)."""
+        self._emit({"type": "wait", "data": "Les autres joueurs réfléchissent..."})
+
     # --- HumanPort ---------------------------------------------------------------------
 
     async def night_choice(self, state: GameState, player_id: str) -> tuple[str, ...]:
+        self._drain()
         self._emit_state(state)
         legal = legal_actions(state, player_id)
         role = state.player(player_id).role
@@ -168,38 +191,66 @@ class GameSession:
     async def show_night_deaths(self, state: GameState, deaths: tuple[str, ...]) -> None:
         self._emit_state(state)
 
-    async def public_message(self, state: GameState, player_id: str) -> Optional[str]:
+    async def day_action(self, state: GameState, player_id: str, seconds_left: float, wait: float,
+                         proposal: Optional[str], nominee_options: list[str]) -> Optional[DayAction]:
+        """Le jour, l'humain agit librement : message public, conversation privée, désignation
+        ou fin de sa journée. Renvoie None si rien n'arrive pendant `wait` secondes."""
+        self._drain()
         self._emit_state(state)
+        others = [p.id for p in state.players if p.id != player_id and p.alive]
+        self._emit({"type": "request", "data": {
+            "kind": "day",
+            "prompt": "Discute en public, ouvre une conversation privée, désigne un joueur, "
+                      "ou termine ta journée.",
+            "options": [{"id": pid, "name": state.player(pid).name} for pid in others],
+            "count": MAX_PRIVATE_PARTNERS,
+            "can_pass": True,
+            "can_nominate": bool(nominee_options),
+            "nominee_options": [{"id": pid, "name": state.player(pid).name} for pid in nominee_options],
+            "deadline": time.time() + seconds_left,
+            "proposal": {"id": proposal, "name": state.player(proposal).name} if proposal else None,
+            "participants": [],
+        }})
+        end = time.monotonic() + wait
         while True:
-            self._request("public_message", "À toi de parler dans le salon public (ou passe ton tour).")
-            action = await self._wait("send_chat")
-            if action is None:
+            remaining = end - time.monotonic()
+            if remaining <= 0:
+                self._close_request()
                 return None
-            if action.payload.channel_id == "public":
-                return action.payload.content
-            self._error("Ce message doit aller dans le salon public.")
+            try:
+                action = await asyncio.wait_for(self.inbox.get(), timeout=remaining)
+            except asyncio.TimeoutError:
+                self._close_request()
+                return None
 
-    async def private_partners(self, state: GameState, player_id: str) -> list[str]:
-        options = [p.id for p in state.players if p.id != player_id and p.alive]
-        while True:
-            self._request("private_partners",
-                          "Choisis 1 ou 2 joueurs pour une conversation privée. "
-                          "Si tu passes, un joueur viendra peut-être te parler.",
-                          options, 2, state=state)
-            action = await self._wait("create_channel")
-            if action is None:
-                self._partners = []
-                return []
-            chosen = list(dict.fromkeys(action.payload.target_ids))
-            if all(pid in options for pid in chosen):
-                self._partners = chosen
-                return chosen
-            self._error("Choix invalide : choisis des joueurs vivants.")
+            if action.action == "pass":
+                return DayAction("end")
+            if action.action == "send_chat":
+                if action.payload.channel_id == "public":
+                    return DayAction("public", text=action.payload.content)
+                self._error("Aucune conversation privée ouverte : écris dans le salon public.")
+            elif action.action == "create_channel":
+                chosen = tuple(dict.fromkeys(action.payload.target_ids))
+                if chosen and all(pid in others for pid in chosen):
+                    self._partners = list(chosen)
+                    return DayAction("private", targets=chosen, agent_first=(proposal is not None
+                                                                              and chosen == (proposal,)))
+                self._error("Choix invalide : choisis 1 ou 2 joueurs vivants.")
+            elif action.action == "nominate":
+                if not nominee_options:
+                    self._error("Tu ne peux plus désigner aujourd'hui (un mort ne désigne pas, "
+                                "et chacun ne désigne qu'une fois par jour).")
+                elif action.payload.target_id in nominee_options:
+                    return DayAction("nominate", targets=(action.payload.target_id,))
+                else:
+                    self._error("Désignation invalide : ce joueur est mort ou a déjà été désigné aujourd'hui.")
+            else:
+                self._error(f"Action inattendue ({action.action}) pendant le jour.")
 
     async def private_message(self, state: GameState, player_id: str) -> Optional[str]:
+        self._drain()
         while True:
-            # Noms des participants : le navigateur ouvre le salon privé tout de suite,
-            # avant le premier message (vide si c'est un agent qui est venu nous parler).
+            # Noms des participants : le navigateur ouvre le salon privé tout de suite, avant le premier message.
             participants = sorted(state.player(pid).name for pid in [player_id, *self._partners])
             self._request("private_message", "Écris ton message privé (ou termine la conversation).",
                           participants=participants if self._partners else None)
@@ -213,11 +264,30 @@ class GameSession:
     async def show_private_replies(self, replies: list[tuple[str, str]]) -> None:
         pass  # les réponses arrivent déjà par les événements de la mémoire
 
-    async def vote(self, state: GameState, player_id: str) -> Optional[str]:
+    async def vote_on(self, state: GameState, player_id: str, nominee_id: str) -> bool:
+        """Vote pour ou contre l'exécution du joueur désigné. « vote » avec target_id = le désigné : pour ;
+        target_id = null ou « pass » : contre."""
+        self._drain()
+        self._emit_state(state)
+        nominee = state.player(nominee_id).name
+        while True:
+            self._request("vote", f"{nominee} a été désigné. Votes-tu pour son exécution ?",
+                          [nominee_id], 1, state=state)
+            action = await self._wait("vote")
+            if action is None or action.payload.target_id is None:
+                return False
+            if action.payload.target_id == nominee_id:
+                return True
+            self._error(f"Vote invalide : on vote seulement sur {nominee}.")
+
+    async def final_vote(self, state: GameState, player_id: str) -> Optional[str]:
+        """Vote de fin de jour : le joueur qui doit être exécuté, ou personne (target_id null / « pass »)."""
+        self._drain()
         self._emit_state(state)
         options = [p.id for p in state.players if p.alive]
         while True:
-            self._request("vote", "Vote pour exécuter un joueur, ou vote pour personne.", options, 1, state=state)
+            self._request("final_vote", "Fin du jour : qui doit être exécuté ? (ou personne)",
+                          options, 1, state=state)
             action = await self._wait("vote")
             if action is None or action.payload.target_id is None:
                 return None
@@ -240,6 +310,7 @@ class GameSession:
         try:
             state, agents, memory = setup_game(self.names, HUMAN_ID, PERSONALITIES, self.rng)
             self.memory = memory
+            self.agents = agents
             self._emit_state(state)
             for event in memory.events_for(HUMAN_ID):  # infos de première nuit déjà enregistrées
                 self._on_event(event)
@@ -247,7 +318,8 @@ class GameSession:
 
             winner = None
             for _ in range(self.max_turns):
-                result = await play_turn_with_human(state, self.rng, agents, memory, HUMAN_ID, self)
+                result = await play_turn_with_human(state, self.rng, agents, memory, HUMAN_ID, self,
+                                                    day_seconds=self.day_seconds)
                 state = result.state
                 self._emit_state(state)
                 if result.game_winner is not None:

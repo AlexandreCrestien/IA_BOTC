@@ -11,6 +11,9 @@ class LegalAction(NamedTuple):
 
 # Rôles qui peuvent se désigner eux-mêmes.
 CAN_TARGET_SELF = {"psychic"}
+# Rôles qui ne peuvent choisir qu'un joueur vivant (voir skills/roles/<rôle>.md).
+# Les autres peuvent viser un mort : le Diablotin (pour ne tuer personne), la Voyante, le Majordome.
+ALIVE_TARGETS_ONLY = {"monk", "poisoner"}
 # Nombre de cibles par rôle (1 par défaut).
 TARGET_COUNT = {"psychic": 2}
 
@@ -25,6 +28,7 @@ def legal_actions(state: GameState, player_id: str) -> LegalAction:
     targets = [
         other.id
         for other in state.players
-        if other.id != player_id or role_name in CAN_TARGET_SELF
+        if (other.id != player_id or role_name in CAN_TARGET_SELF)
+        and (other.alive or role_name not in ALIVE_TARGETS_ONLY)
     ]
     return LegalAction(targets=tuple(targets), count=TARGET_COUNT.get(role_name, 1))

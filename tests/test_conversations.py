@@ -210,3 +210,85 @@ def test_meeting_announcement_uses_names(fake_llm):
     agents = make_agents(memory, ["clown"])
     asyncio.run(start_private_conversation("eva", agents, memory))
     assert memory.events_for("dan")[0].content == "Conversation privée entre Eva, Ana."
+
+
+# --- Conversation simulée entre agents -------------------------------------------
+
+import json  # noqa: E402
+
+import backend.llm_client as llm_client  # noqa: E402
+from backend.conversations import simulate_agents_conversation  # noqa: E402
+
+
+@pytest.fixture
+def fake_simulation(monkeypatch):
+    """Faux LLM pour la simulation : renvoie le JSON donné dans fake_simulation.replies."""
+    class Fake:
+        def __init__(self):
+            self.replies: list[str] = []
+            self.prompts: list[str] = []
+
+        async def __call__(self, profile, messages, **kwargs):
+            self.prompts.append(messages[-1]["content"])
+            return self.replies.pop(0)
+
+    fake = Fake()
+    monkeypatch.setattr(llm_client, "ask_llm", fake)
+    return fake
+
+
+def simulation_reply(lines, notes):
+    return json.dumps({"echange": [{"auteur": a, "message": m} for a, m in lines], "notes": notes})
+
+
+def test_simulation_records_messages_for_participants_only(memory, fake_simulation):
+    agents = make_agents(memory, ["clown", "observer"])  # ana, bruno
+    fake_simulation.replies = [simulation_reply(
+        [("ana", "Je me méfie de carla."), ("bruno", "Moi aussi.")],
+        {"ana": "bruno est d'accord", "bruno": "ana soupçonne carla"},
+    )]
+    said = asyncio.run(simulate_agents_conversation(agents, memory))
+    assert said == [("ana", "Je me méfie de carla."), ("bruno", "Moi aussi.")]
+    contents_carla = [e.content for e in memory.events_for("carla")]
+    assert contents_carla == ["Conversation privée entre ana, bruno."]
+    assert "Moi aussi." in [e.content for e in memory.events_for("ana")]
+
+
+def test_simulation_gives_each_agent_his_own_note(memory, fake_simulation):
+    agents = make_agents(memory, ["clown", "observer"])
+    fake_simulation.replies = [simulation_reply([("ana", "Salut")], {"ana": "note A", "bruno": "note B"})]
+    asyncio.run(simulate_agents_conversation(agents, memory))
+    ana = [e.content for e in memory.events_for("ana")]
+    bruno = [e.content for e in memory.events_for("bruno")]
+    assert any("note A" in c for c in ana) and not any("note B" in c for c in ana)
+    assert any("note B" in c for c in bruno)
+
+
+def test_simulation_prompt_contains_what_each_agent_knows(memory, fake_simulation):
+    memory.add_personal(EventType.role_info, "game_master", "SECRET-ANA", "ana")
+    agents = make_agents(memory, ["clown", "observer"])
+    fake_simulation.replies = [simulation_reply([], {"ana": "-", "bruno": "-"})]
+    asyncio.run(simulate_agents_conversation(agents, memory))
+    assert "SECRET-ANA" in fake_simulation.prompts[0]
+
+
+def test_simulation_retries_on_unknown_author(memory, fake_simulation):
+    agents = make_agents(memory, ["clown", "observer"])
+    fake_simulation.replies = [
+        simulation_reply([("zoe", "?")], {"ana": "-", "bruno": "-"}),
+        simulation_reply([("ana", "ok")], {"ana": "-", "bruno": "-"}),
+    ]
+    assert asyncio.run(simulate_agents_conversation(agents, memory)) == [("ana", "ok")]
+
+
+def test_simulation_failure_keeps_only_the_announcement(memory, fake_simulation):
+    agents = make_agents(memory, ["clown", "observer"])
+    fake_simulation.replies = ["pas du json", "toujours pas"]
+    assert asyncio.run(simulate_agents_conversation(agents, memory)) == []
+    assert [e.type for e in memory.events_for("ana")] == [EventType.private_meeting]
+
+
+def test_simulation_needs_two_agents(memory, fake_simulation):
+    agents = make_agents(memory, ["clown"])
+    assert asyncio.run(simulate_agents_conversation(agents, memory)) == []
+    assert memory.events_for("carla") == []

@@ -16,6 +16,19 @@ class PromptLoader:
         self.general_rules_file = self.base_dir / "general_rules.md"
 
 
+    def personality_display_name(self, personality_name: str) -> str:
+        """Nom affiché (français) d'une personnalité, lu dans son skill
+        (ligne « Nom de la personnalité : … »). Renvoie la clé si le fichier ou la ligne manque."""
+        path = self.personalities_dir / f"{personality_name.strip().lower()}.md"
+        if not path.exists():
+            return personality_name
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if "Nom de la personnalité" in line and ":" in line:
+                name = line.split(":", 1)[1].strip().strip("*").strip()
+                if name:
+                    return name
+        return personality_name
+
     def _read_markdown_file(self, file_path: Path) -> str:
         """Lit un fichier Markdown de manière sécurisée."""
         if not file_path.exists():

@@ -1,6 +1,9 @@
 
 import logging
 
+from pydantic import BaseModel, ValidationInfo, field_validator
+
+from backend import llm_client
 from backend.agent_factory import Agent
 from backend.memory_manager import MemoryManager, game_master
 from backend.models import EventType
@@ -133,3 +136,98 @@ async def private_message(human_id: str, text: str, partners: list[Agent],
     participants = {human_id} | {agent.player_id for agent in partners}
     memory.add_private(EventType.private_summary, human_id, text, participants)
     return await _replies(human_id, partners, memory)
+
+
+# --- Conversation privée simulée entre agents ----------------------------------------
+# Pendant que l'humain parle en privé, les autres agents discutent entre eux. Pour limiter
+# les appels, l'échange entier est simulé en un seul appel LLM, qui donne aussi ce que
+# chaque agent retient (sa note personnelle).
+
+MAX_SIMULATED_LINES = 6
+
+
+class SimulatedLine(BaseModel):
+    auteur: str
+    message: str
+
+    @field_validator("auteur")
+    @classmethod
+    def _known_author(cls, auteur: str, info: ValidationInfo) -> str:
+        names = (info.context or {})["names"]
+        if auteur not in names:
+            raise ValueError(f"{auteur!r} ne participe pas. Participants : {', '.join(names)}")
+        return auteur
+
+
+class SimulatedConversation(BaseModel):
+    echange: list[SimulatedLine]
+    notes: dict[str, str]
+
+    @field_validator("notes")
+    @classmethod
+    def _one_note_each(cls, notes: dict[str, str], info: ValidationInfo) -> dict[str, str]:
+        names = set((info.context or {})["names"])
+        if set(notes) != names:
+            raise ValueError(f"Il faut une note pour chaque participant : {', '.join(sorted(names))}")
+        return notes
+
+
+def _simulation_messages(agents: list[Agent], memory: MemoryManager) -> list[dict]:
+    profiles = []
+    for agent in agents:
+        profiles.append(
+            f"## {agent.name}\n"
+            f"Rôle secret : {agent.role_name}. Personnalité : {agent.personality}.\n"
+            f"Ce que {agent.name} sait :\n{memory.context_for(agent.player_id)}"
+        )
+    names = ", ".join(agent.name for agent in agents)
+    system = (
+        "Tu es le narrateur d'une partie de Blood on the Clocktower (variante du loup-garou). "
+        "Tu simules une courte conversation privée et secrète entre des joueurs. "
+        "Chaque joueur ne connaît que ses propres informations : il peut mentir ou cacher son rôle "
+        "s'il est du côté du mal, et il ne doit jamais révéler ce qu'il ne sait pas. "
+        "Les messages sont courts (1 ou 2 phrases), en français, fidèles à la personnalité de chacun."
+    )
+    user = (
+        "\n\n".join(profiles)
+        + f"\n\n# À TOI\nSimule leur conversation privée ({MAX_SIMULATED_LINES} messages au plus), "
+        + f"puis écris pour chacun ce qu'il retient (une phrase, de son point de vue). "
+        + 'Réponds uniquement en JSON : {"echange": [{"auteur": "nom", "message": "..."}], '
+        + '"notes": {"nom": "ce qu\'il retient"}}. '
+        + f"Participants : {names}."
+    )
+    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+
+
+async def simulate_agents_conversation(agents: list[Agent], memory: MemoryManager) -> list[tuple[str, str]]:
+    """Conversation privée entre 2 agents ou plus, simulée en un seul appel LLM.
+
+    Annonce publique « Conversation privée entre … » (sans le contenu) ; chaque message est
+    enregistré en privé pour les participants, et la note de chaque agent dans sa mémoire personnelle.
+    Renvoie les messages (id_joueur, texte). En cas d'échec du LLM, rien n'est enregistré
+    à part l'annonce."""
+    if len(agents) < 2:
+        return []
+    by_name = {agent.name: agent for agent in agents}
+    participants = {agent.player_id for agent in agents}
+    names = ", ".join(agent.name for agent in agents)
+    memory.add_public(EventType.private_meeting, game_master, f"Conversation privée entre {names}.")
+    try:
+        result = await llm_client.ask_llm_json(
+            "capable", _simulation_messages(agents, memory), SimulatedConversation,
+            context={"names": list(by_name)},
+        )
+    except Exception:
+        logger.exception("La conversation simulée entre %s a échoué", names)
+        return []
+
+    said = []
+    for line in result.echange[:MAX_SIMULATED_LINES]:
+        author = by_name[line.auteur]
+        memory.add_private(EventType.private_summary, author.player_id, line.message, participants)
+        said.append((author.player_id, line.message))
+    for name, note in result.notes.items():
+        agent = by_name[name]
+        memory.add_personal(EventType.private_summary, game_master,
+                            f"Ce que tu retiens de ta conversation privée : {note}", agent.player_id)
+    return said

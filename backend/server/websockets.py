@@ -19,6 +19,9 @@ action_validator = TypeAdapter(ClientActionPacket)
 # Fabrique de sessions : remplacée dans les tests pour ne pas appeler de vrai LLM.
 session_factory = GameSession
 
+# Parties en cours, par joueur connecté (lues par la route admin).
+sessions: dict[str, GameSession] = {}
+
 
 @router.websocket("/ws/{player_id}")
 async def websocket_endpoint(websocket: WebSocket, player_id: str):
@@ -47,6 +50,7 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
                     if task is not None:
                         task.cancel()
                     session = session_factory(player_id, send)
+                    sessions[player_id] = session
                     task = asyncio.create_task(session.run())
                 elif session is None or session.finished:
                     await send({"type": "error", "data": "Aucune partie en cours : lance une partie."})
@@ -73,3 +77,5 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
     finally:
         if task is not None:
             task.cancel()
+        if sessions.get(player_id) is session:
+            sessions.pop(player_id, None)

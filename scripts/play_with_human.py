@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import litellm  # noqa: E402
 
 from backend.game_engine import setup_game  # noqa: E402
-from backend.human_turns import play_turn_with_human  # noqa: E402
+from backend.human_turns import DayAction, play_turn_with_human  # noqa: E402
 from backend.rules import legal_actions  # noqa: E402
 
 litellm.suppress_debug_info = True
@@ -61,18 +61,35 @@ class TerminalHuman:
         names = ", ".join(state.player(pid).name for pid in deaths) or "personne"
         print(f"\n-- Morts de la nuit : {names}")
 
-    async def public_message(self, state, player_id):
-        print("\n[Discussion] Ce que tu sais :")
+    async def day_action(self, state, player_id, seconds_left, wait, proposal, nominee_options):
+        """Dans le terminal, le temps n'est pas limité pendant que tu tapes."""
+        print(f"\n[Jour] Ce que tu sais (temps restant : {int(seconds_left)} s) :")
         print(self.memory.context_for(player_id))
-        text = input("Ton message public (vide = passer) : ").strip()
-        return text or None
-
-    async def private_partners(self, state, player_id):
-        candidates = [p.id for p in state.players if p.alive and p.id != player_id]
-        print("\n[Salon privé] Avec qui veux-tu parler ? (1 ou 2 numéros, vide = personne)")
-        for i, pid in enumerate(candidates, 1):
-            print(f"  {i}. {state.player(pid).name}")
-        return _ask_numbers("Numéros : ", candidates)
+        if proposal:
+            print(f"** {state.player(proposal).name} te propose une conversation privée (choix p). **")
+        print("Que fais-tu ?  m = message public | c = conversation privée | "
+              + ("p = accepter la proposition | " if proposal else "")
+              + ("d = désigner un joueur | " if nominee_options else "") + "f = finir ma journée")
+        choice = input("> ").strip().lower()
+        others = [p.id for p in state.players if p.alive and p.id != player_id]
+        if choice == "m":
+            text = input("Ton message public : ").strip()
+            return DayAction("public", text=text) if text else None
+        if choice == "p" and proposal:
+            return DayAction("private", targets=(proposal,), agent_first=True)
+        if choice == "c":
+            for i, pid in enumerate(others, 1):
+                print(f"  {i}. {state.player(pid).name}")
+            picked = _ask_numbers("1 ou 2 numéros : ", others)[:2]
+            return DayAction("private", targets=tuple(picked)) if picked else None
+        if choice == "d" and nominee_options:
+            for i, pid in enumerate(nominee_options, 1):
+                print(f"  {i}. {state.player(pid).name}")
+            picked = _ask_numbers("Numéro : ", nominee_options)
+            return DayAction("nominate", targets=(picked[0],)) if picked else None
+        if choice == "f":
+            return DayAction("end")
+        return None
 
     async def private_message(self, state, player_id):
         print("\n[Salon privé] Ce que tu sais :")
@@ -84,9 +101,13 @@ class TerminalHuman:
         for pid, text in replies:
             print(f"  {self.memory.name_of(pid)} : {text}")
 
-    async def vote(self, state, player_id):
+    async def vote_on(self, state, player_id, nominee_id):
+        answer = input(f"\n[Vote] {state.player(nominee_id).name} est désigné. Pour son exécution ? (o/n) : ")
+        return answer.strip().lower().startswith("o")
+
+    async def final_vote(self, state, player_id):
         options = [p.id for p in state.players if p.alive]
-        print("\n[Vote] Qui veux-tu faire exécuter ? (0 ou vide = personne)")
+        print("\n[Fin du jour] Qui doit être exécuté ? (vide = personne)")
         for i, pid in enumerate(options, 1):
             print(f"  {i}. {state.player(pid).name}")
         picked = _ask_numbers("Numéro : ", options)

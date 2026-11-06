@@ -58,6 +58,24 @@ def announce_night(memory: MemoryManager, state: GameState, deaths: tuple[str, .
     memory.add_public(EventType.death if deaths else EventType.announcement, game_master, text)
 
 
+def announce_nomination(memory: MemoryManager, state: GameState, nominee_id: str,
+                        ballots: dict[str, bool], executed: Optional[str]) -> None:
+    """Annonce publique du vote sur une désignation : qui a voté pour, qui a voté contre, et le résultat.
+    state = état au moment du vote."""
+    nominee = state.player(nominee_id).name
+    yes = [state.player(pid).name for pid, ballot in ballots.items() if ballot]
+    no = [state.player(pid).name for pid, ballot in ballots.items() if not ballot]
+    memory.add_public(
+        EventType.vote, game_master,
+        f"Vote sur {nominee} : pour ({len(yes)}) : {', '.join(yes) or 'personne'} ; "
+        f"contre ({len(no)}) : {', '.join(no) or 'personne'}.",
+    )
+    if executed is None:
+        memory.add_public(EventType.announcement, game_master, f"{nominee} n'est pas exécuté : pas de majorité.")
+    else:
+        memory.add_public(EventType.death, game_master, f"{nominee} est exécuté.")
+
+
 def announce_vote(memory: MemoryManager, state: GameState, votes: dict[str, Optional[str]],
                   executed: Optional[str]) -> None:
     """Annonce publique des votes et de l'exécution. state = état au moment du vote."""
@@ -82,6 +100,11 @@ def setup_game(
     """Met en place une partie : rôles, personnalités, fausse piste de la Voyante,
     agents IA et infos de première nuit. Renvoie (état, agents, mémoire)."""
     assignments = assign_players(names, human_id, personality_names, rng)
+    loader = prompt_loader or PromptLoader()
+    for player_id, (name, role_data, personality_data) in assignments.items():
+        if personality_data is not None:  # nom affiché en français, lu dans le skill
+            personality_data["personality_name_FR"] = loader.personality_display_name(
+                personality_data["personality_name_EN"])
 
     players = tuple(
         Player(id=player_id, name=name, role=Role(**role_data))
@@ -95,7 +118,7 @@ def setup_game(
     state = state.replace_player(set_link(psychic, FALSE_LEAD_KEY, false_lead))
 
     memory = MemoryManager(list(names), names=names)
-    agents = create_all_agents(assignments, memory, human_id, prompt_loader)
+    agents = create_all_agents(assignments, memory, human_id, loader)
 
     memory.set_moment(state.turn, state.phase)
     for info in first_night_info(state, rng):

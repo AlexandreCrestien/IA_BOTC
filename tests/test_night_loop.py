@@ -1,3 +1,4 @@
+import pytest
 import random
 
 from backend.game_engine import collect_night_choices, play_night
@@ -60,3 +61,26 @@ def test_same_seed_same_choices():
     first = collect_night_choices(night_game(), random.Random(9))
     second = collect_night_choices(night_game(), random.Random(9))
     assert first == second
+
+# --- Cibles vivantes seulement pour le Moine et l'Empoisonneur ---------------------
+
+from backend.rules import legal_actions  # noqa: E402
+
+
+def _game_with_dead_dan():
+    from backend.models import GameState, Phase, Player
+    from backend.rules import get_role
+    roles = {"a": "imp", "b": "poisoner", "c": "monk", "d": "psychic", "e": "detective", "f": "butler"}
+    players = tuple(Player(id=pid, name=pid.upper(), role=get_role(role)) for pid, role in roles.items())
+    state = GameState(turn=2, phase=Phase.NUIT, players=players, channels=())
+    return state.replace_player(state.player("d").die())
+
+
+@pytest.mark.parametrize("role_id", ["c", "b"])  # Moine, Empoisonneur
+def test_monk_and_poisoner_cannot_target_the_dead(role_id):
+    assert "d" not in legal_actions(_game_with_dead_dan(), role_id).targets
+
+
+@pytest.mark.parametrize("role_id", ["a", "f"])  # Diablotin, Majordome
+def test_imp_and_butler_can_target_the_dead(role_id):
+    assert "d" in legal_actions(_game_with_dead_dan(), role_id).targets

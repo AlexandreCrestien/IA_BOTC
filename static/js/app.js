@@ -1,6 +1,6 @@
 // ================= ÉTAT DE L'APPLICATION =================
 // Le serveur envoie : "state", "event", "request", "game_over", "error".
-// Le navigateur envoie : start_game, send_chat, create_channel, night_action, vote, pass.
+// Le navigateur envoie : start_game, send_chat, create_channel, nominate, night_action, vote, pass.
 let ws = null;
 let pseudo = "";
 let ui = freshState();
@@ -19,6 +19,8 @@ function freshState() {
         nightLog: [],
         voteLog: [],
         request: null,           // demande en attente du moteur
+        deadline: null,          // fin du jour (secondes depuis 1970), pour le minuteur
+        dismissedProposal: null, // agent dont la proposition de conversation a été ignorée
         notes: {},               // soupçons notés par le joueur (local)
     };
 }
@@ -93,6 +95,10 @@ function handleServerMessage(message) {
         case "request":
             onRequest(message.data);
             break;
+        case "wait":
+            hideProposal();
+            clearRequest();
+            break;
         case "game_over":
             onGameOver(message.data);
             break;
@@ -109,6 +115,7 @@ function onState(data) {
     ui.phase = data.phase;
     ui.players = data.players;
     ui.me = data.me;
+    if (ui.phase !== "discussion") ui.deadline = null;
     if (!ui.roleShown && ui.me) {
         ui.roleShown = true;
         showRole();
@@ -138,13 +145,19 @@ function onEvent(e) {
     if (e.is_game_master) {
         appendSystem("public", e.content);
         setAnnouncement(e.content);
-        if (e.kind === "vote" || (e.phase === "vote" && (e.kind === "death" || e.kind === "announcement"))) {
+        // Onglet Votes : votes, résultats (désignation pendant le jour ou vote de fin de jour)
+        if (e.kind === "vote" || e.phase === "vote" || /exécuté/.test(e.content)) {
             ui.voteLog.push(e);
             renderVoteLog();
         }
     } else {
         ui.channels.public.messages.push({ sender: e.is_me ? "Moi" : e.author, content: e.content, me: e.is_me });
         if (ui.currentChannel !== "public") markUnread("public");
+        if (e.kind === "nomination") {
+            ui.voteLog.push({ ...e, content: `${e.author} : ${e.content}` });
+            renderVoteLog();
+            setAnnouncement(`${e.author} : ${e.content}`);
+        }
         renderChat();
     }
 }
@@ -179,7 +192,12 @@ function ensurePrivateChannel(turn, participants) {
 
 function onRequest(request) {
     ui.request = request;
-    if (request.kind === "public_message") switchChannel("public");
+    if (request.kind === "day") {
+        ui.deadline = request.deadline;
+        if (request.proposal && ui.dismissedProposal !== request.proposal.id) showProposal(request.proposal);
+    } else {
+        hideProposal();
+    }
     if (request.kind === "private_message") {
         // Salon choisi par l'humain : on l'ouvre tout de suite, avant le premier message.
         if (request.participants && request.participants.length) {
@@ -187,16 +205,20 @@ function onRequest(request) {
         }
         if (ui.currentPrivate) switchChannel(ui.currentPrivate);
     }
-    if (request.kind === "night" || request.kind === "vote") {
+    if (request.kind === "night" || request.kind === "vote" || request.kind === "final_vote") {
+        ui.deadline = null;
         switchLeftTab("chat");
         switchChannel("public");
     }
     renderActionPanel();
     renderChatInput();
+    renderTimer();
 }
 
 function onGameOver(data) {
     ui.request = null;
+    ui.deadline = null;
+    renderTimer();
     renderActionPanel();
     renderChatInput();
     document.getElementById("gameover-title").innerText = data.human_won ? "Victoire !" : "Défaite...";
@@ -221,18 +243,78 @@ function answerWithChoice() {
             return;
         }
         send("night_action", { targets: checked });
-    } else if (req.kind === "private_partners") {
+    } else if (req.kind === "day") {
         if (checked.length < 1 || checked.length > 2) {
-            showToast("Choisis 1 ou 2 joueurs.");
+            showToast("Choisis 1 ou 2 joueurs pour la conversation privée.");
             return;
         }
         send("create_channel", { target_ids: checked });
-    } else if (req.kind === "vote") {
-        const select = document.getElementById("vote-target-select");
-        send("vote", { target_id: select && select.value ? select.value : null });
     }
     clearRequest();
 }
+
+function nominatePlayer() {
+    const req = ui.request;
+    const select = document.getElementById("nominate-select");
+    if (!req || req.kind !== "day" || !select || !select.value) {
+        showToast("Choisis le joueur à désigner.");
+        return;
+    }
+    send("nominate", { target_id: select.value });
+    clearRequest();
+}
+
+function submitFinalVote() {
+    const req = ui.request;
+    if (!req || req.kind !== "final_vote") return;
+    const select = document.getElementById("final-vote-select");
+    send("vote", { target_id: select && select.value ? select.value : null });
+    clearRequest();
+}
+
+function voteBallot(yes) {
+    const req = ui.request;
+    if (!req || req.kind !== "vote") return;
+    send("vote", { target_id: yes ? req.options[0].id : null });
+    clearRequest();
+}
+
+function showProposal(proposal) {
+    document.getElementById("agent-whisper-text").innerText =
+        `${proposal.name} souhaite s'entretenir discrètement avec toi.`;
+    document.getElementById("modal-agent-whisper").dataset.agentId = proposal.id;
+    document.getElementById("modal-agent-whisper").classList.remove("hidden");
+}
+
+function hideProposal() {
+    document.getElementById("modal-agent-whisper").classList.add("hidden");
+}
+
+function acceptAgentWhisper() {
+    const modal = document.getElementById("modal-agent-whisper");
+    hideProposal();
+    if (!ui.request || ui.request.kind !== "day") return;
+    send("create_channel", { target_ids: [modal.dataset.agentId] });
+    clearRequest();
+}
+
+function closeAgentWhisper() {
+    ui.dismissedProposal = document.getElementById("modal-agent-whisper").dataset.agentId;
+    hideProposal();
+}
+
+function renderTimer() {
+    const box = document.getElementById("day-timer");
+    if (!ui.deadline) {
+        box.classList.add("hidden");
+        return;
+    }
+    const left = Math.max(0, Math.round(ui.deadline - Date.now() / 1000));
+    box.innerText = `⏱ ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
+    box.classList.remove("hidden");
+    box.classList.toggle("text-red-400", left <= 30);
+}
+setInterval(renderTimer, 1000);
 
 function passRequest() {
     if (!ui.request) return;
@@ -251,7 +333,7 @@ function sendChatMessage() {
     const content = input.value.trim();
     const req = ui.request;
     if (!content || !req) return;
-    if (req.kind === "public_message") {
+    if (req.kind === "day") {
         send("send_chat", { channel_id: "public", content });
     } else if (req.kind === "private_message") {
         send("send_chat", { channel_id: "private", content });
@@ -276,6 +358,7 @@ function updateSuspicion(playerId, value) {
 // ================= AFFICHAGE =================
 function renderAll() {
     renderHeader();
+    renderTimer();
     renderRoundTable();
     renderPlayersList();
     renderRole();
@@ -293,9 +376,23 @@ function renderHeader() {
     document.getElementById("alive-count").innerText = ui.players.filter(p => p.alive).length || "--";
 }
 
+function isDead(playerId) {
+    const player = ui.players.find(p => p.id === playerId);
+    return player ? !player.alive : false;
+}
+
+function ghostNote() {
+    // Rappel pour un joueur mort : il ne peut voter qu'une seule fois pour le reste de la partie.
+    if (!ui.me || ui.me.alive) return "";
+    return ui.me.can_vote
+        ? "☠️ Tu es mort(e) : tu peux encore parler. Ton vote fantôme est disponible : il sera utilisé si tu votes pour quelqu'un."
+        : "☠️ Tu es mort(e) : tu peux encore parler, mais ton vote fantôme a déjà été utilisé.";
+}
+
 function renderRole() {
     if (!ui.me) return;
-    document.getElementById("player-role-name").innerText = `${ui.me.role} (${ui.me.team})`;
+    document.getElementById("player-role-name").innerText =
+        `${ui.me.role} (${ui.me.team})${ui.me.alive ? "" : " — mort(e)"}`;
     document.getElementById("player-role-desc").innerText = ui.me.description;
     document.getElementById("player-role-desc").title = ui.me.description;
 }
@@ -396,10 +493,10 @@ function renderChatInput() {
     const input = document.getElementById("chat-input");
     const button = document.getElementById("chat-send");
     const kind = ui.request && ui.request.kind;
-    const canWrite = kind === "public_message" || kind === "private_message";
+    const canWrite = kind === "day" || kind === "private_message";
     input.disabled = !canWrite;
     button.disabled = !canWrite;
-    input.placeholder = kind === "public_message" ? "Ton message public..."
+    input.placeholder = kind === "day" ? "Ton message public..."
         : kind === "private_message" ? "Ton message privé..."
         : "Attends ton tour pour écrire...";
     button.classList.toggle("opacity-40", !canWrite);
@@ -427,8 +524,9 @@ function renderVoteLog() {
 function renderActionPanel() {
     const panel = document.getElementById("dynamic-action-panel");
     const req = ui.request;
+    const ghost = ghostNote() ? `<div class="text-xs text-red-300 bg-red-950/40 border border-red-900 rounded-lg p-2 mb-2">${escapeHtml(ghostNote())}</div>` : "";
     if (!req) {
-        panel.innerHTML = `
+        panel.innerHTML = `${ghost}
             <div class="flex items-center space-x-2 text-gray-400 text-sm">
                 <span class="animate-pulse">⏳</span>
                 <span>Les autres joueurs réfléchissent...</span>
@@ -436,7 +534,7 @@ function renderActionPanel() {
         return;
     }
 
-    const prompt = `<div class="text-gray-200 text-sm">${escapeHtml(req.prompt)}</div>`;
+    const prompt = `${ghost}<div class="text-gray-200 text-sm">${escapeHtml(req.prompt)}</div>`;
     const passBtn = (label) => req.can_pass
         ? `<button onclick="passRequest()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider">${label}</button>`
         : "";
@@ -445,27 +543,51 @@ function renderActionPanel() {
     const checkboxes = () => req.options.map(o => `
         <label class="flex items-center space-x-2 text-sm text-gray-300 cursor-pointer">
             <input type="checkbox" name="choice" value="${escapeAttr(o.id)}" onchange="limitChoices(this)" class="accent-yellow-600">
-            <span>${escapeHtml(o.name)}</span>
+            <span>${escapeHtml(o.name)}${isDead(o.id) ? ` <span class="text-red-400 text-xs">(mort)</span>` : ""}</span>
         </label>`).join("");
 
     if (req.kind === "night") {
-        panel.innerHTML = `<div class="text-purple-400 text-sm font-semibold">🌙 Ton action de nuit</div>${prompt}
+        const isImp = ui.me && ui.me.role === "Diablotin";
+        const deadHint = isImp && req.options.some(o => isDead(o.id))
+            ? `<div class="text-xs text-gray-500">Choisir un joueur mort : tu ne tues personne cette nuit (pour faire croire à une protection du Moine, par exemple).</div>` : "";
+        panel.innerHTML = `<div class="text-purple-400 text-sm font-semibold">🌙 Ton action de nuit</div>${prompt}${deadHint}
             <div class="space-y-1">${checkboxes()}</div>${okBtn("Valider")}${passBtn("Choix au hasard")}`;
-    } else if (req.kind === "public_message") {
-        panel.innerHTML = `<div class="text-blue-400 text-sm font-semibold">💬 Discussion publique</div>${prompt}
-            <div class="text-xs text-gray-500">Écris dans le chat à gauche.</div>${passBtn("Je ne dis rien")}`;
-    } else if (req.kind === "private_partners") {
-        panel.innerHTML = `<div class="text-clock-gold text-sm font-semibold">🤫 Conversation privée</div>${prompt}
-            <div class="space-y-1">${checkboxes()}</div>${okBtn("Ouvrir la conversation", "bg-clock-gold/80 hover:bg-clock-gold text-clock-dark")}${passBtn("Passer")}`;
+    } else if (req.kind === "day") {
+        const nominate = req.can_nominate ? `
+            <div class="pt-2 border-t border-clock-border space-y-2">
+                <div class="text-red-400 text-sm font-semibold">⚖️ Désigner un joueur (facultatif)</div>
+                <div class="text-xs text-gray-500">Vote immédiat pour ou contre son exécution. Sinon, chacun votera à la fin du jour.</div>
+                <select id="nominate-select" class="w-full bg-clock-dark border border-clock-border rounded p-2 text-sm text-gray-200 focus:outline-none focus:border-clock-gold">
+                    <option value="">-- Choisir --</option>
+                    ${(req.nominee_options || []).map(o => `<option value="${escapeAttr(o.id)}">${escapeHtml(o.name)}</option>`).join("")}
+                </select>
+                <button onclick="nominatePlayer()" class="w-full bg-clock-red hover:bg-red-800 text-white py-2 rounded-lg text-xs font-semibold uppercase tracking-wider">Désigner</button>
+            </div>` : `<div class="text-xs text-gray-500 pt-2 border-t border-clock-border">Tu ne peux pas désigner (mort, ou déjà désigné aujourd'hui). Le vote aura lieu à la fin du jour.</div>`;
+        panel.innerHTML = `<div class="text-blue-400 text-sm font-semibold">☀️ Jour : à toi d'agir</div>
+            <div class="text-xs text-gray-400">Écris dans le chat public, ou :</div>
+            <div class="pt-2 border-t border-clock-border space-y-2">
+                <div class="text-clock-gold text-sm font-semibold">🤫 Conversation privée (1 ou 2)</div>
+                <div class="space-y-1">${checkboxes()}</div>
+                ${okBtn("Ouvrir la conversation", "bg-clock-gold/80 hover:bg-clock-gold text-clock-dark")}
+            </div>
+            ${nominate}
+            <div class="pt-2 border-t border-clock-border">${passBtn("Finir ma journée")}</div>`;
     } else if (req.kind === "private_message") {
         panel.innerHTML = `<div class="text-clock-gold text-sm font-semibold">🤫 Conversation privée</div>${prompt}
             <div class="text-xs text-gray-500">Écris dans le chat à gauche.</div>${passBtn("Terminer la conversation")}`;
-    } else if (req.kind === "vote") {
-        panel.innerHTML = `<div class="text-red-400 text-sm font-semibold">⚖️ Vote</div>${prompt}
-            <select id="vote-target-select" class="w-full bg-clock-dark border border-clock-border rounded p-2 text-sm text-gray-200 focus:outline-none focus:border-clock-gold">
+    } else if (req.kind === "final_vote") {
+        panel.innerHTML = `<div class="text-red-400 text-sm font-semibold">⚖️ Vote de fin de jour</div>${prompt}
+            <select id="final-vote-select" class="w-full bg-clock-dark border border-clock-border rounded p-2 text-sm text-gray-200 focus:outline-none focus:border-clock-gold">
                 <option value="">Personne</option>
                 ${req.options.map(o => `<option value="${escapeAttr(o.id)}">${escapeHtml(o.name)}</option>`).join("")}
-            </select>${okBtn("Confirmer mon vote")}`;
+            </select>
+            <button onclick="submitFinalVote()" class="w-full bg-clock-red hover:bg-red-800 text-white py-2 rounded-lg text-xs font-semibold uppercase tracking-wider">Confirmer mon vote</button>`;
+    } else if (req.kind === "vote") {
+        panel.innerHTML = `<div class="text-red-400 text-sm font-semibold">⚖️ Vote</div>${prompt}
+            <div class="flex space-x-2">
+                <button onclick="voteBallot(true)" class="flex-1 bg-clock-red hover:bg-red-800 text-white py-2 rounded-lg text-xs font-semibold uppercase tracking-wider">Pour l'exécution</button>
+                <button onclick="voteBallot(false)" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-200 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider">Contre</button>
+            </div>`;
     }
 }
 
