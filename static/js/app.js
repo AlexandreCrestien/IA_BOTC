@@ -86,6 +86,9 @@ function handleServerMessage(data) {
         case "game_over":
             triggerGameOver(data.winner, data.details);
             break;
+        case "private_channel_opened":
+            handlePrivateChannelOpened(data.channel_id, data.text);
+            break;
         default:
             console.log("Message non géré :", data);
     }
@@ -119,14 +122,10 @@ function sendChatMessage() {
         }
     };
 
+    // On envoie au serveur. C'est le message reçu du serveur qui l'affichera proprement.
     ws.send(JSON.stringify(packet));
 
-    // Affichage local immédiat si c'est public ou s'il s'agit d'un salon privé
-    if (!gameState.messages[gameState.currentChannel]) {
-        gameState.messages[gameState.currentChannel] = [];
-    }
-    gameState.messages[gameState.currentChannel].push({ sender: "Moi", content: content });
-    renderChatMessages();
+    // On vide simplement l'input
     input.value = "";
 }
 
@@ -153,6 +152,55 @@ function appendSystemMessage(text) {
     const box = document.getElementById('chat-messages');
     box.innerHTML += `<div class="text-yellow-500/80 italic">⚙️ ${text}</div>`;
     box.scrollTop = box.scrollHeight;
+}
+
+function handlePrivateChannelOpened(channelId, text, members = []) {
+    appendSystemMessage(text);
+    
+    // 1. Initialiser le stockage des messages pour ce salon s'il n'existe pas
+    if (!gameState.messages[channelId]) {
+        gameState.messages[channelId] = [];
+    }
+
+    // 2. Créer l'onglet dans la barre de chat s'il n'existe pas encore
+    const channelsContainer = document.getElementById('chat-channels');
+    if (channelsContainer && !document.getElementById(`tab-${channelId}`)) {
+        const tabTitle = members.length > 0 ? `🔒 ${members.join(', ')}` : `🔒 Privé`;
+        
+        const tabButton = document.createElement('button');
+        tabButton.id = `tab-${channelId}`;
+        tabButton.className = "channel-btn bg-clock-panel text-gray-400 hover:text-white px-3 py-1.5 rounded-lg font-medium border border-clock-border whitespace-nowrap text-xs transition-colors";
+        tabButton.innerText = tabTitle;
+        tabButton.onclick = () => switchChannel(channelId);
+        
+        channelsContainer.appendChild(tabButton);
+    }
+    
+    // 3. Basculer automatiquement sur ce nouveau canal privé
+    switchChannel(channelId);
+}
+
+function switchChannel(channelId) {
+    gameState.currentChannel = channelId;
+    
+    // Mettre à jour l'apparence de tous les boutons de salons
+    const allButtons = document.querySelectorAll('#chat-channels button');
+    allButtons.forEach(btn => {
+        // On vérifie si c'est le bouton actif en comparant son ID (ex: "tab-public" ou "tab-whisper_...")
+        const isPublicBtnActive = (channelId === 'public' && btn.getAttribute('onclick')?.includes("'public'"));
+        const isPrivateBtnActive = (btn.id === `tab-${channelId}`);
+        
+        if (isPublicBtnActive || isPrivateBtnActive) {
+            btn.classList.remove('text-gray-400', 'bg-clock-panel');
+            btn.classList.add('text-clock-gold', 'bg-clock-accent', 'border-clock-gold');
+        } else {
+            btn.classList.add('text-gray-400', 'bg-clock-panel');
+            btn.classList.remove('text-clock-gold', 'bg-clock-accent', 'border-clock-gold');
+        }
+    });
+
+    // Rafraîchir l'affichage des messages dans la boîte de chat
+    renderChatMessages();
 }
 
 // ================= TABLE RONDE & ÉTAT DU JEU =================
@@ -324,7 +372,6 @@ function requestWhisper() {
         return;
     }
 
-    // On rassemble les cibles sélectionnées (1 ou 2 max)
     const targets = [target1];
     if (target2) {
         targets.push(target2);
@@ -335,7 +382,10 @@ function requestWhisper() {
             action: "request_whisper",
             payload: { targets: targets }
         }));
-        appendSystemMessage(`Demande d'entretien transmise (${targets.length} agent(s)).`);
+        
+        // Masquer/réinitialiser le panneau de sélection (ou afficher un message de confirmation dans le panneau)
+        const panel = document.getElementById('dynamic-action-panel');
+        panel.innerHTML = `<div class="text-green-400 text-xs italic text-center py-2">✓ Proposition de discussion privée transmise. Ouverture du salon.</div>`;
     }
 }
 

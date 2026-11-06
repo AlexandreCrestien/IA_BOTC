@@ -58,24 +58,37 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
                 # 2. DEMANDE DE CONVERSATION PRIVÉE
                 elif action == "request_whisper":
                     targets = payload.targets
-                        
-                    logger.info(f"Joueur {player_id} souhaite chuchoter avec les agents : {targets}")
+                    logger.info(f"Joueur {player_id} souhaite discuter en privé avec les agents : {targets}")
                     
-                    # Validation : 1 ou 2 agents maximum (déjà filtré par Pydantic, mais sécurité supplémentaire)
                     if len(targets) == 0 or len(targets) > 2:
                         await manager.send_to_player(
                             player_id,
-                            {"type": "error", "data": "Vous devez sélectionner 1 ou 2 agents maximum pour un chuchotement."}
+                            {"type": "error", "data": "Vous devez sélectionner 1 ou 2 agents maximum pour une discussion privée."}
                         )
                     else:
+                        # Création d'un ID de canal unique trié (ex: whisper_Ariel_agent_bot_1)
+                        participants = sorted([player_id] + targets)
+                        channel_id = "whisper_" + "_".join(participants)
+                        
+                        # 1. Annonce publique dans le chat pour tout le monde
+                        announcement_text = f"💬 {player_id} est entré en discussion privée avec {', '.join(targets)}."
+                        await manager.broadcast({
+                            "type": "chat",
+                            "channel_id": "public",
+                            "sender": "Grimoire",
+                            "content": announcement_text
+                        })
+                        
+                        # 2. Ouverture effective du canal privé pour l'humain (et préparation pour les agents)
                         await manager.send_to_player(
                             player_id,
                             {
-                                "type": "announcement",
-                                "text": f"Proposition d'entretien transmise à {', '.join(targets)}."
+                                "type": "private_channel_opened",
+                                "channel_id": channel_id,
+                                "members": participants,
+                                "text": f"Salon privé ouvert avec {', '.join(targets)}"
                             }
                         )
-                        # TODO: Transmettre la demande groupée au game_engine / aux agents IA concernés
 
                 # 3. RÉPONSE À UNE INVITATION DE CONVERSATION PRIVÉE
                 elif action == "respond_whisper_invitation":
