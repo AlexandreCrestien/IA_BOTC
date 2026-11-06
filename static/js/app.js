@@ -315,28 +315,50 @@ function updateGameState(newState) {
 function renderRoundTable() {
     const table = document.getElementById('round-table');
     const players = gameState.players || [];
+    
+    // Bouton Grimoire central
+    const grimoireBtnHtml = `
+        <button onclick="openGrimoireModal()" class="z-10 group bg-clock-dark/90 hover:bg-clock-gold/20 border-2 border-clock-gold/60 hover:border-clock-gold text-clock-gold p-5 rounded-full shadow-2xl transition-all duration-300 transform hover:scale-110 flex flex-col items-center justify-center">
+            <span class="text-4xl group-hover:rotate-12 transition-transform duration-300">📖</span>
+            <span class="text-xs font-mono uppercase tracking-widest mt-1 font-bold">Grimoire</span>
+        </button>
+    `;
+
     if (players.length === 0) {
-        table.innerHTML = `<div class="text-center text-gray-500 text-sm italic">En attente des joueurs...</div>`;
+        table.innerHTML = `
+            ${grimoireBtnHtml}
+            <div class="absolute text-center text-gray-500 text-xs italic pointer-events-none mt-32">
+                En attente des joueurs...
+            </div>
+        `;
         return;
     }
 
-    const radius = 130;
-    const centerX = table.offsetWidth / 2 || 192;
-    const centerY = table.offsetHeight / 2 || 192;
+    // 💡 Rayon augmenté à 200px pour décaler les cercles vers l'extérieur 
+    // (le conteneur faisant ~420px, un rayon de 200 place le centre des cercles pile sur le trait de la table)
+    const radius = 200; 
+    const centerX = table.offsetWidth / 2 || 210;
+    const centerY = table.offsetHeight / 2 || 210;
 
-    let html = '';
+    let html = grimoireBtnHtml;
+
     players.forEach((p, index) => {
         const angle = (index / players.length) * 2 * Math.PI - Math.PI / 2;
-        const x = centerX + radius * Math.cos(angle) - 36;
-        const y = centerY + radius * Math.sin(angle) - 36;
+        
+        // Offset à 56px (moitié de la taille de l'avatar w-28 = 112px)
+        const x = centerX + radius * Math.cos(angle) - 56;
+        const y = centerY + radius * Math.sin(angle) - 56;
 
-        const statusColor = p.alive ? 'border-green-600 bg-clock-panel' : 'border-red-900 bg-red-950/40 opacity-70';
+        const statusColor = p.alive 
+            ? 'border-green-500/80 bg-clock-panel shadow-green-950/40' 
+            : 'border-red-900 bg-red-950/50 opacity-70 shadow-red-950/40';
         
         html += `
-            <div class="absolute w-20 h-20 rounded-full border-2 ${statusColor} flex flex-col items-center justify-center p-1 text-center shadow-lg transition-all duration-300 cursor-pointer hover:scale-105"
+            <div class="absolute w-28 h-28 rounded-full border-2 ${statusColor} flex flex-col items-center justify-center p-2.5 text-center shadow-2xl transition-all duration-300 cursor-pointer hover:scale-110 z-10"
                  style="left: ${x}px; top: ${y}px;" title="${p.name} (${p.alive ? 'Vivant' : 'Mort'})">
+                <span class="text-3xl mb-1">${p.alive ? '👤' : '💀'}</span>
                 <span class="text-xs font-bold truncate w-full text-gray-200 px-1">${p.name}</span>
-                <span class="text-xs ${p.alive ? 'text-green-400 font-semibold' : 'text-red-500 font-semibold'}">${p.alive ? 'Vivant' : 'Mort'}</span>
+                <span class="text-[11px] ${p.alive ? 'text-green-400 font-semibold' : 'text-red-400 font-semibold'}">${p.alive ? 'Vivant' : 'Mort'}</span>
             </div>
         `;
     });
@@ -810,3 +832,47 @@ function escapeHtml(text) {
     if (!text) return '';
     return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
+
+// ================= GESTION DU GRIMOIRE =================
+function openGrimoireModal() {
+    const modal = document.getElementById('modal-grimoire');
+    if (modal) modal.classList.remove('hidden');
+}
+
+function closeGrimoireModal() {
+    const modal = document.getElementById('modal-grimoire');
+    if (modal) modal.classList.add('hidden');
+}
+
+function switchGrimoireTab(tabName) {
+    const rolesSection = document.getElementById('grimoire-tab-roles');
+    const rulesSection = document.getElementById('grimoire-tab-rules');
+    const btnRoles = document.getElementById('grimoire-tab-btn-roles');
+    const btnRules = document.getElementById('grimoire-tab-btn-rules');
+
+    if (tabName === 'roles') {
+        rolesSection.classList.remove('hidden');
+        rulesSection.classList.add('hidden');
+        btnRoles.className = "flex-1 py-2 font-bold text-clock-gold border-b-2 border-clock-gold transition";
+        btnRules.className = "flex-1 py-2 font-medium text-gray-400 hover:text-gray-200 transition";
+    } else {
+        rolesSection.classList.add('hidden');
+        rulesSection.classList.remove('hidden');
+        btnRules.className = "flex-1 py-2 font-bold text-clock-gold border-b-2 border-clock-gold transition";
+        btnRoles.className = "flex-1 py-2 font-medium text-gray-400 hover:text-gray-200 transition";
+    }
+}
+
+// Visibilité globale pour le HTML
+window.openGrimoireModal = openGrimoireModal;
+window.closeGrimoireModal = closeGrimoireModal;
+window.switchGrimoireTab = switchGrimoireTab;
+
+// ================= FERMETURE DES MODALES AU CLIC SUR LE FOND (BACKDROP) =================
+document.addEventListener('click', function(event) {
+    // Vérifier si l'élément cliqué est un fond de modale (qui possède la classe "fixed inset-0")
+    if (event.target.classList.contains('fixed') && event.target.classList.contains('inset-0')) {
+        // Masquer la modale cliquée
+        event.target.classList.add('hidden');
+    }
+});
