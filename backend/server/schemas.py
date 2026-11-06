@@ -61,6 +61,15 @@ class SubmitNightAction(BaseAction):
     payload: SubmitNightActionPayload
 
 
+class TriggerVotePhasePayload(StrictInput):
+    pass  # Aucun paramètre requis pour l'instant
+
+class TriggerVotePhaseAction(BaseAction):
+    """Déclencher le passage à la phase de vote."""
+    action: Literal["trigger_vote_phase"] = "trigger_vote_phase"
+    payload: TriggerVotePhasePayload = Field(default_factory=TriggerVotePhasePayload)
+
+
 # Le type d'action est choisi uniquement d'après le champ "action" (obligatoire dans le paquet reçu).
 ClientActionPacket = Annotated[
     Union[
@@ -69,6 +78,7 @@ ClientActionPacket = Annotated[
         RespondWhisperInvitationAction,
         SubmitVoteAction,
         SubmitNightAction,
+        TriggerVotePhaseAction,  # <--- AJOUTÉ ICI
     ],
     Field(discriminator="action"),
 ]

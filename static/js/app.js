@@ -389,48 +389,111 @@ function requestWhisper() {
     }
 }
 
-// Réception d'une proposition de chuchotement venant d'un agent
-function triggerAgentWhisper(agentId, agentName, message) {
-    currentWhisperAgentId = agentId;
+let currentWhisperAgent = null;
+
+// 1. Afficher la modale initiale de proposition
+function showAgentWhisperModal(agentId) {
+    currentWhisperAgent = agentId;
+    const modal = document.getElementById('modal-agent-whisper');
     const textEl = document.getElementById('agent-whisper-text');
-    textEl.innerHTML = `<strong>${agentName || agentId}</strong> souhaite s'entretenir discrètement avec vous.<br><em class="text-xs text-gray-400">"${message || ''}"</em>`;
-    document.getElementById('modal-agent-whisper').classList.remove('hidden');
+    const actionsEl = modal.querySelector('.flex'); // Le conteneur des boutons
+
+    if (textEl) {
+        textEl.innerText = `${agentId} souhaite s'entretenir discrètement avec vous dans l'ombre.`;
+    }
+
+    // Remettre les boutons Oui / Non d'origine
+    if (actionsEl) {
+        actionsEl.innerHTML = `
+            <button onclick="acceptAgentWhisper()" class="flex-1 bg-green-900/50 text-green-300 border border-green-700 py-2 rounded-xl text-xs font-semibold">Accepter</button>
+            <button onclick="refuseAgentWhisper()" class="flex-1 bg-gray-800 text-gray-400 py-2 rounded-xl text-xs">Ignorer</button>
+        `;
+    }
+
+    if (modal) modal.classList.remove('hidden');
 }
 
-// L'humain accepte la proposition de l'agent
+// 2. Si l'humain clique sur "NON" (Refuser)
+function refuseAgentWhisper() {
+    const modal = document.getElementById('modal-agent-whisper');
+    const textEl = document.getElementById('agent-whisper-text');
+    const actionsEl = modal.querySelector('.flex');
+
+    // Changer le texte et les boutons de la modale pour proposer les deux choix
+    if (textEl) {
+        textEl.innerText = `Vous avez refusé l'entretien avec ${currentWhisperAgent || 'l\'agent'}. Que souhaitez-vous faire ?`;
+    }
+
+    if (actionsEl) {
+        actionsEl.innerHTML = `
+            <button onclick="closeAgentWhisperModalOnly()" class="flex-1 bg-clock-dark border border-clock-border text-gray-300 py-2 rounded-xl text-xs hover:border-clock-gold">Lancer une discussion</button>
+            <button onclick="triggerVotePhaseFromModal()" class="flex-1 bg-clock-red text-white py-2 rounded-xl text-xs font-bold uppercase">Lancer le vote</button>
+        `;
+    }
+
+    // Informer éventuellement le serveur du refus
+    if (ws && ws.readyState === WebSocket.OPEN && currentWhisperAgent) {
+        ws.send(JSON.stringify({
+            action: "respond_whisper_invitation",
+            payload: { target_agent_id: currentWhisperAgent, accepted: false }
+        }));
+    }
+}
+
+// Option A du Refus : Juste fermer la modale (rien ne se passe, l'humain initie sa propre action)
+function closeAgentWhisperModalOnly() {
+    const modal = document.getElementById('modal-agent-whisper');
+    if (modal) modal.classList.add('hidden');
+    currentWhisperAgent = null;
+}
+
+// Option B du Refus : Lancer la phase de vote
+function triggerVotePhaseFromModal() {
+    const modal = document.getElementById('modal-agent-whisper');
+    if (modal) modal.classList.add('hidden');
+    
+    // Envoyer l'action au serveur pour déclencher le vote
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+            action: "trigger_vote_phase", // ou l'action gérée par ton back
+            payload: {}
+        }));
+    }
+
+    console.log("🗳️ Demande de passage à la phase de vote envoyée au serveur.");
+    currentWhisperAgent = null;
+}
+
+// 3. Si l'humain clique sur "OUI" (Accepter)
 function acceptAgentWhisper() {
-    document.getElementById('modal-agent-whisper').classList.add('hidden');
-    
-    if (ws && ws.readyState === WebSocket.OPEN && currentWhisperAgentId) {
-        ws.send(JSON.stringify({
-            action: "respond_whisper_invitation",
-            payload: {
-                target_agent_id: currentWhisperAgentId,
-                accepted: true
-            }
-        }));
-        appendSystemMessage(`Vous avez accepté l'entretien avec ${currentWhisperAgentId}.`);
-        // Basculer vers un onglet ou créer un canal privé si besoin
-        switchChannel(currentWhisperAgentId);
-    }
-    currentWhisperAgentId = null;
-}
+    const modal = document.getElementById('modal-agent-whisper');
+    if (modal) modal.classList.add('hidden');
 
-// L'humain refuse la proposition de l'agent
-function closeAgentWhisper() {
-    document.getElementById('modal-agent-whisper').classList.add('hidden');
-    
-    if (ws && ws.readyState === WebSocket.OPEN && currentWhisperAgentId) {
+    const agentId = currentWhisperAgent || "tobIAs";
+
+    // A. Envoyer l'acceptation au serveur
+    if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({
             action: "respond_whisper_invitation",
-            payload: {
-                target_agent_id: currentWhisperAgentId,
-                accepted: false
-            }
+            payload: { target_agent_id: agentId, accepted: true }
         }));
-        appendSystemMessage(`Vous avez refusé l'entretien.`);
     }
-    currentWhisperAgentId = null;
+
+    // B. Annonce publique dans le chat
+    handleServerMessage({
+        type: "chat",
+        channel_id: "public",
+        sender: "Grimoire",
+        content: `💬 Un entretien privé a débuté entre vous et ${agentId}.`
+    });
+
+    // C. Ouverture automatique de l'onglet privé et basculement
+    const channelId = "whisper_human_" + agentId;
+    if (typeof handlePrivateChannelOpened === 'function') {
+        handlePrivateChannelOpened(channelId, `Salon privé ouvert avec ${agentId}`, [agentId]);
+    }
+
+    currentWhisperAgent = null;
 }
 
 function triggerGameOver(winner, details) {
