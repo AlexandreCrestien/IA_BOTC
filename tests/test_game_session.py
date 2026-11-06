@@ -129,3 +129,24 @@ def test_wrong_action_for_the_request_is_refused():
 def test_human_name_cannot_be_an_ai_name():
     names = player_names(AI_NAMES[0])
     assert len(set(names.values())) == 6
+
+
+def test_private_request_names_participants_when_human_chooses():
+    """Le navigateur doit pouvoir ouvrir le salon privé avant le premier message."""
+    with TestClient(app).websocket_connect("/ws/Sasha") as ws:
+        ws.send_text(json.dumps({"action": "start_game"}))
+        for _ in range(500):
+            message = ws.receive_json()
+            if message["type"] != "request":
+                continue
+            request = message["data"]
+            if request["kind"] == "private_partners":
+                ws.send_text(json.dumps({"action": "create_channel",
+                                         "payload": {"target_ids": [request["options"][0]["id"]]}}))
+                chosen = request["options"][0]["name"]
+            elif request["kind"] == "private_message":
+                assert sorted(request["participants"]) == sorted(["Sasha", chosen])
+                return
+            else:
+                ws.send_text(json.dumps(answer(request, [0])))
+    raise AssertionError("pas de demande de message privé")

@@ -150,14 +150,29 @@ function onEvent(e) {
 }
 
 function privateChannelFor(e) {
-    // Un salon par conversation : même jour et mêmes participants.
-    const others = e.participants.filter(n => !ui.me || n !== ui.me.name);
-    const id = `private-${e.turn}-${others.join("-")}`;
+    const isNew = !ui.channels[privateChannelId(e.turn, e.participants)];
+    const id = ensurePrivateChannel(e.turn, e.participants);
+    if (isNew && !e.is_me) setAnnouncement(`${e.author} veut te parler en privé.`);
+    return id;
+}
+
+function privateOthers(participants) {
+    return participants.filter(n => !ui.me || n !== ui.me.name);
+}
+
+function privateChannelId(turn, participants) {
+    // Un salon par conversation : même jour et mêmes participants (l'humain exclu du nom).
+    return `private-${turn}-${privateOthers(participants).join("-")}`;
+}
+
+function ensurePrivateChannel(turn, participants) {
+    const others = privateOthers(participants);
+    const id = privateChannelId(turn, participants);
     if (!ui.channels[id]) {
-        ui.channels[id] = { label: `Privé (jour ${e.turn}) : ${others.join(", ")}`, messages: [] };
+        ui.channels[id] = { label: `Privé (jour ${turn}) : ${others.join(", ")}`, messages: [] };
         ui.channelOrder.push(id);
         ui.currentPrivate = id;
-        if (!e.is_me) setAnnouncement(`${e.author} veut te parler en privé.`);
+        renderChannels();
     }
     return id;
 }
@@ -165,7 +180,13 @@ function privateChannelFor(e) {
 function onRequest(request) {
     ui.request = request;
     if (request.kind === "public_message") switchChannel("public");
-    if (request.kind === "private_message" && ui.currentPrivate) switchChannel(ui.currentPrivate);
+    if (request.kind === "private_message") {
+        // Salon choisi par l'humain : on l'ouvre tout de suite, avant le premier message.
+        if (request.participants && request.participants.length) {
+            ui.currentPrivate = ensurePrivateChannel(ui.turn, request.participants);
+        }
+        if (ui.currentPrivate) switchChannel(ui.currentPrivate);
+    }
     if (request.kind === "night" || request.kind === "vote") {
         switchLeftTab("chat");
         switchChannel("public");

@@ -56,6 +56,7 @@ class GameSession:
         self._outbox: asyncio.Queue = asyncio.Queue()
         self.memory = None
         self.finished = False
+        self._partners: list[str] = []  # agents choisis par l'humain pour le salon privé du jour
 
     # --- Envoi vers le navigateur (toujours dans l'ordre) ---------------------------
 
@@ -122,13 +123,15 @@ class GameSession:
     # --- Attente des actions de l'humain ---------------------------------------------
 
     def _request(self, kind: str, prompt: str, options: list[str] = (), count: int = 0,
-                 can_pass: bool = True, state: Optional[GameState] = None) -> None:
+                 can_pass: bool = True, state: Optional[GameState] = None,
+                 participants: Optional[list[str]] = None) -> None:
         self._emit({"type": "request", "data": {
             "kind": kind,
             "prompt": prompt,
             "options": [{"id": pid, "name": state.player(pid).name} for pid in options] if state else [],
             "count": count,
             "can_pass": can_pass,
+            "participants": participants or [],
         }})
 
     async def _wait(self, expected: str):
@@ -185,15 +188,21 @@ class GameSession:
                           options, 2, state=state)
             action = await self._wait("create_channel")
             if action is None:
+                self._partners = []
                 return []
             chosen = list(dict.fromkeys(action.payload.target_ids))
             if all(pid in options for pid in chosen):
+                self._partners = chosen
                 return chosen
             self._error("Choix invalide : choisis des joueurs vivants.")
 
     async def private_message(self, state: GameState, player_id: str) -> Optional[str]:
         while True:
-            self._request("private_message", "Écris ton message privé (ou termine la conversation).")
+            # Noms des participants : le navigateur ouvre le salon privé tout de suite,
+            # avant le premier message (vide si c'est un agent qui est venu nous parler).
+            participants = sorted(state.player(pid).name for pid in [player_id, *self._partners])
+            self._request("private_message", "Écris ton message privé (ou termine la conversation).",
+                          participants=participants if self._partners else None)
             action = await self._wait("send_chat")
             if action is None:
                 return None

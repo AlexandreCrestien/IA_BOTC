@@ -39,4 +39,14 @@ def health_check():
     return {"status": "online", "message": "Le serveur Blood on the Clocktower tourne à merveille !"}
 
 
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
+class NoCacheStaticFiles(StaticFiles):
+    """Fichiers de l'interface : le navigateur doit toujours vérifier s'il y a une nouvelle version,
+    sinon il garde un ancien app.js après une modification."""
+
+    def file_response(self, *args, **kwargs):
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
+app.mount("/", NoCacheStaticFiles(directory="static", html=True), name="static")
