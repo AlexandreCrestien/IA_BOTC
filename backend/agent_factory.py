@@ -39,7 +39,7 @@ class Agent:
 
     def _build_system_prompt(self) -> str:
         """Injecte dynamiquement la liste des joueurs vivants/présents sans dupliquer le general_rules."""
-        players = ", ".join(sorted(self.memory.player_ids))
+        players = ", ".join(sorted(self.memory.name_of(p) for p in self.memory.player_ids))
         return f"{self.system_prompt.strip()}\n\n# CONTEXTE DE LA PARTIE\nJoueurs présents dans la partie : {players}."
 
     def _messages(self, instruction: str) -> list[dict]:
@@ -57,16 +57,22 @@ class Agent:
             "C'est ton tour de parler dans le salon public. Écris un seul message court (2 phrases maximum), sans préfixe ni guillemets."
         )
         if optional:
-            instruction += f" Si tu n'as rien d'utile à dire, réponds seulement : {PASS}"
+            instruction += (
+                " Tu n'es pas obligé de parler, et passer ton tour est un choix normal."
+                " Ne parle que si tu apportes quelque chose de nouveau : un soupçon, une information,"
+                " ou une réponse à quelqu'un qui s'adresse à toi."
+                f" Sinon, réponds exactement : {PASS}"
+            )
         text = await ask_llm("fast", self._messages(instruction))
-        if optional and text.strip().strip(".").upper() == PASS:
+        if optional and _is_pass(text):
             return None
         return text
 
     async def speak_private(self, partners: list[str]) -> str:
-        """Réponse dans une conversation privée."""
+        """Réponse dans une conversation privée. partners : ids des autres participants."""
+        names = ", ".join(self.memory.name_of(p) for p in partners)
         instruction = (
-            f"Tu es en conversation privée avec {', '.join(partners)}. Réponds-leur par un seul message court (2 phrases maximum), sans préfixe ni guillemets."
+            f"Tu es en conversation privée avec {names}. Réponds-leur par un seul message court (2 phrases maximum), sans préfixe ni guillemets."
         )
         return await ask_llm("fast", self._messages(instruction))
 
@@ -94,6 +100,11 @@ class Agent:
 
 NOBODY = "Personne"
 PASS = "PASSE"  # réponse d'un agent qui ne veut pas parler
+
+
+def _is_pass(text: str) -> bool:
+    """Vrai si la réponse est seulement PASSE, même avec ponctuation, guillemets ou gras (ex. "**Passe.**")."""
+    return text.strip().strip(" .!*_\"'«»`").strip().upper() == PASS
 
 
 def _check_in_options(name: str, info: ValidationInfo) -> str:

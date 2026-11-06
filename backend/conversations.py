@@ -115,7 +115,7 @@ async def start_private_conversation(human_id: str, partners: list[Agent], memor
     Renvoie les messages des agents (id_joueur, texte), vide si l'humain parle en premier.
     """
     _check_partners(human_id, partners)
-    names = ", ".join([human_id] + [agent.player_id for agent in partners])
+    names = ", ".join(memory.name_of(p) for p in [human_id] + [agent.player_id for agent in partners])
     memory.add_public(EventType.private_meeting, game_master, f"Conversation privée entre {names}.")
     if agent_speaks_first:
         return await _replies(human_id, partners, memory)

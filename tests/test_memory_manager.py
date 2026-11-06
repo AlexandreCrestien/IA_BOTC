@@ -130,3 +130,24 @@ def test_private_partners(memory):
     assert memory.private_partners("ana") == {"bruno"}
     assert memory.private_partners("bruno") == {"ana"}
     assert memory.private_partners("carla") == set()  # un message public n'est pas une conversation privée
+
+
+
+# --- Noms affichés (complète tests/test_memory_names.py) ---------------------------
+
+def test_names_replace_ids_in_context():
+    """Les agents connaissent les joueurs par leur nom : l'historique ne doit pas montrer les ids."""
+    memory = MemoryManager(["p1", "p2", "p3"], names={"p1": "Ana", "p2": "Bruno", "p3": "Carla"})
+    memory.add_private(EventType.private_summary, "p2", "On soupçonne Carla.", {"p1", "p2"})
+    memory.add_public(EventType.public_message, "p3", "Bonjour !")
+    memory.add_public(EventType.announcement, game_master, "Le jour se lève.")
+
+    assert memory.context_for("p1").splitlines() == [
+        "[Nuit 1] (privé avec Bruno) Bruno : On soupçonne Carla.",
+        "[Nuit 1] (public) Carla : Bonjour !",
+        "[Nuit 1] (public) Maître du Jeu : Le jour se lève.",
+    ]
+
+
+def test_name_of_falls_back_to_id():
+    assert MemoryManager(["ana"]).name_of("ana") == "ana"
