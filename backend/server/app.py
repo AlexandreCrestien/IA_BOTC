@@ -1,5 +1,7 @@
+import os
 import logging
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -32,11 +34,15 @@ app.add_middleware(
 app.include_router(ws_router)
 app.include_router(admin_router)
 
+@app.get("/admin", tags=["Administration UI"])
+def serve_admin_page():
+    """Sert la page HTML du panneau de contrôle admin."""
+    return FileResponse(os.path.join("static", "admin.html"))
 
 @app.get("/health", tags=["Health Check"])
 def health_check():
     """Route de santé pour vérifier rapidement si le serveur tourne."""
-    return {"status": "online", "message": "Le serveur Blood on the Clocktower tourne à merveille !"}
+    return {"status": "online", "message": "Le serveur Blood on the AI Clocktower tourne à merveille !"}
 
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")

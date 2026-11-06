@@ -1,0 +1,65 @@
+/* ==========================================================
+   Blood on the AI Clocktower - Styles Admin
+   ========================================================== */
+
+/* Personnalisation de la barre de défilement (style sombre/gothique) */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: #07080a;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #232733;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #b48a3d;
+}
+
+/* Styles globaux (reprise exacte de l'ambiance du jeu) */
+body {
+    background-color: #07080a;
+    color: #e5e7eb;
+    background-image: linear-gradient(rgba(7, 8, 10, 0.1), rgba(7, 8, 10, 0.1)), url('../img/background.jpg');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+}
+
+/* Effets de lueur subtils */
+.glow-gold {
+    box-shadow: 0 0 15px rgba(180, 138, 61, 0.15);
+}
+
+.glow-red {
+    box-shadow: 0 0 15px rgba(129, 29, 29, 0.25);
+}
+
+/* Panneaux translucides (semi-opaques) identiques au jeu */
+.bg-clock-panel {
+    background-color: rgba(17, 19, 24, 0.85) !important;
+    backdrop-filter: blur(4px);
+}
+
+/* Couleurs utilitaires spécifiques */
+.text-clock-gold {
+    color: #b48a3d;
+}
+
+.bg-clock-dark {
+    background-color: #07080a;
+}
+
+.border-clock-border {
+    border-color: #232733;
+}
+
+.bg-clock-accent {
+    background-color: #12151c;
+}

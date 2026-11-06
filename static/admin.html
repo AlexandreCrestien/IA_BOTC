@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="fr" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blood on the AI Clocktower - Grimoire Admin</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lien vers ton CSS dédié -->
+    <link rel="stylesheet" href="/css/admin.css">
+</head>
+<body class="text-gray-200 font-mono min-h-screen flex flex-col">
+
+    <!-- Superposition d'opacité pour l'ambiance sombre et lisible par-dessus le background -->
+    <div class="min-h-screen flex flex-col bg-black/75 backdrop-blur-[2px]">
+
+        <!-- HEADER ADMIN -->
+        <header class="border-b border-clock-border bg-clock-panel px-6 py-4 flex items-center justify-between shadow-2xl">
+            <div class="flex items-center space-x-3">
+                <span class="text-3xl">🗝️</span>
+                <div>
+                    <h1 class="text-clock-gold font-bold uppercase tracking-widest text-sm">Panneau de Contrôle & Debug</h1>
+                    <p class="text-xs text-gray-400">Suivi des historiques LLM et états internes du serveur</p>
+                </div>
+            </div>
+            <div id="auth-controls" class="hidden flex items-center space-x-4">
+                <button onclick="fetchAdminData()" class="bg-clock-accent hover:bg-clock-border border border-clock-gold/50 text-clock-gold px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition">
+                    Rafraîchir
+                </button>
+                <button onclick="logout()" class="bg-red-950/60 hover:bg-red-900 border border-red-800 text-red-300 px-3 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition">
+                    Déconnexion
+                </button>
+            </div>
+        </header>
+
+        <!-- CONTENU PRINCIPAL -->
+        <main class="flex-1 p-6 max-w-7xl mx-auto w-full space-y-6">
+
+            <!-- ÉCRAN DE CONNEXION (TOKEN) -->
+            <section id="login-section" class="max-w-md mx-auto mt-20 bg-clock-panel border border-clock-border rounded-2xl p-8 shadow-2xl space-y-6">
+                <div class="text-center space-y-2">
+                    <span class="text-4xl">📜</span>
+                    <h2 class="text-clock-gold font-bold uppercase tracking-wider text-base">Authentification Requise</h2>
+                    <p class="text-xs text-gray-400">Entrez le jeton administrateur configuré sur le serveur pour accéder au Grimoire de debug.</p>
+                </div>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-gray-400 mb-1">Jeton Admin (Token)</label>
+                        <input type="password" id="admin-token-input" placeholder="secret-de-test..." 
+                               class="w-full bg-clock-dark border border-clock-border rounded-xl px-4 py-2.5 text-xs text-gray-100 focus:outline-none focus:border-clock-gold transition">
+                    </div>
+                    <button onclick="login()" class="w-full bg-clock-gold text-clock-dark py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-yellow-500 transition shadow-lg font-bold">
+                        Accéder au Panneau
+                    </button>
+                    <div id="login-error" class="text-red-400 text-xs text-center hidden font-bold">Jeton admin invalide ou manquant.</div>
+                </div>
+            </section>
+
+            <!-- TABLEAU DE BORD (CACHÉ PAR DÉFAUT) -->
+            <div id="dashboard-section" class="hidden space-y-6">
+                
+                <!-- Statistiques / Infos Globales -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="bg-clock-panel border border-clock-border rounded-2xl p-4 shadow-xl flex items-center space-x-4">
+                        <span class="text-3xl">👥</span>
+                        <div>
+                            <div class="text-xs text-gray-400 uppercase">Agents enregistrés</div>
+                            <div id="stat-agents-count" class="text-clock-gold font-bold text-lg">0</div>
+                        </div>
+                    </div>
+                    <div class="bg-clock-panel border border-clock-border rounded-2xl p-4 shadow-xl flex items-center space-x-4">
+                        <span class="text-3xl">⏳</span>
+                        <div>
+                            <div class="text-xs text-gray-400 uppercase">Tour actuel / Phase</div>
+                            <div id="stat-turn-phase" class="text-clock-gold font-bold text-lg">-</div>
+                        </div>
+                    </div>
+                    <div class="bg-clock-panel border border-clock-border rounded-2xl p-4 shadow-xl flex items-center space-x-4">
+                        <span class="text-3xl">💬</span>
+                        <div>
+                            <div class="text-xs text-gray-400 uppercase">Salons actifs</div>
+                            <div id="stat-channels-count" class="text-clock-gold font-bold text-lg">0</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- HISTORIQUE PUBLIC DES LLM -->
+                <section class="bg-clock-panel border border-clock-border rounded-2xl p-6 shadow-xl space-y-4">
+                    <div class="flex items-center justify-between border-b border-clock-border/50 pb-3">
+                        <h3 class="text-clock-gold font-bold uppercase tracking-wider text-sm flex items-center space-x-2">
+                            <span>Historique public</span>
+                        </h3>
+                    </div>
+                    <div id="public-history-container" class="bg-clock-dark border border-clock-border/50 rounded-xl p-4 max-h-60 overflow-y-auto space-y-2 text-xs text-gray-300">
+                        <span class="italic text-gray-500">Aucun historique public pour l'instant.</span>
+                    </div>
+                </section>
+
+                <!-- HISTORIQUES PERSONNELS DES AGENTS -->
+                <section class="bg-clock-panel border border-clock-border rounded-2xl p-6 shadow-xl space-y-4">
+                    <div class="flex items-center justify-between border-b border-clock-border/50 pb-3">
+                        <h3 class="text-clock-gold font-bold uppercase tracking-wider text-sm flex items-center space-x-2">
+                            <span>Historiques personnels des agents</span>
+                        </h3>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                        <!-- Menu / Liste des agents (colonne latérale gauche) -->
+                        <div id="agents-tabs-container" class="lg:col-span-1 space-y-2 border-r border-clock-border/40 lg:pr-4">
+                            <span class="italic text-gray-500 text-xs">Chargement des agents...</span>
+                        </div>
+                        
+                        <!-- Contenu de l'historique de l'agent sélectionné (colonne droite) -->
+                        <div id="agent-detail-container" class="lg:col-span-3 bg-clock-dark border border-clock-border/50 rounded-xl p-4 min-h-[300px]">
+                            <span class="italic text-gray-500 text-xs">Sélectionnez un agent dans la liste pour voir sa mémoire LLM.</span>
+                        </div>
+                    </div>
+                </section>
+
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Script JS -->
+    <script src="/js/admin.js"></script>
+</body>
+</html>
