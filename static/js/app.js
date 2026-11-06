@@ -563,10 +563,23 @@ function showVoteResultModal(turnNumber, executedPlayer, votesArray) {
     const modal = document.getElementById('modal-vote-result');
     const headerEl = document.getElementById('vote-result-header');
     const listEl = document.getElementById('vote-result-list');
+    const deathNoticeEl = document.getElementById('vote-death-notice');
 
     if (!modal || !headerEl || !listEl) return;
 
-    // 1. 🔄 METTRE À JOUR AUTOMATIQUEMENT L'HISTORIQUE GLOBAL
+    // Récupérer le pseudo du joueur connecté
+    const currentUsername = typeof playerId !== 'undefined' ? playerId : null;
+
+    // 1. Gérer l'affichage du message personnel si le joueur est exécuté
+    if (deathNoticeEl) {
+        if (executedPlayer && executedPlayer === currentUsername) {
+            deathNoticeEl.classList.remove('hidden');
+        } else {
+            deathNoticeEl.classList.add('hidden');
+        }
+    }
+
+    // 2. 🔄 METTRE À JOUR AUTOMATIQUEMENT L'HISTORIQUE GLOBAL
     if (typeof gameState !== 'undefined') {
         if (!gameState.vote_history) gameState.vote_history = [];
 
@@ -586,7 +599,7 @@ function showVoteResultModal(turnNumber, executedPlayer, votesArray) {
         }
     }
 
-    // 2. Afficher le contenu dans la modale
+    // 3. Afficher le contenu dans la modale
     const executionText = executedPlayer ? `${executedPlayer} exécuté` : "pas d'exécution";
     headerEl.innerText = `JOUR ${turnNumber} - ${executionText}`;
 
@@ -605,11 +618,11 @@ function showVoteResultModal(turnNumber, executedPlayer, votesArray) {
     }
     listEl.innerHTML = html;
 
-    // 3. Ouvrir la modale
+    // 4. Ouvrir la modale
     modal.classList.remove('hidden');
 }
 
-// Fonction pour fermer la modale
+// Fonction pour fermer la modale de vote
 function closeVoteResultModal() {
     const modal = document.getElementById('modal-vote-result');
     if (modal) modal.classList.add('hidden');
@@ -619,20 +632,32 @@ function closeVoteResultModal() {
 function showNightResultModal(deadPlayerName) {
     const modal = document.getElementById('modal-night-result');
     const messageEl = document.getElementById('night-result-message');
+    const deathNoticeEl = document.getElementById('night-death-notice');
 
     if (!modal || !messageEl) return;
 
-    // Définir le message selon si quelqu'un est mort ou non
+    // Récupérer le pseudo du joueur connecté
+    const currentUsername = typeof playerId !== 'undefined' ? playerId : null;
+
+    // Définir le message selon si quelqu'un est mort ou non (et si c'est l'humain)
     if (deadPlayerName) {
-        messageEl.innerHTML = `Les ténèbres ont frappé...<br><br><span class="text-red-400 font-bold text-sm">${deadPlayerName}</span> est mort cette nuit.`;
+        if (deadPlayerName === currentUsername) {
+            messageEl.innerHTML = `L'obscurité a frappé cette nuit...`;
+            if (deathNoticeEl) deathNoticeEl.classList.remove('hidden');
+        } else {
+            messageEl.innerHTML = `Les ténèbres ont frappé...<br><br><span class="text-red-400 font-bold text-sm">${deadPlayerName}</span> est mort cette nuit.`;
+            if (deathNoticeEl) deathNoticeEl.classList.add('hidden');
+        }
     } else {
         messageEl.innerHTML = `Les esprits ont protégé le village...<br><br><span class="text-green-400 font-bold text-sm">Personne n'est mort</span> cette nuit !`;
+        if (deathNoticeEl) deathNoticeEl.classList.add('hidden');
     }
 
     // Afficher la modale
     modal.classList.remove('hidden');
 }
 
+// Fonction pour fermer la modale de nuit
 function closeNightResultModal() {
     const modal = document.getElementById('modal-night-result');
     if (modal) {
@@ -641,6 +666,7 @@ function closeNightResultModal() {
 }
 
 // Assurer la visibilité globale pour les onclick du HTML
+window.closeVoteResultModal = closeVoteResultModal;
 window.closeNightResultModal = closeNightResultModal;
 
 
