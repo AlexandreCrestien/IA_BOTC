@@ -42,8 +42,8 @@
 
             <div class="w-full space-y-3">
                 <label class="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Votre pseudo</label>
-                <input type="text" id="welcome-player-id" placeholder="ex: Enqueteur_Arthur" value="Sasha"
-                    class="w-full bg-black/40 border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-yellow-500 text-center font-mono text-gray-200">
+                <input type="text" id="welcome-player-id" placeholder="ex: Sasha" value="Sasha"
+                    class="w-full bg-black/40 border border-[var(--gold)] rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[var(--gold)] text-center font-mono text-gray-200">
             </div>
 
             <button onclick="joinGame()" class="w-full bg-seal text-white font-display tracking-wider py-3.5 rounded-xl transition shadow-seal uppercase text-sm font-bold">
@@ -53,78 +53,143 @@
     </div>
 
     <!-- ================= 2. INTERFACE GÉNÉRALE DU JEU ================= -->
-    <div id="screen-game" class="hidden flex-1 flex flex-col h-screen">
+    <div id="screen-game" class="hidden flex flex-col h-screen overflow-hidden">
         
         <!-- Top bar / Annonces & état du jeu -->
-        <header class="bg-clock-panel border-b border-clock-border px-6 py-3 relative flex justify-between items-center shadow-md z-10">
-            <!-- Gauche : Titre et Stats -->
-            <div class="flex items-center space-x-6 z-10">
-                <div class="flex items-center space-x-2">
-                    <span class="text-xl">⏳</span>
-                    <span class="font-bold tracking-wider text-clock-gold text-base">BLOOD ON THE AI CLOCKTOWER</span>
+        <header class="panel border-b border-border px-6 h-16 shrink-0 relative flex justify-between items-center shadow-md z-10">
+            <!-- Gauche : Titre -->
+            <div class="flex items-center space-x-2 z-10">
+                <span class="font-display font-bold tracking-wider text-gilt text-base uppercase">Blood on the AI Clocktower</span>
+            </div>
+
+            <!-- Centre : Bandeau d'annonces -->
+            <div class="absolute left-1/2 -translate-x-1/2 z-20 w-full max-w-2xl px-4 pointer-events-none">
+                <div class="flex justify-center">
+                    <div id="game-announcement" class="pointer-events-auto panel px-6 py-2 rounded-xl text-sm text-gold italic text-center shadow-lg transition-all duration-300 w-full truncate">
+                        En attente du début de la partie...
+                    </div>
                 </div>
-                <div class="bg-clock-dark border border-clock-border px-3 py-1 rounded-lg text-sm flex items-center space-x-3 font-mono">
-                    <span>Tour <strong id="game-day" class="text-clock-gold">1</strong></span>
+            </div>
+
+            <!-- Droite : Encadré tour/phase/vivants + Badge de statut -->
+            <div class="flex items-center space-x-4 z-10">
+                <div class="panel px-4 py-1.5 rounded-xl text-sm flex items-center space-x-3 font-mono">
+                    <span>Tour <strong id="game-day" class="text-gold">1</strong></span>
                     <span class="text-gray-600">|</span>
-                    <span id="game-phase" class="uppercase text-blue-400 font-semibold">Jour</span>
+                    <span id="game-phase" class="uppercase text-blue-400 font-semibold">Nuit</span>
                     <span class="text-gray-600">|</span>
                     <span>Vivants : <strong id="alive-count" class="text-green-400">--</strong></span>
                 </div>
-            </div>
 
-            <!-- Centre : bandeau d'annonces -->
-            <div class="absolute left-1/2 -translate-x-1/2 z-20">
-                <div id="game-announcement" class="bg-clock-accent border border-clock-border px-4 py-1.5 rounded-lg text-sm text-clock-gold truncate italic max-w-md text-center transition-all duration-300">
-                    Annonce : En attente du début de la partie...
+                <!-- Badge de connexion -->
+                <div id="connection-status" class="px-3 py-1 rounded-full text-xs font-semibold bg-green-900/50 text-green-400 border border-green-700 whitespace-nowrap shadow-sm">
+                    Connecté
                 </div>
-            </div>
-
-            <!-- Droite : Badge statut à taille normale -->
-            <div id="connection-status" class="px-3 py-1 rounded-full text-xs font-semibold bg-green-900/50 text-green-400 border border-green-700 whitespace-nowrap z-10">
-                Connecté
             </div>
         </header>
 
         <!-- Grille principale à 3 colonnes (Sidebar gauche | Table ronde Centrale | Sidebar droite) -->
-        <main class="flex-1 grid grid-cols-1 md:grid-cols-12 gap-4 p-4 overflow-hidden">
-            
+        <main class="grid grid-cols-1 md:grid-cols-12 grid-rows-[minmax(0,1fr)] gap-4 p-4 h-[calc(100vh-4rem)] overflow-hidden">
+
             <!-- SIDEBAR GAUCHE : Conversations & historiques (3 colonnes) -->
-            <section class="md:col-span-3 bg-clock-panel border border-clock-border rounded-2xl flex flex-col overflow-hidden shadow-xl">
-                <!-- Onglets de la sidebar gauche -->
-                <div class="flex border-b border-clock-border bg-clock-dark text-sm">
-                    <button onclick="switchLeftTab('chat')" id="tab-btn-chat" class="flex-1 py-3 font-semibold text-clock-gold border-b-2 border-clock-gold transition">Chat</button>
-                    <button onclick="switchLeftTab('night')" id="tab-btn-night" class="flex-1 py-3 font-medium text-gray-400 hover:text-gray-200 transition">Nuits</button>
-                    <button onclick="switchLeftTab('votes')" id="tab-btn-votes" class="flex-1 py-3 font-medium text-gray-400 hover:text-gray-200 transition">Votes</button>
+            <section class="md:col-span-3 panel border-r border-border flex flex-col h-full min-h-0 overflow-hidden">
+                <!-- Onglets principaux de la sidebar (Chat / Nuits / Votes) -->
+                <div class="flex border-b border-border bg-black/20 text-s tracking-wider uppercase font-serif shrink-0">
+                    <button onclick="switchLeftTab('chat')" id="tab-btn-chat" class="flex-1 py-3 font-semibold text-gold border-b-2 border-[var(--gold)] transition">Chat</button>
+                    <button onclick="switchLeftTab('night')" id="tab-btn-night" class="flex-1 py-3 font-medium text-muted-foreground hover:text-foreground transition">Nuits</button>
+                    <button onclick="switchLeftTab('votes')" id="tab-btn-votes" class="flex-1 py-3 font-medium text-muted-foreground hover:text-foreground transition">Votes</button>
                 </div>
 
-                <!-- Contenu onglet : Tchats (public + privés) -->
-                <div id="tab-content-chat" class="flex-1 flex flex-col p-3 overflow-hidden">
-                    <div id="chat-channels" class="flex space-x-1 mb-2 overflow-x-auto pb-1 text-xs">
-                        <button id="tab-public" onclick="switchChannel('public')" class="channel-btn bg-clock-accent text-clock-gold px-3 py-1.5 rounded-lg font-medium border border-clock-border whitespace-nowrap text-xs">Public</button>
+                <!-- Contenu onglet : Chat -->
+                <div id="tab-content-chat" class="flex-1 flex flex-col min-h-0 overflow-hidden">
+                    
+                    <!-- Navigation des canaux et chuchotements -->
+                    <nav aria-label="Canaux" class="border-b border-border/70 p-3 bg-black/10 shrink-0 flex flex-col">
+                        <!-- Bouton Place publique -->
+                        <button
+                            type="button"
+                            id="tab-public" 
+                            onclick="switchChannel('public')"
+                            class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm channel-btn"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4 shrink-0 text-gold" aria-hidden="true">
+                                <path d="M16 10a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 14.286V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                                <path d="M20 9a2 2 0 0 1 2 2v10.286a.71.71 0 0 1-1.212.502l-2.202-2.202A2 2 0 0 0 17.172 19H10a2 2 0 0 1-2-2v-1"></path>
+                            </svg>
+                            <span class="font-serif text-base">Place publique</span>
+                        </button>
+
+                        <p class="mt-3 mb-1 px-1 text-[12px] uppercase tracking-[0.2em] text-muted-foreground font-serif">Discussions privées</p>
+                        
+                        <!-- Liste des chuchotements / agents (injectée dynamiquement par ton JS) -->
+                        <ul id="chat-channels" class="scrollbar-thin flex max-h-24 flex-col gap-1.5 overflow-y-auto pr-1">
+                        </ul>
+                    </nav>
+
+                    <!-- En-tête du canal actif -->
+                    <div id="active-channel-header" class="flex items-center gap-2 px-4 py-2.5 text-sm border-b border-border/40 bg-black/5 shrink-0">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-messages-square size-4 text-gold shrink-0" aria-hidden="true">
+                            <path d="M16 10a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 14.286V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+                            <path d="M20 9a2 2 0 0 1 2 2v10.286a.71.71 0 0 1-1.212.502l-2.202-2.202A2 2 0 0 0 17.172 19H10a2 2 0 0 1-2-2v-1"></path>
+                        </svg>
+                        <span id="active-channel-title" class="font-serif text-base text-foreground">Place publique</span>
                     </div>
-                    <div id="chat-messages" class="flex-1 bg-clock-dark border border-clock-border rounded-xl p-3 overflow-y-auto space-y-2 font-mono text-sm mb-3">
-                        <div class="text-gray-500 italic text-center">Canal public initialisé...</div>
+
+                    <!-- Zone des messages du chat -->
+                    <div id="chat-messages" class="scrollbar-thin h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3 font-mono text-xs" aria-live="polite">
+                        <div class="ornament animate-rise px-2 text-center my-2">
+                            <p class="max-w-[85%] mx-auto font-serif text-sm italic text-gold">Canal public initialisé...</p>
+                        </div>
                     </div>
-                    <div class="flex space-x-2">
-                        <input type="text" id="chat-input" placeholder="Écrire un message..." onkeypress="if(event.key==='Enter') sendChatMessage()"
-                            class="flex-1 bg-clock-dark border border-clock-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-clock-gold">
-                        <button onclick="sendChatMessage()" class="bg-clock-gold hover:bg-yellow-600 text-clock-dark font-bold px-4 py-2 rounded-xl text-xs transition uppercase tracking-wider">Envoyer</button>
-                    </div>
+
+                    <!-- Zone de saisie / Composer -->
+                    <form onsubmit="event.preventDefault(); sendChatMessage();" class="border-t border-border/70 p-3 shrink-0">
+                        <div class="flex items-end gap-2 rounded-lg chat-composer p-1.5 transition-colors">
+                            <!-- Icône de plume -->
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-feather mb-2 ml-1.5 size-4 shrink-0 text-gold-dim" aria-hidden="true">
+                                <path d="M12.67 19a2 2 0 0 0 1.416-.588l6.154-6.172a6 6 0 0 0-8.49-8.49L5.586 9.914A2 2 0 0 0 5 11.328V18a1 1 0 0 0 1 1z"></path>
+                                <path d="M16 8 2 22"></path>
+                                <path d="M17.5 15H9"></path>
+                            </svg>
+                            
+                            <!-- Zone de texte -->
+                            <textarea
+                                id="chat-input"
+                                rows="1"
+                                placeholder="Parler au village…"
+                                aria-label="Votre message"
+                                onkeypress="if(event.key==='Enter' && !event.shiftKey) { event.preventDefault(); sendChatMessage(); }"
+                                class="max-h-32 min-h-9 flex-1 resize-none bg-transparent px-1 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed"
+                            ></textarea>
+                            
+                            <!-- Bouton d'envoi -->
+                            <button 
+                                type="submit" 
+                                aria-label="Envoyer"
+                                class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md cursor-pointer transition-all disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed chat-send-btn text-primary-foreground font-serif text-base font-semibold tracking-wide h-9 w-9 shrink-0"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-send size-4" aria-hidden="true">
+                                    <path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"></path>
+                                    <path d="m21.854 2.147-10.94 10.939"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </form>
                 </div>
 
-                <!-- Contenu onglet : Historique nuits -->
-                <div id="tab-content-night" class="hidden flex-1 p-3 overflow-y-auto text-sm space-y-2 font-mono">
-                    <div class="text-gray-500 italic">Aucune information nocturne enregistrée.</div>
+                <!-- Contenu onglet : Nuits -->
+                <div id="tab-content-night" class="hidden flex-1 p-2 overflow-y-auto text-sm space-y-2 font-mono scrollbar-thin text-muted-foreground">
+                    <div class="text-gray-500 italic text-center py-4">Aucune information nocturne enregistrée.</div>
                 </div>
 
-                <!-- Contenu onglet : Historique votes -->
-                <div id="tab-content-votes" class="hidden flex-1 p-3 overflow-y-auto text-sm space-y-2 font-mono">
-                    <div class="text-gray-500 italic">Aucun historique de vote disponible.</div>
+                <!-- Contenu onglet : Votes -->
+                <div id="tab-content-votes" class="hidden flex-1 p-2 overflow-y-auto text-sm space-y-2 font-mono scrollbar-thin text-muted-foreground">
+                    <div class="text-gray-500 italic text-center py-4">Aucun historique de vote disponible.</div>
                 </div>
             </section>
 
             <!-- ZONE CENTRALE : Table ronde & Grimoire (6 colonnes) -->
-            <section class="md:col-span-6 bg-clock-panel border border-clock-border rounded-2xl flex flex-col items-center justify-between p-6 relative shadow-xl overflow-hidden">
+            <section class="md:col-span-6 panel border border-clock-border flex flex-col items-center justify-between p-6 relative shadow-xl overflow-hidden h-full min-h-0">
                 <div class="absolute top-4 left-4 text-xs font-semibold text-gray-400 uppercase tracking-widest">Table ronde & Grimoire</div>
                 
                 <!-- Représentation visuelle de la table ronde agrandie -->
@@ -265,7 +330,7 @@
 
 
             <!-- SIDEBAR DROITE : Actions dynamiques & Liste des joueurs (3 colonnes) -->
-            <section class="md:col-span-3 bg-clock-panel border border-clock-border rounded-2xl flex flex-col overflow-hidden shadow-xl">
+            <section class="md:col-span-3 panel border border-clock-border flex flex-col overflow-hidden shadow-xl h-full min-h-0">
                 
                 <!-- Haut : Encadré dynamique des actions de phase -->
                 <div class="p-4 border-b border-clock-border bg-clock-dark/50">
@@ -292,7 +357,7 @@
 
     <!-- Modale de fin de partie (victoire / défaite) -->
     <div id="modal-gameover" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-        <div class="bg-clock-panel border border-clock-border p-8 rounded-2xl max-w-md w-full mx-4 text-center space-y-4">
+        <div class="panel border border-clock-border p-8 rounded-2xl max-w-md w-full mx-4 text-center space-y-4">
             <h2 id="gameover-title" class="text-2xl font-bold text-clock-gold">Fin de la Partie</h2>
             <p id="gameover-desc" class="text-base text-gray-300">Le village a rendu son verdict.</p>
             <button onclick="location.reload()" class="bg-clock-red text-white px-6 py-2 rounded-xl text-xs font-bold uppercase tracking-wider">Nouvelle partie</button>
@@ -301,7 +366,7 @@
 
     <!-- Modale d'attribution du rôle de l'humain (début de partie) -->
     <div id="modal-role-reveal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md">
-        <div class="bg-clock-panel border-2 border-clock-gold p-8 rounded-2xl max-w-md w-full mx-4 text-center space-y-4 shadow-2xl">
+        <div class="panel border-2 border-clock-gold p-8 rounded-2xl max-w-md w-full mx-4 text-center space-y-4 shadow-2xl">
             <span class="text-4xl">📜</span>
             <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-widest">Le Grimoire s'ouvre</h3>
             <h2 id="modal-role-title" class="text-2xl font-bold text-clock-gold">Votre rôle secret</h2>
@@ -316,7 +381,7 @@
 
     <!-- Modale d'interaction Agent - Humain (proposition de conversation) -->
     <div id="modal-agent-whisper" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-        <div class="bg-clock-panel border border-clock-border p-6 rounded-2xl max-w-sm w-full mx-4 space-y-4">
+        <div class="panel border border-clock-border p-6 rounded-2xl max-w-sm w-full mx-4 space-y-4">
             <h3 class="text-xs font-semibold text-clock-gold uppercase tracking-wider">Demande d'entretien</h3>
             <p id="agent-whisper-text" class="text-sm text-gray-300 italic">Un agent souhaite s'entretenir discrètement avec vous.</p>
             <div class="flex space-x-2">

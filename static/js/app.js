@@ -108,17 +108,26 @@ function handleServerMessage(data) {
 // ================= CHAT & ONGLETS LATÉRAUX =================
 function switchLeftTab(tabName) {
     ['chat', 'night', 'votes'].forEach(t => {
-        document.getElementById(`tab-content-${t}`).classList.add('hidden');
-        document.getElementById(`tab-btn-${t}`).className = "flex-1 py-3 font-medium text-gray-400 hover:text-gray-200 transition";
+        const content = document.getElementById(`tab-content-${t}`);
+        const btn = document.getElementById(`tab-btn-${t}`);
+        
+        if (content) content.classList.add('hidden');
+        if (btn) {
+            // Style de l'onglet inactif (ajusté selon la charte)
+            btn.className = "flex-1 py-3 font-medium text-muted-foreground hover:text-foreground transition border-b-2 border-transparent";
+        }
     });
-    document.getElementById(`tab-content-${tabName}`).classList.remove('hidden');
-    document.getElementById(`tab-btn-${tabName}`).className = "flex-1 py-3 font-semibold text-clock-gold border-b-2 border-clock-gold transition";
+
+    const activeContent = document.getElementById(`tab-content-${tabName}`);
+    const activeBtn = document.getElementById(`tab-btn-${tabName}`);
+
+    if (activeContent) activeContent.classList.remove('hidden');
+    if (activeBtn) {
+        // Style de l'onglet ACTIF : texte doré permanent et bordure dorée
+        activeBtn.className = "flex-1 py-3 font-semibold text-gold border-b-2 border-[var(--gold)] transition";
+    }
 }
 
-function switchChannel(channelId) {
-    gameState.currentChannel = channelId;
-    renderChatMessages();
-}
 
 function sendChatMessage() {
     const input = document.getElementById('chat-input');
@@ -147,18 +156,70 @@ function receiveChatMessage(channelId, sender, content) {
 
 function renderChatMessages() {
     const box = document.getElementById('chat-messages');
+    if (!box) return;
+
+    let html = '';
+
+    // 1. En-tête conditionnel selon le canal actif
+    if (gameState.currentChannel === 'public') {
+        html = `
+            <div class="ornament animate-rise px-2 text-center my-2">
+                <p class="max-w-[85%] mx-auto font-serif text-sm italic text-gold">Canal public initialisé...</p>
+            </div>
+            <div class="ornament animate-rise px-2 text-center my-2">
+                <p class="max-w-[85%] mx-auto font-serif text-sm italic text-gold">Connexion établie avec le serveur.</p>
+            </div>
+        `;
+    } else {
+        // Récupère le nom du canal affiché dans le header pour un message sur mesure
+        const channelTitle = document.getElementById('active-channel-title')?.textContent || 'cette conversation';
+        html = `
+            <div class="ornament animate-rise px-2 text-center my-2">
+                <p class="max-w-[85%] mx-auto font-serif text-sm italic text-gold">Début de la discussion privée avec ${channelTitle}.</p>
+            </div>
+        `;
+    }
+
+    // 2. Récupération des messages du canal courant
     const msgs = gameState.messages[gameState.currentChannel] || [];
-    box.innerHTML = msgs.map(m => `
-        <div class="mb-1.5">
-            <span class="text-clock-gold font-bold">[${m.sender}]</span>: ${escapeHtml(m.content)}
-        </div>
-    `).join('') || '<div class="text-gray-500 italic text-center">Aucun message dans ce canal...</div>';
+
+    if (msgs.length === 0) {
+        html += `<div class="text-gray-500 italic text-center py-4 text-xs">Aucun message dans ce canal...</div>`;
+    } else {
+        // 3. Boucle sur les messages des joueurs
+        html += msgs.map(m => `
+            <div class="flex animate-rise flex-col items-start my-3">
+                <div class="mb-0.5 flex items-baseline gap-2 px-1 text-[11px]">
+                    <span class="font-semibold text-foreground/80">${escapeHtml(m.sender)}</span>
+                    <span class="text-muted-foreground">${m.time || '13:20'}</span>
+                </div>
+                <p class="break-words rounded-lg px-3 py-2 text-s leading-relaxed rounded-tl-sm border border-[var(--border)] bg-[var(--card)] text-foreground">
+                    ${escapeHtml(m.content)}
+                </p>
+            </div>
+        `).join('');
+    }
+
+    // 4. Injection dans le conteneur et défilement automatique
+    box.innerHTML = html;
     box.scrollTop = box.scrollHeight;
 }
 
 function appendSystemMessage(text) {
     const box = document.getElementById('chat-messages');
-    box.innerHTML += `<div class="text-yellow-500/80 italic">⚙️ ${text}</div>`;
+    if (!box) return;
+
+    // Création de l'élément avec le style ornemental Lovable
+    const msgDiv = document.createElement('div');
+    msgDiv.className = "ornament animate-rise px-2 text-center my-2";
+    msgDiv.innerHTML = `
+        <p class="max-w-[85%] mx-auto font-serif text-sm italic text-gold">
+            ${escapeHtml(text)}
+        </p>
+    `;
+
+    // Ajout dans la boîte de chat
+    box.appendChild(msgDiv);
     box.scrollTop = box.scrollHeight;
 }
 
@@ -171,11 +232,12 @@ function handlePrivateChannelOpened(channelId, text, members = []) {
 
     const channelsContainer = document.getElementById('chat-channels');
     if (channelsContainer && !document.getElementById(`tab-${channelId}`)) {
-        const tabTitle = members.length > 0 ? `🔒 ${members.join(', ')}` : `🔒 Privé`;
+        const tabTitle = members.length > 0 ? `${members.join(', ')}` : `Privé`;
         
         const tabButton = document.createElement('button');
         tabButton.id = `tab-${channelId}`;
-        tabButton.className = "channel-btn bg-clock-panel text-gray-400 hover:text-white px-3 py-1.5 rounded-lg font-medium border border-clock-border whitespace-nowrap text-xs transition-colors";
+        // Design harmonisé : flex, bordure dorée subtile, texte discret, sans fond violet par défaut
+        tabButton.className = "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-muted-foreground hover:text-foreground hover:bg-white/5 border border-gold/30 transition-colors shrink-0";
         tabButton.innerText = tabTitle;
         tabButton.onclick = () => switchChannel(channelId);
         
@@ -187,21 +249,36 @@ function handlePrivateChannelOpened(channelId, text, members = []) {
 
 function switchChannel(channelId) {
     gameState.currentChannel = channelId;
+
+    // 1. Mise à jour du titre affiché dans l'en-tête actif
+    let channelName = "Place publique";
+    if (channelId !== 'public') {
+        const targetBtn = document.getElementById(`tab-${channelId}`);
+        channelName = targetBtn ? targetBtn.innerText.trim() : channelId;
+    }
+
+    const titleElement = document.getElementById('active-channel-title');
+    if (titleElement) {
+        titleElement.textContent = channelName;
+    }
+
+    // 2. Gestion des états actifs / inactifs des boutons
+    const allButtons = document.querySelectorAll('nav[aria-label="Canaux"] button');
     
-    const allButtons = document.querySelectorAll('#chat-channels button');
     allButtons.forEach(btn => {
-        const isPublicBtnActive = (channelId === 'public' && btn.getAttribute('onclick')?.includes("'public'"));
-        const isPrivateBtnActive = (btn.id === `tab-${channelId}`);
-        
-        if (isPublicBtnActive || isPrivateBtnActive) {
-            btn.classList.remove('text-gray-400', 'bg-clock-panel');
-            btn.classList.add('text-clock-gold', 'bg-clock-accent', 'border-clock-gold');
+        // Vérifie si c'est le bouton actif (public ou autre canal)
+        const isTargetBtn = (btn.id === `tab-${channelId}`) || (channelId === 'public' && (btn.id === 'tab-public' || btn.getAttribute('onclick')?.includes("'public'")));
+
+        if (isTargetBtn) {
+            // ACTIF : Fond violet/actif (adapte selon tes classes, ici on enlève le transparent)
+            btn.className = "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm channel-btn transition-colors bg-secondary/80 text-foreground border border-[var(--gold)]";
         } else {
-            btn.classList.add('text-gray-400', 'bg-clock-panel');
-            btn.classList.remove('text-clock-gold', 'bg-clock-accent', 'border-clock-gold');
+            // INACTIF : Transparent et discret
+            btn.className = "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-muted-foreground hover:text-foreground hover:bg-white/5 bg-transparent channel-btn transition-colors border border-transparent";
         }
     });
 
+    // 3. Rendu des messages du canal sélectionné
     renderChatMessages();
 }
 
@@ -211,7 +288,7 @@ function renderVoteHistory() {
 
     if (!gameState.vote_history || gameState.vote_history.length === 0) {
         container.innerHTML = `
-            <div class="text-center text-gray-500 py-8 text-xs italic">
+            <div class="text-center text-muted-foreground py-8 text-xs italic font-serif">
                 Aucun vote enregistré pour le moment.
             </div>
         `;
@@ -226,35 +303,43 @@ function renderVoteHistory() {
         turnsMap[record.turn].votes.push(record);
     });
 
-    let html = '';
+    let html = '<div class="p-1 space-y-3">';
     
     Object.keys(turnsMap).sort((a, b) => b - a).forEach(turn => {
         const data = turnsMap[turn];
-        const executionText = data.executed ? `${data.executed} exécuté` : "pas d'exécution";
+        const executionText = data.executed ? `${data.executed} exécuté` : "Aucune exécution";
 
+        // Ornement pour le titre du tour de vote
         html += `
-            <div class="mb-5 text-xs text-gray-300 font-mono">
-                <div class="font-bold text-clock-gold uppercase tracking-wider mb-2">
-                    JOUR ${turn} - ${executionText}
+            <div class="space-y-2">
+                <div class="ornament animate-rise px-2 text-center my-3">
+                    <p class="max-w-[85%] mx-auto font-serif text-sm italic text-gold">
+                        Tour ${turn} — ${executionText}
+                    </p>
                 </div>
-                <ul class="space-y-1 pl-2 border-l border-clock-border/40">
+                <div class="space-y-1.5 pl-2 border-border/70">
         `;
 
         data.votes.forEach(v => {
-            const targetText = v.target ? v.target : "vote blanc";
+            const targetText = v.target ? v.target : "Vote blanc";
             html += `
-                <li class="text-gray-300">
-                    - <span class="font-semibold text-white">${v.voter}</span> : ${targetText}
-                </li>
+                <div class="panel p-2.5 rounded-lg border border-border bg-secondary/40 text-xs flex justify-between items-center">
+                    <div>
+                        <span class="font-semibold text-foreground">${escapeHtml(v.voter)}</span>
+                        <span class="text-muted-foreground ml-1.5">a voté pour</span>
+                        <span class="font-semibold text-gold ml-1">${escapeHtml(targetText)}</span>
+                    </div>
+                </div>
             `;
         });
 
         html += `
-                </ul>
+                </div>
             </div>
         `;
     });
 
+    html += '</div>';
     container.innerHTML = html;
 }
 
@@ -263,30 +348,35 @@ function renderNightInfoHistory() {
     const container = document.getElementById('tab-content-night');
     if (!container) return;
 
-    if (!gameState.night_info_history || gameState.night_info_history.length === 0) {
+    if (!gameState.night_info_history || !Array.isArray(gameState.night_info_history) || gameState.night_info_history.length === 0) {
         container.innerHTML = `
-            <div class="text-center text-gray-500 py-8 text-xs italic">
+            <div class="text-center text-muted-foreground py-8 text-sm italic font-serif">
                 Aucun événement nocturne pour le moment.
             </div>
         `;
         return;
     }
 
-    let html = '';
-    // Trier par tour décroissant si nécessaire, ou afficher l'ordre chronologique
+    let html = '<div class="p-1 space-y-3">';
+    
     gameState.night_info_history.forEach(item => {
         const isResult = item.type === "result";
-        const borderColor = isResult ? "border-clock-red/40" : "border-clock-gold/40";
-        const titleColor = isResult ? "text-clock-red" : "text-clock-gold";
+        // Utilisation de bordures et teintes cohérentes avec le design system
+        const borderColor = isResult ? "border-red-500/30" : "border-border";
+        const titleColor = isResult ? "text-red-400" : "text-gold";
+        const bgStyle = isResult ? "bg-red-950/10" : "bg-secondary/50";
 
         html += `
-            <div class="bg-clock-darker border ${borderColor} rounded-lg p-3 mb-2 text-xs font-mono">
-                <span class="${titleColor} font-bold">NUIT (Tour ${item.turn})</span>
-                <p class="text-gray-300 mt-1">${item.info}</p>
+            <div class="panel rounded-lg border ${borderColor} ${bgStyle} p-3 text-s">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="${titleColor} font-serif font-bold italic">Tour ${item.turn}</span>
+                </div>
+                <p class="text-foreground/90 font-sans leading-relaxed">${escapeHtml(item.info || item.text || '')}</p>
             </div>
         `;
     });
 
+    html += '</div>';
     container.innerHTML = html;
 }
 
@@ -623,7 +713,7 @@ function acceptAgentWhisper() {
         type: "chat",
         channel_id: "public",
         sender: "Grimoire",
-        content: `💬 Un entretien privé a débuté entre vous et ${agentId}.`
+        content: `Un entretien privé a débuté entre vous et ${agentId}.`
     });
 
     const channelId = "whisper_human_" + agentId;

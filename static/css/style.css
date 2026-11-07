@@ -7,7 +7,7 @@
   --radius: 0.5rem;
   --background: oklch(0.145 0.018 295);
   --foreground: oklch(0.91 0.02 85);
-  --card: oklch(0.18 0.022 295);
+  --card: color-mix(in oklab, var(--secondary) 70%, transparent);
   --card-foreground: oklch(0.91 0.02 85);
   --popover: oklch(0.2 0.025 295);
   --popover-foreground: oklch(0.91 0.02 85);
@@ -15,6 +15,7 @@
   --primary-foreground: oklch(0.96 0.012 85);
   --border: oklch(0.3 0.025 290);
   --input: oklch(0.29 0.025 290);
+  --secondary: oklch(0.24 0.02 280);
 
   --gold: oklch(0.76 0.115 80);
   --gold-dim: oklch(0.56 0.085 72);
@@ -77,10 +78,17 @@ body {
 
 /* Composant Carte / Panneau translucide */
 .panel {
-  background-color: color-mix(in oklab, var(--card) 88%, transparent);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-panel);
   backdrop-filter: blur(10px);
+}
+
+/* Application stricte de la variable Lovable sur toutes les bordures de la sidebar */
+section.panel border,
+section.panel nav,
+section.panel form,
+section.panel div {
+  border-color: color-mix(in oklab, var(--border) 70%, transparent);
 }
 
 /* Titres Dorés (Gilt) */
@@ -89,6 +97,10 @@ body {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+}
+
+.text-gold {
+  color: var(--gold);
 }
 
 .text-gold-dim {
@@ -104,6 +116,17 @@ body {
   opacity: 0.92;
 }
 
+/* Bouton de Canal / Place Publique (Style Lovable) */
+.channel-btn {
+  background-color: color-mix(in oklab, var(--primary) 25%, transparent);
+  color: var(--foreground);
+  box-shadow: 0 0 15px -3px oklch(0.76 0.115 80 / 20%), inset 0 0 0 1px oklch(0.76 0.115 80 / 30%);
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+.channel-btn:hover {
+  background-color: color-mix(in oklab, var(--primary) 35%, transparent);
+}
+
 /* Ornements (Lignes de séparation avec losange ou texte) */
 .ornament {
   display: flex;
@@ -117,4 +140,29 @@ body {
   flex: 1;
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--gold-dim), transparent);
+}
+
+/* Effet d'ombre et de lueur dorée Lovable */
+.shadow-gilt {
+  box-shadow: 0 0 15px -3px oklch(0.76 0.115 80 / 20%), inset 0 0 0 1px oklch(0.76 0.115 80 / 30%);
+}
+
+/* Zone de saisie du chat (Style Lovable) */
+.chat-composer {
+  background-color: color-mix(in oklab, var(--background) 70%, transparent);
+  border: 1px solid var(--border);
+}
+.chat-composer:focus-within {
+  border-color: oklch(0.76 0.115 80 / 0.6);
+}
+
+/* Bouton d'envoi du chat (Style Sceau Pourpre) */
+.chat-send-btn {
+  background-image: var(--gradient-seal);
+  box-shadow: var(--shadow-seal);
+  border: 1px solid oklch(0.76 0.115 80 / 0.3);
+}
+.chat-send-btn:hover {
+  filter: brightness(1.1);
+  border-color: oklch(0.76 0.115 80 / 0.6);
 }
