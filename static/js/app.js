@@ -384,22 +384,68 @@ function renderNightInfoHistory() {
 function updateGameState(newState) {
     gameState = { ...gameState, ...newState };
     
-    document.getElementById('game-day').innerText = gameState.day;
-    document.getElementById('game-phase').innerText = gameState.phase === 'nuit' ? 'Nuit' : (gameState.phase === 'vote' ? 'Vote' : 'Discussion');
-    document.getElementById('alive-count').innerText = gameState.aliveCount;
+    // 1. Mise à jour du numéro du tour
+    const dayEl = document.getElementById('game-day');
+    if (dayEl) dayEl.innerText = gameState.day;
 
-    // Mise à jour contextuelle de l'annonce si le serveur ne donne pas d'annonce explicite dans le paquet
-    if (newState.announcement) {
+    // 2. Gestion de la phase, de son icône et de ses classes de couleur
+    const phaseElement = document.getElementById('game-phase');
+    const phaseIconContainer = document.getElementById('phase-icon-container');
+
+    // Dictionnaire des configurations visuelles par phase (clés unifiées en minuscules)
+    const phaseConfig = {
+        'nuit': {
+            label: 'Nuit',
+            textColor: 'text-[var(--night)]',
+            svg: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-moon size-5"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"></path></svg>`
+        },
+        'vote': {
+            label: 'Vote',
+            textColor: 'text-[var(--blood)]',
+            svg: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-scale size-5"><path d="M12 3v18"></path><path d="m19 8 3 8a5 5 0 0 1-6 0zV7"></path><path d="M3 7h1a17 17 0 0 0 8-2 17 17 0 0 0 8 2h1"></path><path d="m5 8 3 8a5 5 0 0 1-6 0zV7"></path><path d="M7 21h10"></path></svg>`
+        },
+        'discussion': {
+            label: 'Jour',
+            textColor: 'text-[var(--day)]',
+            svg: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sun size-5"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path></svg>`
+        }
+    };
+
+    // Récupération de la configuration active (par défaut 'nuit' si inconnu)
+    const currentPhaseKey = gameState.phase ? gameState.phase.toLowerCase() : 'nuit';
+    const config = phaseConfig[currentPhaseKey] || phaseConfig['nuit'];
+
+    // Application du texte et des classes de couleur
+    if (phaseElement) {
+        phaseElement.innerText = config.label;
+        phaseElement.className = `font-display text-lg leading-none uppercase ${config.textColor}`;
+    }
+
+    if (phaseIconContainer) {
+        // Application propre de la bordure grise du thème et de la couleur textuelle pour le SVG
+        phaseIconContainer.className = `panel flex size-9 items-center justify-center rounded-full border border-border bg-card shrink-0 ${config.textColor}`;
+        phaseIconContainer.innerHTML = config.svg;
+    }
+
+    // 3. Mise à jour du nombre de vivants
+    const aliveEl = document.getElementById('alive-count');
+    if (aliveEl) aliveEl.innerText = gameState.aliveCount;
+
+    // Annonces contextuelles
+    if (newState.announcement && typeof setAnnouncement === 'function') {
         setAnnouncement(newState.announcement);
-    } else if (newState.phase === 'night') {
-        setAnnouncement("La nuit tombe... Reposez-vous pendant que les autres joueurs vaquent à leurs occupations.");
-    } else if (newState.phase === 'vote') {
+    } else if (newState.phase === 'nuit' && typeof setAnnouncement === 'function') {
+        setAnnouncement("La nuit tombe... Les pouvoirs sont en cours d'invocation.");
+    } else if (newState.phase === 'vote' && typeof setAnnouncement === 'function') {
         setAnnouncement("Phase de vote : réflexion et choix des joueurs en cours...");
     }
 
-    renderRoundTable();
-    renderPlayersList();
-    renderActionPanel();
+    // Attention : si renderRoundTable() recrée le HTML de zéro, il faut qu'il utilise le gameState à jour,
+    // sinon commente cette ligne si la table ronde est déjà gérée par le code ci-dessus.
+    // renderRoundTable(); 
+    
+    if (typeof renderPlayersList === 'function') renderPlayersList();
+    if (typeof renderActionPanel === 'function') renderActionPanel();
 }
 
 function renderRoundTable() {
@@ -561,43 +607,13 @@ function closeRoleRevealModal() {
 
 
 // ================= BANDEAU D'ANNONCE & EFFET VISIBLE =================
-let announcementTimer = null;
-
 function setAnnouncement(text) {
     const announcementEl = document.getElementById('game-announcement');
     if (!announcementEl) return;
 
     // 1. Mettre à jour le texte
-    announcementEl.innerText = `Annonce : ${text}`;
+    announcementEl.innerText = `${text}`;
 
-    // 2. Détecter si c'est un état d'attente / chargement
-    const lowerText = text.toLowerCase();
-    const isWaitingState = lowerText.includes("attente") || 
-                           lowerText.includes("cours") || 
-                           lowerText.includes("patienter") || 
-                           lowerText.includes("réflexion") ||
-                           lowerText.includes("endort");
-
-    // Nettoyer un éventuel timer précédent
-    if (announcementTimer) {
-        clearTimeout(announcementTimer);
-        announcementTimer = null;
-    }
-
-    // 3. Appliquer l'effet visuel sans toucher au positionnement
-    if (isWaitingState) {
-        // Effet lumineux pulsé (sans bounce pour ne pas décaler l'affichage)
-        announcementEl.className = "bg-clock-accent border border-yellow-500 px-4 py-1.5 rounded-lg text-sm text-yellow-300 truncate italic max-w-md text-center font-bold animate-pulse shadow-[0_0_12px_rgba(234,179,8,0.5)] transition-all duration-300";
-
-        // Retirer l'effet au bout de 3 secondes
-        announcementTimer = setTimeout(() => {
-            announcementEl.className = "bg-clock-accent border border-clock-border px-4 py-1.5 rounded-lg text-sm text-clock-gold truncate italic max-w-md text-center transition-all duration-300";
-        }, 3000);
-
-    } else {
-        // Style classique d'origine
-        announcementEl.className = "bg-clock-accent border border-clock-border px-4 py-1.5 rounded-lg text-sm text-clock-gold truncate italic max-w-md text-center transition-all duration-300";
-    }
 }
 
 function requestWhisper() {

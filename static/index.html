@@ -72,13 +72,31 @@
             </div>
 
             <!-- Droite : Encadré tour/phase/vivants + Badge de statut -->
-            <div class="flex items-center space-x-4 z-10">
-                <div class="panel px-4 py-1.5 rounded-xl text-sm flex items-center space-x-3 font-mono">
-                    <span>Tour <strong id="game-day" class="text-gold">1</strong></span>
-                    <span class="text-gray-600">|</span>
-                    <span id="game-phase" class="uppercase text-blue-400 font-semibold">Nuit</span>
-                    <span class="text-gray-600">|</span>
-                    <span>Vivants : <strong id="alive-count" class="text-green-400">--</strong></span>
+            <div class="flex items-center gap-4 z-10 shrink-0 whitespace-nowrap">
+                <div class="px-4 py-1.5 rounded-xl flex items-center justify-between gap-4 font-mono whitespace-nowrap shrink-0">
+                    
+                    <!-- 1. Tour de jeu -->
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm uppercase tracking-wider text-muted-foreground leading-none">Tour</span>
+                        <span id="game-day" class="font-mono text-sm font-bold leading-none text-gilt">0</span>
+                    </div>
+
+                    <!-- 2. Phase & Icône dynamiques -->
+                    <div class="flex items-center gap-3">
+                        <!-- Conteneur de l'icône piloté par JS -->
+                        <div id="phase-icon-container" class="panel flex size-8 items-center justify-center rounded-full border border-border bg-card shrink-0 self-center">
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm uppercase tracking-wider text-muted-foreground leading-none">Phase</span>
+                            <span id="game-phase" class="font-mono text-sm font-bold leading-none uppercase text-[var(--gold)]">----</span>
+                        </div>
+                    </div>
+
+                    <!-- 3. Joueurs vivants -->
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm uppercase tracking-wider text-muted-foreground leading-none">Vivants</span>
+                        <strong id="alive-count" class="font-mono text-sm font-bold leading-none text-gilt">--</strong>
+                    </div>
                 </div>
 
                 <!-- Badge de connexion -->
@@ -89,7 +107,7 @@
         </header>
 
         <!-- Grille principale à 3 colonnes (Sidebar gauche | Table ronde Centrale | Sidebar droite) -->
-        <main class="grid grid-cols-1 md:grid-cols-12 grid-rows-[minmax(0,1fr)] gap-4 p-4 h-[calc(100vh-4rem)] overflow-hidden">
+        <main class="grid grid-cols-1 md:grid-cols-12 grid-rows-[minmax(0,1fr)] h-[calc(100vh-4rem)] overflow-hidden">
 
             <!-- SIDEBAR GAUCHE : Conversations & historiques (3 colonnes) -->
             <section class="md:col-span-3 panel border-r border-border flex flex-col h-full min-h-0 overflow-hidden">
