@@ -59,10 +59,10 @@ function joinGame() {
 function updateConnectionBadge(isConnected) {
     const badge = document.getElementById('connection-status');
     if (isConnected) {
-        badge.className = "px-3 py-1 rounded-full text-xs font-semibold bg-green-900/50 text-green-400 border border-green-700 whitespace-nowrap";
+        badge.className = "px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-900/50 text-green-400 border border-green-700 whitespace-nowrap";
         badge.innerText = "Connecté";
     } else {
-        badge.className = "px-3 py-1 rounded-full text-xs font-semibold bg-red-900/50 text-red-400 border border-red-700 whitespace-nowrap";
+        badge.className = "px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-900/50 text-red-400 border border-red-700 whitespace-nowrap";
         badge.innerText = "Déconnecté";
     }
     // Active/désactive le bouton de validation de l'encadré d'action.
@@ -91,10 +91,12 @@ function handleServerMessage(data) {
             triggerGameOver(data.winner, data.details);
             break;
         case "private_channel_opened":
-            handlePrivateChannelOpened(data.channel_id, data.text);
+            // members inclut le joueur humain : on ne garde que ses interlocuteurs pour le titre de l'onglet
+            handlePrivateChannelOpened(data.channel_id, data.text, (data.members || []).filter(m => m !== playerId));
             break;
         case "vote_result":
-            showVoteResultModal(data.turn, data.executed, data.votes);
+            showVoteResultModal(data.turn, data.executed, data.votes); // historique (+ modale si le joueur est exécuté)
+            showVoteResultInPanel(data.executed, data.votes || []);
             break;
         case "night_result":
             showNightResultModal(data.turn, data.dead_player); // data.turn et data.dead_player
@@ -102,7 +104,25 @@ function handleServerMessage(data) {
         case "night_info":
             // allies (facultatif) : révélation des alliés du camp du mal, la première nuit : [{ id, role }]
             if (Array.isArray(data.allies)) revealAllies(data.allies);
-            showNightInfoModal(data.turn, data.info); // Information spécifique reçue la nuit selon le rôle
+            if (pendingAction?.kind === "nuit" && pendingAction.stage === "waiting") {
+                // Réponse à l'action de nuit du joueur : affichée dans l'encadré plutôt qu'en modale
+                recordNightInfo(data.turn, data.info);
+                showNightResultInPanel(data.info);
+            } else {
+                showNightInfoModal(data.turn, data.info); // Information spécifique reçue la nuit selon le rôle
+            }
+            break;
+        case "night_action_ack":
+            // Simple confirmation de l'action de nuit (rôles sans information en retour)
+            showNightResultInPanel(data.text || "Le Maître du Jeu a bien reçu votre choix.");
+            break;
+        case "error":
+            appendSystemMessage(data.data || "Erreur du serveur.");
+            // L'action a été refusée : le joueur peut corriger son choix
+            if (pendingAction?.stage === "waiting") {
+                pendingAction.stage = "choosing";
+                renderActionPanel();
+            }
             break;
         case "action_request":
             handleActionRequest(data); // Remplit l'encadré d'action de la sidebar droite
@@ -113,7 +133,27 @@ function handleServerMessage(data) {
 }
 
 // ================= CHAT & ONGLETS LATÉRAUX =================
+// ================= NOUVEAUX MESSAGES SUR LA PLACE PUBLIQUE =================
+let activeLeftTab = 'chat';
+let hasUnreadPublic = false;
+
+// Le joueur voit la place publique s'il est sur l'onglet Chat ET sur le canal public.
+function isViewingPublic() {
+    return activeLeftTab === 'chat' && gameState.currentChannel === 'public';
+}
+
+// Badge sur "Place publique" si le joueur est dans un autre canal,
+// badge à côté de "Chat" s'il est sur un autre onglet (les deux peuvent coexister).
+function refreshUnreadBadges() {
+    if (isViewingPublic()) hasUnreadPublic = false;
+    const onPublicBtn = document.getElementById('unread-public');
+    const onChatTab = document.getElementById('unread-chat-tab');
+    if (onPublicBtn) onPublicBtn.hidden = !(hasUnreadPublic && gameState.currentChannel !== 'public');
+    if (onChatTab) onChatTab.hidden = !(hasUnreadPublic && activeLeftTab !== 'chat');
+}
+
 function switchLeftTab(tabName) {
+    activeLeftTab = tabName;
     ['chat', 'night', 'votes'].forEach(t => {
         const content = document.getElementById(`tab-content-${t}`);
         const btn = document.getElementById(`tab-btn-${t}`);
@@ -133,6 +173,7 @@ function switchLeftTab(tabName) {
         // Style de l'onglet ACTIF : texte doré permanent et bordure dorée
         activeBtn.className = "flex-1 py-3 font-semibold text-gold border-b-2 border-[var(--gold)] transition";
     }
+    refreshUnreadBadges();
 }
 
 
@@ -159,6 +200,12 @@ function receiveChatMessage(channelId, sender, content) {
     }
     gameState.messages[channelId].push({ sender: sender, content: content });
     renderChatMessages();
+
+    // Nouveau message public (hors messages du joueur lui-même) pendant qu'il regarde ailleurs
+    if (channelId === 'public' && sender !== playerId && !isViewingPublic()) {
+        hasUnreadPublic = true;
+        refreshUnreadBadges();
+    }
 }
 
 function renderChatMessages() {
@@ -287,6 +334,7 @@ function switchChannel(channelId) {
 
     // 3. Rendu des messages du canal sélectionné
     renderChatMessages();
+    refreshUnreadBadges();
 }
 
 function renderVoteHistory() {
@@ -392,7 +440,8 @@ function updateGameState(newState) {
     gameState = { ...gameState, ...newState };
 
     // Une action demandée pour une autre phase n'a plus lieu d'être.
-    if (pendingAction && newState.phase && newState.phase.toLowerCase() !== pendingAction.kind) {
+    // (une action déjà envoyée reste affichée en attente de sa réponse)
+    if (pendingAction && pendingAction.stage === "choosing" && newState.phase && newState.phase.toLowerCase() !== pendingAction.kind) {
         pendingAction = null;
         actionSelection = [];
     }
@@ -436,7 +485,7 @@ function updateGameState(newState) {
 
     if (phaseIconContainer) {
         // Application propre de la bordure grise du thème et de la couleur textuelle pour le SVG
-        phaseIconContainer.className = `panel flex size-9 items-center justify-center rounded-full border border-border bg-card shrink-0 ${config.textColor}`;
+        phaseIconContainer.className = `panel flex size-8 items-center justify-center rounded-full border border-border bg-card shrink-0 ${config.textColor}`;
         phaseIconContainer.innerHTML = config.svg;
     }
 
@@ -453,65 +502,49 @@ function updateGameState(newState) {
         setAnnouncement("Phase de vote : réflexion et choix des joueurs en cours...");
     }
 
-    // Attention : si renderRoundTable() recrée le HTML de zéro, il faut qu'il utilise le gameState à jour,
-    // sinon commente cette ligne si la table ronde est déjà gérée par le code ci-dessus.
-    // renderRoundTable(); 
+    // Lueur d'ambiance de la zone centrale selon la phase
+    const centerStage = document.getElementById('center-stage');
+    if (centerStage && gameState.phase) centerStage.dataset.phase = gameState.phase.toLowerCase();
+
+    renderRoundTable();
     
     if (typeof renderPlayersList === 'function') renderPlayersList();
     if (typeof renderActionPanel === 'function') renderActionPanel();
 }
 
+// Place les joueurs autour de la table (le Grimoire central est statique dans le HTML).
 function renderRoundTable() {
-    const table = document.getElementById('round-table');
+    const seats = document.getElementById('round-table-seats');
+    if (!seats) return;
     const players = gameState.players || [];
-    
-    // Bouton Grimoire central
-    const grimoireBtnHtml = `
-        <button onclick="openGrimoireModal()" class="z-10 group bg-clock-dark/90 hover:bg-clock-gold/20 border-2 border-clock-gold/60 hover:border-clock-gold text-clock-gold p-5 rounded-full shadow-2xl transition-all duration-300 transform hover:scale-110 flex flex-col items-center justify-center">
-            <span class="text-4xl group-hover:rotate-12 transition-transform duration-300">📖</span>
-            <span class="text-xs font-mono uppercase tracking-widest mt-1 font-bold">Grimoire</span>
-        </button>
-    `;
 
     if (players.length === 0) {
-        table.innerHTML = `
-            ${grimoireBtnHtml}
-            <div class="absolute text-center text-gray-500 text-xs italic pointer-events-none mt-32">
-                En attente des joueurs...
-            </div>
+        seats.innerHTML = `
+            <p class="absolute inset-x-0 bottom-[3%] text-center text-sm italic opacity-60">En attente des joueurs...</p>
         `;
         return;
     }
 
-    // 💡 Rayon augmenté à 200px pour décaler les cercles vers l'extérieur 
-    // (le conteneur faisant ~420px, un rayon de 200 place le centre des cercles pile sur le trait de la table)
-    const radius = 200; 
-    const centerX = table.offsetWidth / 2 || 210;
-    const centerY = table.offsetHeight / 2 || 210;
-
-    let html = grimoireBtnHtml;
-
-    players.forEach((p, index) => {
+    seats.innerHTML = players.map((p, index) => {
+        // Positions en % du carré : la table reste correcte quelle que soit sa taille.
         const angle = (index / players.length) * 2 * Math.PI - Math.PI / 2;
-        
-        // Offset à 56px (moitié de la taille de l'avatar w-28 = 112px)
-        const x = centerX + radius * Math.cos(angle) - 56;
-        const y = centerY + radius * Math.sin(angle) - 56;
+        // Rayon 39 % = bord extérieur de la table (inset-[11%]) : le centre de la bulle est posé sur le cercle.
+        const left = 50 + 39 * Math.cos(angle);
+        const top = 50 + 39 * Math.sin(angle);
+        const isMe = p.id === playerId;
+        const isAlive = p.alive !== false;
+        const initial = escapeHtml((p.name || '?').trim().charAt(0).toUpperCase());
+        const label = escapeHtml(p.name) + (isMe ? ' (vous)' : '') + (isAlive ? '' : ' (mort)');
 
-        const statusColor = p.alive 
-            ? 'border-green-500/80 bg-clock-panel shadow-green-950/40' 
-            : 'border-red-900 bg-red-950/50 opacity-70 shadow-red-950/40';
-        
-        html += `
-            <div class="absolute w-28 h-28 rounded-full border-2 ${statusColor} flex flex-col items-center justify-center p-2.5 text-center shadow-2xl transition-all duration-300 cursor-pointer hover:scale-110 z-10"
-                 style="left: ${x}px; top: ${y}px;" title="${p.name} (${p.alive ? 'Vivant' : 'Mort'})">
-                <span class="text-xs font-bold truncate w-full text-gray-200 px-1">${p.name}</span>
-                <span class="text-[11px] ${p.alive ? 'text-green-400 font-semibold' : 'text-red-400 font-semibold'}">${p.alive ? 'Vivant' : 'Mort'}</span>
+        return `
+            <!-- Le siège est centré sur la bulle ; le nom est accroché en dessous sans décaler la bulle. -->
+            <div class="seat ${isMe ? 'is-me' : ''} ${isAlive ? '' : 'is-dead'} pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2"
+                 style="left: ${left}%; top: ${top}%;" title="${label}">
+                <div class="seat-avatar flex size-12 sm:size-14 items-center justify-center rounded-full font-display text-lg">${initial}</div>
+                <span class="seat-name absolute left-1/2 top-full mt-1 w-32 sm:w-36 -translate-x-1/2 line-clamp-2 text-center leading-tight px-1 text-xs sm:text-sm font-medium">${label}</span>
             </div>
         `;
-    });
-
-    table.innerHTML = html;
+    }).join('');
 }
 
 // Soupçons notés par le joueur, stockés à part pour survivre aux "game_state" du serveur.
@@ -668,9 +701,16 @@ function renderPlayersList() {
 //     min_targets?: n, role?: "imp" | "Diablotin" | ... }
 // Seul le texte (titre, consigne, bouton) est défini côté client, selon la phase et le rôle.
 
-let pendingAction = null;   // { kind, candidates, maxTargets, minTargets, role } ou null
+let pendingAction = null;   // { kind, candidates, maxTargets, minTargets, role, stage: "choosing" | "waiting" } ou null
 let actionSelection = [];   // ids sélectionnés
 const NO_TARGET = "__none__"; // option "Personne" du vote
+
+// Résultat affiché dans l'encadré (vote ou réponse de nuit). Il reste affiché jusqu'à ce que
+// le joueur le ferme ; une nouvelle action ne peut le remplacer qu'après RESULT_MIN_DISPLAY_MS.
+let actionResult = null;    // { kind: "vote" | "nuit", shownAt, ...données }
+let deferredActionRequest = null;
+let deferredActionTimer = null;
+const RESULT_MIN_DISPLAY_MS = 12000;
 
 const ACTION_ICONS = {
     discussion: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>`,
@@ -728,6 +768,18 @@ function getPlayerName(id) {
 }
 
 function handleActionRequest(data) {
+    // Un résultat est affiché depuis trop peu de temps : on laisse le joueur le lire.
+    if (actionResult) {
+        const remaining = RESULT_MIN_DISPLAY_MS - (Date.now() - actionResult.shownAt);
+        if (remaining > 0) {
+            deferredActionRequest = data;
+            clearTimeout(deferredActionTimer);
+            deferredActionTimer = setTimeout(applyDeferredActionRequest, remaining);
+            return;
+        }
+        actionResult = null;
+    }
+
     const kind = data.kind;
     if (!["discussion", "vote", "nuit"].includes(kind)) {
         console.warn("action_request : kind inconnu", data);
@@ -758,10 +810,108 @@ function handleActionRequest(data) {
         candidates,
         maxTargets,
         minTargets: Math.min(maxTargets, data.min_targets || defaultMin),
-        role: data.role || null
+        role: data.role || null,
+        stage: "choosing"
     };
     actionSelection = [];
     renderActionPanel();
+}
+
+function applyDeferredActionRequest() {
+    clearTimeout(deferredActionTimer);
+    const data = deferredActionRequest;
+    deferredActionRequest = null;
+    if (!data) return;
+    actionResult = null;
+    handleActionRequest(data);
+}
+
+// Bouton "Fermer" d'un résultat : affiche tout de suite l'action suivante si elle attendait.
+function closeActionResult() {
+    actionResult = null;
+    if (deferredActionRequest) applyDeferredActionRequest();
+    else renderActionPanel();
+}
+
+function showVoteResultInPanel(executedId, votes) {
+    if (pendingAction?.kind === "vote") pendingAction = null;
+    actionSelection = [];
+    actionResult = { kind: "vote", executedId, votes, shownAt: Date.now() };
+    renderActionPanel();
+}
+
+function showNightResultInPanel(text) {
+    if (pendingAction?.kind === "nuit") pendingAction = null;
+    actionSelection = [];
+    actionResult = { kind: "nuit", text, shownAt: Date.now() };
+    renderActionPanel();
+}
+
+// Même enregistrement que showNightInfoModal, sans ouvrir la modale.
+function recordNightInfo(turn, info) {
+    if (!gameState.night_info_history) gameState.night_info_history = [];
+    gameState.night_info_history.push({ turn, type: "role_info", info });
+    if (typeof renderNightInfoHistory === 'function') renderNightInfoHistory();
+}
+
+const RESULT_CLOSE_BUTTON = `
+    <button type="button" onclick="closeActionResult()"
+        class="mt-3 w-full shrink-0 flex items-center justify-center gap-2 rounded-md py-1.5 text-sm opacity-70 hover:opacity-100 transition-opacity">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>
+        Fermer
+    </button>`;
+
+function renderVoteResult(result) {
+    const isDead = id => (gameState.players || []).find(p => p.id === id)?.alive === false;
+
+    // Verdict : seul le total de voix de la personne exécutée est indiqué.
+    let verdict;
+    if (result.executedId) {
+        const n = result.votes.filter(v => v.target === result.executedId).length;
+        verdict = `<p class="result-verdict mb-3 rounded-md px-3 py-2 text-sm">
+            <span class="font-semibold">${escapeHtml(getPlayerName(result.executedId))}</span>
+            est exécuté·e avec <span class="font-semibold text-gold">${n} voix</span>.
+        </p>`;
+    } else {
+        verdict = `<p class="mb-3 text-sm opacity-75">Aucune majorité : personne n'est exécuté aujourd'hui.</p>`;
+    }
+
+    // Un bulletin par votant : "votant → cible" (ou "Personne").
+    // Un votant déjà mort a utilisé son vote fantôme : on le signale.
+    const ballots = result.votes.map(v => {
+        const target = v.target
+            ? `<span class="font-semibold ${v.target === result.executedId ? 'text-blood-bright' : 'text-gold'}">${escapeHtml(getPlayerName(v.target))}</span>`
+            : `<span class="italic opacity-60">Personne</span>`;
+        return `
+            <li class="ballot flex items-center gap-2 rounded-md px-3 py-1.5 text-sm">
+                <span class="truncate">${escapeHtml(getPlayerName(v.voter))}${isDead(v.voter) ? ' <span class="text-xs opacity-60">(vote fantôme)</span>' : ''}</span>
+                <span class="truncate ml-auto text-right">${target}</span>
+            </li>
+        `;
+    }).join('');
+
+    return `
+        <h3 class="action-title font-display text-lg flex items-center gap-2 mb-2 shrink-0">
+            ${ACTION_ICONS.vote}<span>Résultats du vote</span>
+        </h3>
+        ${verdict}
+        <ul class="flex flex-col gap-1 min-h-0 overflow-y-auto pr-1">
+            ${ballots || '<li class="text-sm italic opacity-60">Aucun vote enregistré.</li>'}
+        </ul>
+        ${RESULT_CLOSE_BUTTON}
+    `;
+}
+
+function renderNightResult(result) {
+    return `
+        <h3 class="action-title font-display text-lg flex items-center gap-2 mb-2 shrink-0">
+            ${ACTION_ICONS.nuit}<span>Réponse du Maître du Jeu</span>
+        </h3>
+        <div class="min-h-0 overflow-y-auto pr-1">
+            <p class="font-serif text-base italic leading-snug">${escapeHtml(result.text)}</p>
+        </div>
+        ${RESULT_CLOSE_BUTTON}
+    `;
 }
 
 function clearPendingAction() {
@@ -774,6 +924,14 @@ function renderActionPanel() {
     const zone = document.getElementById('action-zone');
     const panel = document.getElementById('dynamic-action-panel');
     if (!zone || !panel) return;
+
+    // Un résultat à lire passe avant tout le reste.
+    if (actionResult) {
+        panel.dataset.phase = actionResult.kind;
+        panel.innerHTML = actionResult.kind === "vote" ? renderVoteResult(actionResult) : renderNightResult(actionResult);
+        zone.classList.remove('hidden');
+        return;
+    }
 
     // Aucune action en cours : l'encadré disparaît complètement.
     if (!pendingAction) {
@@ -810,8 +968,10 @@ function renderActionPanel() {
             `).join('')}
         </div>
         <button type="button" id="action-submit" onclick="submitPendingAction()"
-            class="action-submit mt-3 w-full shrink-0 rounded-md py-2 font-serif text-base font-semibold tracking-wide">
-            ${escapeHtml(texts.submit)}
+            class="action-submit mt-3 w-full shrink-0 rounded-md py-2 font-serif text-base font-semibold tracking-wide flex items-center justify-center min-h-10">
+            ${pendingAction.stage === "waiting"
+                ? `<span class="action-spinner" aria-hidden="true"></span><span class="sr-only">En attente de la réponse du serveur…</span>`
+                : escapeHtml(texts.submit)}
         </button>
     `;
 
@@ -842,12 +1002,13 @@ function refreshActionSelection() {
     if (!pendingAction) return;
     const { maxTargets, minTargets } = pendingAction;
     const isFull = maxTargets > 1 && actionSelection.length >= maxTargets;
+    const waiting = pendingAction.stage === "waiting";
 
     document.querySelectorAll('#dynamic-action-panel .option-btn').forEach(btn => {
         const selected = actionSelection.includes(btn.dataset.id);
         btn.setAttribute('aria-pressed', String(selected));
         // En multi-sélection, une fois le maximum atteint, on grise les autres options.
-        btn.disabled = isFull && !selected;
+        btn.disabled = waiting || (isFull && !selected);
     });
 
     const counter = document.getElementById('action-counter');
@@ -858,12 +1019,13 @@ function refreshActionSelection() {
     const submit = document.getElementById('action-submit');
     if (submit) {
         const connected = ws && ws.readyState === WebSocket.OPEN;
-        submit.disabled = actionSelection.length < minTargets || !connected;
+        submit.disabled = waiting || actionSelection.length < minTargets || !connected;
+        submit.classList.toggle('is-waiting', waiting);
     }
 }
 
 function submitPendingAction() {
-    if (!pendingAction || actionSelection.length < pendingAction.minTargets) return;
+    if (!pendingAction || pendingAction.stage !== "choosing" || actionSelection.length < pendingAction.minTargets) return;
     if (!ws || ws.readyState !== WebSocket.OPEN) {
         appendSystemMessage("Connexion perdue : votre choix n'a pas été envoyé.");
         return;
@@ -884,7 +1046,14 @@ function submitPendingAction() {
         appendSystemMessage(`Action nocturne confiée au Maître du Jeu : ${names}.`);
     }
 
-    clearPendingAction();
+    if (pendingAction.kind === "discussion") {
+        // Le serveur répond par "private_channel_opened", qui ouvre le salon dans la sidebar gauche.
+        clearPendingAction();
+    } else {
+        // Vote / nuit : loader dans le bouton jusqu'à la réponse du serveur.
+        pendingAction.stage = "waiting";
+        renderActionPanel();
+    }
 }
 
 // ================= INTERACTIONS & MODALES =================
@@ -910,9 +1079,18 @@ function setAnnouncement(text) {
     const announcementEl = document.getElementById('game-announcement');
     if (!announcementEl) return;
 
-    // 1. Mettre à jour le texte
-    announcementEl.innerText = `${text}`;
+    const changed = announcementEl.innerText.trim() !== String(text).trim();
 
+    // 1. Mettre à jour le texte (le title permet de lire une annonce tronquée au survol)
+    announcementEl.innerText = `${text}`;
+    announcementEl.title = `${text}`;
+
+    // 2. Effet doré si l'annonce a réellement changé (on relance l'animation si elle est en cours)
+    if (changed) {
+        announcementEl.classList.remove('announce-flash');
+        void announcementEl.offsetWidth; // force le reflow pour redémarrer l'animation
+        announcementEl.classList.add('announce-flash');
+    }
 }
 
 let currentWhisperAgent = null;
@@ -1062,7 +1240,11 @@ function showVoteResultModal(turnNumber, executedPlayer, votesArray) {
     }
     listEl.innerHTML = html;
 
-    modal.classList.remove('hidden');
+    // Les résultats s'affichent dans l'encadré d'action ; la modale ne s'ouvre
+    // que si le joueur lui-même est exécuté (message important à ne pas manquer).
+    if (executedPlayer && executedPlayer === currentUsername) {
+        modal.classList.remove('hidden');
+    }
 }
 
 function closeVoteResultModal() {
