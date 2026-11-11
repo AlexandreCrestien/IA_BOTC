@@ -258,110 +258,98 @@
             </section>
 
             <!-- Modale du Grimoire (Règles & Rôles) -->
-            <div id="modal-grimoire" class="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 hidden">
-                <div class="bg-clock-dark border border-clock-border rounded-2xl p-6 w-[550px] max-w-[95vw] max-h-[85vh] shadow-2xl flex flex-col font-mono">
+            <div id="modal-grimoire" class="modal-backdrop hidden" onclick="if (event.target === this) closeGrimoireModal()">
+                <div class="modal-card w-[560px] max-h-[85vh] flex flex-col" data-tone="gold" role="dialog" aria-modal="true" aria-labelledby="grimoire-title">
                     <!-- En-tête -->
-                    <div class="flex justify-between items-center border-b border-clock-border/50 pb-3 mb-4">
-                        <div class="flex items-center space-x-2">
-                            <span class="text-2xl">📖</span>
-                            <h3 class="text-clock-gold font-bold uppercase tracking-wider text-base">Grimoire du Village</h3>
+                    <div class="flex items-center justify-between gap-3 mb-4 shrink-0">
+                        <div class="flex items-center gap-3">
+                            <span class="modal-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="size-6"><path d="M12 7v14"></path><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"></path></svg></span>
+                            <div>
+                                <p class="modal-kicker">Les secrets du village</p>
+                                <h3 id="grimoire-title" class="modal-title">Grimoire du Village</h3>
+                            </div>
                         </div>
-                        <button onclick="closeGrimoireModal()" class="text-gray-400 hover:text-white text-lg font-bold">✕</button>
+                        <button onclick="closeGrimoireModal()" class="modal-close" aria-label="Fermer le Grimoire"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-5"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button>
                     </div>
 
-                    <!-- Onglets interne du Grimoire -->
-                    <div class="flex border-b border-clock-border/40 mb-4 text-xs">
-                        <button id="grimoire-tab-btn-roles" onclick="switchGrimoireTab('roles')" class="flex-1 py-2 font-bold text-clock-gold border-b-2 border-clock-gold transition">
-                            Les rôles
-                        </button>
-                        <button id="grimoire-tab-btn-rules" onclick="switchGrimoireTab('rules')" class="flex-1 py-2 font-medium text-gray-400 hover:text-gray-200 transition">
-                            Règles du jeu
-                        </button>
+                    <!-- Onglets internes du Grimoire -->
+                    <div class="flex border-b border-[var(--border)] mb-4 shrink-0">
+                        <button id="grimoire-tab-btn-roles" onclick="switchGrimoireTab('roles')" class="grimoire-tab is-active">Les rôles</button>
+                        <button id="grimoire-tab-btn-rules" onclick="switchGrimoireTab('rules')" class="grimoire-tab">Règles du jeu</button>
                     </div>
 
                     <!-- Contenu défilant -->
-                    <div class="overflow-y-auto pr-2 space-y-4 text-xs text-gray-300 flex-1">
-                        
+                    <div class="overflow-y-auto pr-2 flex-1 min-h-0">
                         <!-- Section Rôles -->
-                        <div id="grimoire-tab-roles" class="space-y-3">
-                            <div class="text-[11px] text-gray-400 italic mb-2">Compendium des rôles présents dans cette édition :</div>
-                            
-                            <div class="bg-clock-darker border border-clock-border/30 rounded-xl p-3">
-                                <div class="flex items-center justify-between font-bold text-clock-gold mb-1">
-                                    <span>Diablotin</span>
-                                    <span class="text-[10px] px-2 py-0.5 rounded bg-red-950/60 text-red-400 border border-red-900/50">Démon</span>
+                        <div id="grimoire-tab-roles" class="flex flex-col gap-2">
+                            <p class="font-serif italic text-sm opacity-70 mb-1">Compendium des rôles présents dans cette édition :</p>
+                            <article class="grimoire-card rounded-lg p-3">
+                                <div class="flex items-center justify-between gap-2 mb-1">
+                                    <span class="font-display text-lg text-gold">Diablotin</span>
+                                    <span class="role-tag tag-demon">Démon</span>
                                 </div>
-                                <p class="text-gray-300 text-xs">Chaque nuit (sauf la première), il choisit un joueur à tuer. S'il est exécuté, les Villageois remportent la partie.</p>
-                            </div>
-
-                            <div class="bg-clock-darker border border-clock-border/30 rounded-xl p-3">
-                                <div class="flex items-center justify-between font-bold text-clock-gold mb-1">
-                                    <span>Empoisonneur</span>
-                                    <span class="text-[10px] px-2 py-0.5 rounded bg-purple-950/60 text-purple-400 border border-red-900/50">Démon - Sbire</span>
+                                <p class="text-sm leading-relaxed opacity-85">Chaque nuit (sauf la première), il choisit un joueur à tuer. S'il est exécuté, les Villageois remportent la partie.</p>
+                            </article>
+                            <article class="grimoire-card rounded-lg p-3">
+                                <div class="flex items-center justify-between gap-2 mb-1">
+                                    <span class="font-display text-lg text-gold">Empoisonneur</span>
+                                    <span class="role-tag tag-minion">Démon - Sbire</span>
                                 </div>
-                                <p class="text-gray-300 text-xs">Chaque nuit, il empoisonne un joueur. Le pouvoir de celui-ci échoue sans qu'il le sache.</p>
-                            </div>
-
-                            <div class="bg-clock-darker border border-clock-border/30 rounded-xl p-3">
-                                <div class="flex items-center justify-between font-bold text-clock-gold mb-1">
-                                    <span>Voyante</span>
-                                    <span class="text-[10px] px-2 py-0.5 rounded bg-green-950/60 text-green-400 border border-green-900/50">Villageois</span>
+                                <p class="text-sm leading-relaxed opacity-85">Chaque nuit, il empoisonne un joueur. Le pouvoir de celui-ci échoue sans qu'il le sache.</p>
+                            </article>
+                            <article class="grimoire-card rounded-lg p-3">
+                                <div class="flex items-center justify-between gap-2 mb-1">
+                                    <span class="font-display text-lg text-gold">Voyante</span>
+                                    <span class="role-tag tag-good">Villageois</span>
                                 </div>
-                                <p class="text-gray-300 text-xs">Chaque nuit, elle choisit 2 joueurs et découvre si au moins l'un d'eux est un Démon. Il existe un leurre : un Villageois qu'elle voit comme un Démon.</p>
-                            </div>
-
-                            <div class="bg-clock-darker border border-clock-border/30 rounded-xl p-3">
-                                <div class="flex items-center justify-between font-bold text-clock-gold mb-1">
-                                    <span>Moine</span>
-                                    <span class="text-[10px] px-2 py-0.5 rounded bg-green-950/60 text-green-400 border border-green-900/50">Villageois</span>
+                                <p class="text-sm leading-relaxed opacity-85">Chaque nuit, elle choisit 2 joueurs et découvre si au moins l'un d'eux est un Démon. Il existe un leurre : un Villageois qu'elle voit comme un Démon.</p>
+                            </article>
+                            <article class="grimoire-card rounded-lg p-3">
+                                <div class="flex items-center justify-between gap-2 mb-1">
+                                    <span class="font-display text-lg text-gold">Moine</span>
+                                    <span class="role-tag tag-good">Villageois</span>
                                 </div>
-                                <p class="text-gray-300 text-xs">Chaque nuit (sauf la première), il protège un joueur (sauf lui-même) du Diablotin.</p>
-                            </div>
-
-                            <div class="bg-clock-darker border border-clock-border/30 rounded-xl p-3">
-                                <div class="flex items-center justify-between font-bold text-clock-gold mb-1">
-                                    <span>Détective</span>
-                                    <span class="text-[10px] px-2 py-0.5 rounded bg-green-950/60 text-green-400 border border-green-900/50">Villageois</span>
+                                <p class="text-sm leading-relaxed opacity-85">Chaque nuit (sauf la première), il protège un joueur (sauf lui-même) du Diablotin.</p>
+                            </article>
+                            <article class="grimoire-card rounded-lg p-3">
+                                <div class="flex items-center justify-between gap-2 mb-1">
+                                    <span class="font-display text-lg text-gold">Détective</span>
+                                    <span class="role-tag tag-good">Villageois</span>
                                 </div>
-                                <p class="text-gray-300 text-xs">La première nuit, il reçoit le nom de 2 joueurs et sait que l'un d'eux est l'Empoisonneur.</p>
-                            </div>
-                            
-                            <div class="bg-clock-darker border border-clock-border/30 rounded-xl p-3">
-                                <div class="flex items-center justify-between font-bold text-clock-gold mb-1">
-                                    <span>Majordome</span>
-                                    <span class="text-[10px] px-2 py-0.5 rounded bg-green-950/60 text-green-400 border border-green-900/50">Villageois - Outsider</span>
+                                <p class="text-sm leading-relaxed opacity-85">La première nuit, il reçoit le nom de 2 joueurs et sait que l'un d'eux est l'Empoisonneur.</p>
+                            </article>
+                            <article class="grimoire-card rounded-lg p-3">
+                                <div class="flex items-center justify-between gap-2 mb-1">
+                                    <span class="font-display text-lg text-gold">Majordome</span>
+                                    <span class="role-tag tag-outsider">Villageois - Outsider</span>
                                 </div>
-                                <p class="text-gray-300 text-xs">Chaque nuit, il choisit son maître. Il ne pourra voter pour un joueur que si son maître décide également de voter.</p>
-                            </div>
-
+                                <p class="text-sm leading-relaxed opacity-85">Chaque nuit, il choisit son maître. Il ne pourra voter pour un joueur que si son maître décide également de voter.</p>
+                            </article>
                         </div>
 
                         <!-- Section Règles -->
-                        <div id="grimoire-tab-rules" class="space-y-3 hidden">
-                            <div class="bg-clock-darker border border-clock-border/30 rounded-xl p-3 space-y-2">
-                                <h4 class="font-bold text-clock-gold">Phase de Jour - Discussions</h4>
-                                <p>Discutez en public ou en privé avec vos voisins. L'objectif est d'échanger des informations ou de bluffer pour démasquer les Démons.</p>
-                            </div>
-                            <div class="bg-clock-darker border border-clock-border/30 rounded-xl p-3 space-y-2">
-                                <h4 class="font-bold text-clock-gold">Phase de Jour - Vote</h4>
-                                <p>Les joueurs peuvent désigner un suspect à exécuter. Celui ayant recueilli la majorité des voix meurt. En cas d'égalité, personne ne meurt.</p>
-                            </div>
-                            <div class="bg-clock-darker border border-clock-border/30 rounded-xl p-3 space-y-2">
-                                <h4 class="font-bold text-clock-gold">Phase de Nuit</h4>
-                                <p>Le village s'endort. Les rôles à pouvoir (Voyante, Moine, Démon...) sont appelés dans l'ombre pour effectuer leurs actions secrètes.</p>
-                            </div>
-                            <div class="bg-clock-darker border border-clock-border/30 rounded-xl p-3 space-y-2">
-                                <h4 class="font-bold text-clock-gold">Morts</h4>
-                                <p>Les morts continuent de jouer. Leur rôle n'est pas révélé, ils continuent de participer aux discussions et peuvent encore voter une fois dans la partie. Ils ne peuvent plus utiliser leur pouvoir nocturne.</p>
-                            </div>
+                        <div id="grimoire-tab-rules" class="flex flex-col gap-2 hidden">
+                            <article class="grimoire-card rounded-lg p-3">
+                                <h4 class="font-display text-lg text-gold mb-1">Phase de Jour - Discussions</h4>
+                                <p class="text-sm leading-relaxed opacity-85">Discutez en public ou en privé avec vos voisins. L'objectif est d'échanger des informations ou de bluffer pour démasquer les Démons.</p>
+                            </article>
+                            <article class="grimoire-card rounded-lg p-3">
+                                <h4 class="font-display text-lg text-gold mb-1">Phase de Jour - Vote</h4>
+                                <p class="text-sm leading-relaxed opacity-85">Les joueurs peuvent désigner un suspect à exécuter. Celui ayant recueilli la majorité des voix meurt. En cas d'égalité, personne ne meurt.</p>
+                            </article>
+                            <article class="grimoire-card rounded-lg p-3">
+                                <h4 class="font-display text-lg text-gold mb-1">Phase de Nuit</h4>
+                                <p class="text-sm leading-relaxed opacity-85">Le village s'endort. Les rôles à pouvoir (Voyante, Moine, Démon...) sont appelés dans l'ombre pour effectuer leurs actions secrètes.</p>
+                            </article>
+                            <article class="grimoire-card rounded-lg p-3">
+                                <h4 class="font-display text-lg text-gold mb-1">Morts</h4>
+                                <p class="text-sm leading-relaxed opacity-85">Les morts continuent de jouer. Leur rôle n'est pas révélé, ils continuent de participer aux discussions et peuvent encore voter une fois dans la partie. Ils ne peuvent plus utiliser leur pouvoir nocturne.</p>
+                            </article>
                         </div>
-
                     </div>
 
                     <!-- Bouton Fermer -->
-                    <button onclick="closeGrimoireModal()" class="w-full mt-4 bg-clock-gold text-clock-dark py-2 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-yellow-600 transition-colors">
-                        Fermer le Grimoire
-                    </button>
+                    <button onclick="closeGrimoireModal()" class="btn-seal mt-4 w-full shrink-0">Fermer le Grimoire</button>
                 </div>
             </div>
 
@@ -393,113 +381,125 @@
         </main>
     </div>
 
-    <!-- ================= 3. POPINS & MODALES DYNAMIQUES ================= -->
-
-    <!-- Modale de fin de partie (victoire / défaite) -->
-    <div id="modal-gameover" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-        <div class="panel border border-clock-border p-8 rounded-2xl max-w-md w-full mx-4 text-center space-y-4">
-            <h2 id="gameover-title" class="text-2xl font-bold text-clock-gold">Fin de la Partie</h2>
-            <p id="gameover-desc" class="text-base text-gray-300">Le village a rendu son verdict.</p>
-            <button onclick="location.reload()" class="bg-clock-red text-white px-6 py-2 rounded-xl text-xs font-bold uppercase tracking-wider">Nouvelle partie</button>
-        </div>
-    </div>
+    <!-- ================= 3. POPINS & MODALES DYNAMIQUES =================
+         Base commune : .modal-backdrop (voile) + .modal-card (carte), data-tone pilote la couleur
+         d'accent : gold (neutre), day (réveil), night (nuit), blood (mort / vote). -->
 
     <!-- Modale d'attribution du rôle de l'humain (début de partie) -->
-    <div id="modal-role-reveal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md">
-        <div class="panel border-2 border-clock-gold p-8 rounded-2xl max-w-md w-full mx-4 text-center space-y-4 shadow-2xl">
-            <span class="text-4xl">📜</span>
-            <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-widest">Le Grimoire s'ouvre</h3>
-            <h2 id="modal-role-title" class="text-2xl font-bold text-clock-gold">Votre rôle secret</h2>
-            <p id="modal-role-description" class="text-sm text-gray-300 leading-relaxed italic">
+    <div id="modal-role-reveal" class="modal-backdrop hidden">
+        <div class="modal-card w-[440px] text-center" data-tone="gold" role="dialog" aria-modal="true" aria-labelledby="modal-role-title">
+            <span class="modal-icon mx-auto mb-3"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="size-6"><path d="M15 12h-5"></path><path d="M15 8h-5"></path><path d="M19 17V5a2 2 0 0 0-2-2H4"></path><path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3"></path></svg></span>
+            <p class="modal-kicker ornament">Le Grimoire s'ouvre</p>
+            <h2 id="modal-role-title" class="modal-title text-3xl my-2">Votre rôle secret</h2>
+            <p id="modal-role-description" class="font-serif text-base italic leading-relaxed opacity-90">
                 Description de votre rôle et de votre capacité spéciale dans l'ombre du village.
             </p>
-            <button onclick="closeRoleRevealModal()" class="w-full bg-clock-gold hover:bg-yellow-600 text-clock-dark font-bold py-3 rounded-xl text-xs uppercase tracking-wider transition">
-                Compris, commençons à jouer !
-            </button>
+            <button onclick="closeRoleRevealModal()" class="btn-seal mt-6 w-full">Compris, commençons à jouer !</button>
         </div>
     </div>
 
     <!-- Modale d'interaction Agent - Humain (proposition de conversation) -->
-    <div id="modal-agent-whisper" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-        <div class="panel border border-clock-border p-6 rounded-2xl max-w-sm w-full mx-4 space-y-4">
-            <h3 class="text-xs font-semibold text-clock-gold uppercase tracking-wider">Demande d'entretien</h3>
-            <p id="agent-whisper-text" class="text-sm text-gray-300 italic">Un agent souhaite s'entretenir discrètement avec vous.</p>
-            <div class="flex space-x-2">
-                <button onclick="acceptAgentWhisper()" class="flex-1 bg-green-900/50 text-green-300 border border-green-700 py-2 rounded-xl text-xs font-semibold">Accepter</button>
-                <button onclick="closeAgentWhisper()" class="flex-1 bg-gray-800 text-gray-400 py-2 rounded-xl text-xs">Ignorer</button>
+    <div id="modal-agent-whisper" class="modal-backdrop hidden">
+        <div class="modal-card w-[400px]" data-tone="day" role="dialog" aria-modal="true" aria-labelledby="agent-whisper-title">
+            <div class="flex items-center gap-3 mb-3">
+                <span class="modal-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="size-5"><path d="M16 10a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 14.286V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path><path d="M20 9a2 2 0 0 1 2 2v10.286a.71.71 0 0 1-1.212.502l-2.202-2.202A2 2 0 0 0 17.172 19H10a2 2 0 0 1-2-2v-1"></path></svg></span>
+                <div>
+                    <p class="modal-kicker">Un murmure dans l'ombre</p>
+                    <h3 id="agent-whisper-title" class="modal-title">Demande d'entretien</h3>
+                </div>
+            </div>
+            <p id="agent-whisper-text" class="font-serif text-base italic leading-relaxed opacity-90">Un agent souhaite s'entretenir discrètement avec vous.</p>
+            <!-- Boutons remplacés par showAgentWhisperModal / refuseAgentWhisper -->
+            <div id="agent-whisper-actions" class="flex gap-2 mt-5">
+                <button onclick="acceptAgentWhisper()" class="btn-seal flex-1">Accepter</button>
+                <button onclick="refuseAgentWhisper()" class="btn-ghost flex-1">Ignorer</button>
             </div>
         </div>
     </div>
 
-    <!-- Modale Résultat des Votes -->
-    <div id="modal-vote-result" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 hidden">
-        <div class="bg-clock-dark border border-clock-border rounded-2xl p-6 w-[420px] shadow-2xl font-mono">
-            <!-- En-tête -->
-            <div id="vote-result-header" class="font-bold text-clock-gold uppercase tracking-wider mb-4 text-center text-sm border-b border-clock-border/40 pb-2">
-                JOUR X - EXÉCUTION
-            </div>
+    <!-- Modale du joueur exécuté (les résultats détaillés sont dans l'encadré d'action) -->
+    <div id="modal-vote-result" class="modal-backdrop hidden">
+        <div class="modal-card w-[420px] text-center" data-tone="blood" role="dialog" aria-modal="true" aria-labelledby="vote-result-header">
+            <span class="modal-icon mx-auto mb-3"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="size-6"><path d="M12 3v18"></path><path d="m19 8 3 8a5 5 0 0 1-6 0zV7"></path><path d="M3 7h1a17 17 0 0 0 8-2 17 17 0 0 0 8 2h1"></path><path d="m5 8 3 8a5 5 0 0 1-6 0zV7"></path><path d="M7 21h10"></path></svg></span>
+            <p class="modal-kicker ornament">Le verdict du village</p>
+            <h3 id="vote-result-header" class="modal-title my-2">Jour X - Exécution</h3>
 
             <!-- MESSAGE SI LE JOUEUR MEURT -->
-            <div id="vote-death-notice" class="hidden bg-clock-red/20 border border-clock-red/50 rounded-xl p-3 mb-4 text-xs text-center text-red-300">
-                <strong class="text-red-400 block mb-1">Vous avez été exécuté par le village.</strong>
+            <div id="vote-death-notice" class="modal-notice notice-blood hidden">
+                <strong class="block mb-1 font-display text-lg">Le village a décidé de vous exécuter...</strong>
                 La partie n'est pas finie, vous pouvez encore faire gagner votre camp. Vous pouvez continuer à discuter avec les autres joueurs et il vous reste un vote pour le reste de la partie.
             </div>
-            
-            <!-- Liste des votes -->
-            <ul id="vote-result-list" class="space-y-1.5 pl-2 border-l border-clock-border/40 mb-6 text-xs max-h-48 overflow-y-auto">
-                <!-- Injecté dynamiquement par JS -->
-            </ul>
 
-            <!-- Bouton de fermeture -->
-            <button onclick="closeVoteResultModal()" class="w-full bg-clock-red text-white py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-red-700 transition-colors">
-                Continuer la partie
-            </button>
+            <!-- Liste des votes (conservée pour compatibilité, le détail est affiché dans l'encadré d'action) -->
+            <ul id="vote-result-list" class="hidden"></ul>
+
+            <button onclick="closeVoteResultModal()" class="btn-seal mt-5 w-full">Continuer la partie</button>
         </div>
     </div>
 
-    <!-- Modale Résultat de la Nuit -->
-    <div id="modal-night-result" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 hidden">
-        <div class="bg-clock-dark border border-clock-border rounded-2xl p-6 w-[420px] shadow-2xl font-mono text-center">
-            <!-- En-tête -->
-            <div class="font-bold text-clock-gold uppercase tracking-wider mb-4 text-sm border-b border-clock-border/40 pb-2">
-                RÉVEIL DU VILLAGE
-            </div>
-            
+    <!-- Modale Résultat de la Nuit (réveil du village) -->
+    <div id="modal-night-result" class="modal-backdrop hidden">
+        <div class="modal-card w-[420px] text-center" data-tone="day" role="dialog" aria-modal="true" aria-labelledby="night-result-title">
+            <span class="modal-icon mx-auto mb-3"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="size-6"><path d="M12 2v8"></path><path d="m4.93 10.93 1.41 1.41"></path><path d="M2 18h2"></path><path d="M20 18h2"></path><path d="m19.07 10.93-1.41 1.41"></path><path d="M22 22H2"></path><path d="m8 6 4-4 4 4"></path><path d="M16 18a4 4 0 0 0-8 0"></path></svg></span>
+            <p class="modal-kicker ornament">L'aube se lève</p>
+            <h3 id="night-result-title" class="modal-title my-2">Réveil du village</h3>
+
             <!-- Message de la nuit -->
-            <div id="night-result-message" class="text-white text-xs mb-4">
+            <div id="night-result-message" class="font-serif text-base italic leading-relaxed opacity-90">
                 <!-- Injecté dynamiquement par JS -->
             </div>
 
             <!-- MESSAGE SI LE JOUEUR MEURT -->
-            <div id="night-death-notice" class="hidden bg-clock-red/20 border border-clock-red/50 rounded-xl p-3 mb-6 text-xs text-center text-red-300">
-                <strong class="text-red-400 block mb-1">Vous avez été tué par le Diablotin.</strong>
+            <div id="night-death-notice" class="modal-notice notice-blood hidden">
+                <strong class="block mb-1 font-display text-lg">Vous avez été tué·e par le Diablotin.</strong>
                 La partie n'est pas finie, vous pouvez encore faire gagner les Villageois. Vous pouvez continuer à discuter avec les autres joueurs et il vous reste un vote pour le reste de la partie.
             </div>
 
-            <!-- Bouton de fermeture -->
-            <button onclick="closeNightResultModal()" class="w-full bg-clock-red text-white py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-red-700 transition-colors">
-                Commencer la journée
-            </button>
+            <button onclick="closeNightResultModal()" class="btn-seal mt-5 w-full">Commencer la journée</button>
         </div>
     </div>
 
-    <!-- Modale d'Information Nocturne -->
-    <div id="modal-night-info" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 hidden">
-        <div class="bg-clock-dark border border-clock-border rounded-2xl p-6 w-[420px] shadow-2xl font-mono text-center">
-            <!-- En-tête -->
-            <div class="font-bold text-clock-gold uppercase tracking-wider mb-4 text-sm border-b border-clock-border/40 pb-2">
-                RÉVÉLATION DE LA NUIT
-            </div>
-            
+    <!-- Modale d'Information Nocturne (information reçue hors action, ex. alliés la première nuit) -->
+    <div id="modal-night-info" class="modal-backdrop hidden">
+        <div class="modal-card w-[420px] text-center" data-tone="night" role="dialog" aria-modal="true" aria-labelledby="night-info-title">
+            <span class="modal-icon mx-auto mb-3"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="size-6"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"></path></svg></span>
+            <p class="modal-kicker ornament">Dans le secret de la nuit</p>
+            <h3 id="night-info-title" class="modal-title my-2">Révélation de la nuit</h3>
+
             <!-- Contenu de l'information reçue -->
-            <div id="night-info-content" class="text-white text-xs mb-6 py-4 bg-clock-darker border border-clock-border/30 rounded-xl px-4">
+            <div id="night-info-content" class="modal-notice notice-night">
                 <!-- Injecté dynamiquement par JS selon le rôle -->
             </div>
 
-            <!-- Bouton de fermeture -->
-            <button onclick="closeNightInfoModal()" class="w-full bg-clock-gold text-clock-dark py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-yellow-600 transition-colors">
-                Compris, laisse-moi dormir maintenant.
-            </button>
+            <button onclick="closeNightInfoModal()" class="btn-seal mt-5 w-full">Compris, laissez-moi dormir</button>
+        </div>
+    </div>
+
+    <!-- Modale de connexion perdue -->
+    <div id="modal-disconnected" class="modal-backdrop hidden">
+        <div class="modal-card w-[420px] text-center" data-tone="blood" role="alertdialog" aria-modal="true" aria-labelledby="disconnected-title">
+            <span class="modal-icon mx-auto mb-3"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="size-6"><path d="M12 20h.01"></path><path d="M8.5 16.429a5 5 0 0 1 7 0"></path><path d="M5 12.859a10 10 0 0 1 5.17-2.69"></path><path d="M19 12.859a10 10 0 0 0-2.007-1.523"></path><path d="M2 8.82a15 15 0 0 1 4.177-2.643"></path><path d="M22 8.82a15 15 0 0 0-11.288-3.764"></path><path d="m2 2 20 20"></path></svg></span>
+            <p class="modal-kicker ornament">Le lien est rompu</p>
+            <h3 id="disconnected-title" class="modal-title my-2">Connexion perdue</h3>
+            <p class="font-serif text-base italic leading-relaxed opacity-90">
+                La connexion avec le serveur a été interrompue. Les messages et actions ne sont plus transmis.
+            </p>
+            <div class="flex gap-2 mt-5">
+                <button onclick="location.reload()" class="btn-seal flex-1">Recharger la page</button>
+                <button onclick="closeDisconnectedModal()" class="btn-ghost flex-1">Rester ici</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modale de fin de partie (victoire / défaite) -->
+    <div id="modal-gameover" class="modal-backdrop hidden">
+        <div id="gameover-card" class="modal-card w-[460px] text-center" data-tone="gold" role="dialog" aria-modal="true" aria-labelledby="gameover-title">
+            <span class="modal-icon mx-auto mb-3"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="size-6"><path d="M10 14.66v1.626a2 2 0 0 1-.976 1.696A5 5 0 0 0 7 21.978"></path><path d="M14 14.66v1.626a2 2 0 0 0 .976 1.696A5 5 0 0 1 17 21.978"></path><path d="M18 9h1.5a1 1 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M6 9a6 6 0 0 0 12 0V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1z"></path><path d="M6 9H4.5a1 1 0 0 1 0-5H6"></path></svg></span>
+            <p class="modal-kicker ornament">Fin de la partie</p>
+            <h2 id="gameover-title" class="modal-title text-3xl my-2">Fin de la Partie</h2>
+            <p id="gameover-outcome" class="font-display text-xl hidden"></p>
+            <p id="gameover-desc" class="font-serif text-base italic leading-relaxed opacity-90 mt-2">Le village a rendu son verdict.</p>
+            <button onclick="location.reload()" class="btn-seal mt-6 w-full">Nouvelle partie</button>
         </div>
     </div>
 

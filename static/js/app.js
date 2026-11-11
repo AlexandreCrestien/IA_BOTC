@@ -47,6 +47,7 @@ function joinGame() {
 
     ws.onclose = function() {
         updateConnectionBadge(false);
+        showDisconnectedModal();
         appendSystemMessage("Connexion fermée par le serveur.");
     };
 
@@ -85,7 +86,7 @@ function handleServerMessage(data) {
             setAnnouncement(data.text);
             break;
         case "agent_whisper_request":
-            triggerAgentWhisper(data.agent_id, data.agent_name, data.message);
+            showAgentWhisperModal(data.agent_id, data.agent_name, data.message);
             break;
         case "game_over":
             triggerGameOver(data.winner, data.details);
@@ -1095,20 +1096,21 @@ function setAnnouncement(text) {
 
 let currentWhisperAgent = null;
 
-function showAgentWhisperModal(agentId) {
+function showAgentWhisperModal(agentId, agentName, message) {
     currentWhisperAgent = agentId;
     const modal = document.getElementById('modal-agent-whisper');
     const textEl = document.getElementById('agent-whisper-text');
-    const actionsEl = modal.querySelector('.flex');
+    const actionsEl = document.getElementById('agent-whisper-actions');
+    const name = agentName || getPlayerName(agentId);
 
     if (textEl) {
-        textEl.innerText = `${agentId} souhaite s'entretenir discrètement avec vous dans l'ombre.`;
+        textEl.innerText = message || `${name} souhaite s'entretenir discrètement avec vous dans l'ombre.`;
     }
 
     if (actionsEl) {
         actionsEl.innerHTML = `
-            <button onclick="acceptAgentWhisper()" class="flex-1 bg-green-900/50 text-green-300 border border-green-700 py-2 rounded-xl text-xs font-semibold">Accepter</button>
-            <button onclick="refuseAgentWhisper()" class="flex-1 bg-gray-800 text-gray-400 py-2 rounded-xl text-xs">Ignorer</button>
+            <button onclick="acceptAgentWhisper()" class="btn-seal flex-1">Accepter</button>
+            <button onclick="refuseAgentWhisper()" class="btn-ghost flex-1">Ignorer</button>
         `;
     }
 
@@ -1118,16 +1120,16 @@ function showAgentWhisperModal(agentId) {
 function refuseAgentWhisper() {
     const modal = document.getElementById('modal-agent-whisper');
     const textEl = document.getElementById('agent-whisper-text');
-    const actionsEl = modal.querySelector('.flex');
+    const actionsEl = document.getElementById('agent-whisper-actions');
 
     if (textEl) {
-        textEl.innerText = `Vous avez refusé l'entretien avec ${currentWhisperAgent || 'l\'agent'}. Que souhaitez-vous faire ?`;
+        textEl.innerText = `Vous avez refusé l'entretien avec ${currentWhisperAgent ? getPlayerName(currentWhisperAgent) : 'l\'agent'}. Que souhaitez-vous faire ?`;
     }
 
     if (actionsEl) {
         actionsEl.innerHTML = `
-            <button onclick="closeAgentWhisperModalOnly()" class="flex-1 bg-clock-dark border border-clock-border text-gray-300 py-2 rounded-xl text-xs hover:border-clock-gold">Lancer une discussion</button>
-            <button onclick="triggerVotePhaseFromModal()" class="flex-1 bg-clock-red text-white py-2 rounded-xl text-xs font-bold uppercase">Lancer le vote</button>
+            <button onclick="closeAgentWhisperModalOnly()" class="btn-ghost flex-1">Lancer une discussion</button>
+            <button onclick="triggerVotePhaseFromModal()" class="btn-seal btn-blood flex-1">Lancer le vote</button>
         `;
     }
 
@@ -1193,7 +1195,7 @@ function showVoteResultModal(turnNumber, executedPlayer, votesArray) {
     const listEl = document.getElementById('vote-result-list');
     const deathNoticeEl = document.getElementById('vote-death-notice');
 
-    if (!modal || !headerEl || !listEl) return;
+    if (!modal || !headerEl) return;
 
     const currentUsername = typeof playerId !== 'undefined' ? playerId : null;
 
@@ -1223,7 +1225,7 @@ function showVoteResultModal(turnNumber, executedPlayer, votesArray) {
     }
 
     const executionText = executedPlayer ? `${executedPlayer} exécuté` : "pas d'exécution";
-    headerEl.innerText = `JOUR ${turnNumber} - ${executionText}`;
+    headerEl.innerText = `Jour ${turnNumber} — ${executionText}`;
 
     let html = '';
     if (!votesArray || votesArray.length === 0) {
@@ -1238,7 +1240,7 @@ function showVoteResultModal(turnNumber, executedPlayer, votesArray) {
             `;
         });
     }
-    listEl.innerHTML = html;
+    if (listEl) listEl.innerHTML = html;
 
     // Les résultats s'affichent dans l'encadré d'action ; la modale ne s'ouvre
     // que si le joueur lui-même est exécuté (message important à ne pas manquer).
@@ -1265,15 +1267,15 @@ function showNightResultModal(turnNumber, deadPlayerName) {
 
     if (deadPlayerName) {
         if (deadPlayerName === currentUsername) {
-            messageEl.innerHTML = `L'obscurité a frappé cette nuit...`;
+            messageEl.innerHTML = `L'obscurité a frappé cette nuit…`;
             if (deathNoticeEl) deathNoticeEl.classList.remove('hidden');
         } else {
-            messageEl.innerHTML = `Les ténèbres ont frappé...<br><br><span class="text-red-400 font-bold text-sm">${deadPlayerName}</span> est mort cette nuit.`;
+            messageEl.innerHTML = `Les ténèbres ont frappé…<br><span class="modal-highlight-blood">${escapeHtml(getPlayerName(deadPlayerName))}</span> est mort·e cette nuit.`;
             if (deathNoticeEl) deathNoticeEl.classList.add('hidden');
         }
         nightLogText = `${deadPlayerName} est mort cette nuit.`;
     } else {
-        messageEl.innerHTML = `Les esprits ont protégé le village...<br><br><span class="text-green-400 font-bold text-sm">Personne n'est mort</span> cette nuit !`;
+        messageEl.innerHTML = `Les esprits ont protégé le village…<br><span class="modal-highlight-good">Personne n'est mort</span> cette nuit !`;
         if (deathNoticeEl) deathNoticeEl.classList.add('hidden');
         nightLogText = "Personne n'est mort cette nuit.";
     }
@@ -1311,8 +1313,8 @@ function showNightInfoModal(turnNumber, infoText) {
     if (!modal || !contentEl) return;
 
     contentEl.innerHTML = `
-        <span class="text-clock-gold font-bold block mb-2">Tour ${turnNumber}</span>
-        <p class="text-gray-200">${infoText}</p>
+        <span class="modal-kicker block mb-2">Tour ${escapeHtml(String(turnNumber ?? ''))}</span>
+        <p class="font-serif text-base italic leading-relaxed">${escapeHtml(infoText)}</p>
     `;
 
     // Enregistrer l'information de rôle dans l'historique global de nuit
@@ -1345,9 +1347,36 @@ window.closeNightInfoModal = closeNightInfoModal;
 
 
 function triggerGameOver(winner, details) {
+    gameIsOver = true;
     document.getElementById('gameover-title').innerText = `Victoire des ${winner}`;
     document.getElementById('gameover-desc').innerText = details;
+
+    // Victoire ou défaite du joueur, si son rôle est connu
+    const outcomeEl = document.getElementById('gameover-outcome');
+    const card = document.getElementById('gameover-card');
+    if (outcomeEl && card && gameState.roleInfo?.name && resolveRoleKey(gameState.roleInfo.name)) {
+        const evilWon = /d[ée]mon|mal|sbire/i.test(String(winner));
+        const playerWon = evilWon === isEvilRole();
+        outcomeEl.innerText = playerWon ? "Votre camp l'emporte !" : "Votre camp a perdu…";
+        outcomeEl.classList.remove('hidden');
+        card.dataset.tone = playerWon ? 'gold' : 'blood';
+        outcomeEl.style.color = playerWon ? 'var(--gold)' : 'oklch(0.66 0.22 25)';
+    }
+
     document.getElementById('modal-gameover').classList.remove('hidden');
+}
+
+// ================= CONNEXION PERDUE =================
+let gameIsOver = false;
+
+function showDisconnectedModal() {
+    const gameVisible = !document.getElementById('screen-game')?.classList.contains('hidden');
+    if (!gameVisible || gameIsOver) return; // pas pendant l'accueil ni après la fin de partie
+    document.getElementById('modal-disconnected')?.classList.remove('hidden');
+}
+
+function closeDisconnectedModal() {
+    document.getElementById('modal-disconnected')?.classList.add('hidden');
 }
 
 function updateSuspicion(targetId, value) {
@@ -1372,23 +1401,17 @@ function closeGrimoireModal() {
 }
 
 function switchGrimoireTab(tabName) {
-    const rolesSection = document.getElementById('grimoire-tab-roles');
-    const rulesSection = document.getElementById('grimoire-tab-rules');
-    const btnRoles = document.getElementById('grimoire-tab-btn-roles');
-    const btnRules = document.getElementById('grimoire-tab-btn-rules');
-
-    if (tabName === 'roles') {
-        rolesSection.classList.remove('hidden');
-        rulesSection.classList.add('hidden');
-        btnRoles.className = "flex-1 py-2 font-bold text-clock-gold border-b-2 border-clock-gold transition";
-        btnRules.className = "flex-1 py-2 font-medium text-gray-400 hover:text-gray-200 transition";
-    } else {
-        rolesSection.classList.add('hidden');
-        rulesSection.classList.remove('hidden');
-        btnRules.className = "flex-1 py-2 font-bold text-clock-gold border-b-2 border-clock-gold transition";
-        btnRoles.className = "flex-1 py-2 font-medium text-gray-400 hover:text-gray-200 transition";
-    }
+    const showRoles = tabName === 'roles';
+    document.getElementById('grimoire-tab-roles')?.classList.toggle('hidden', !showRoles);
+    document.getElementById('grimoire-tab-rules')?.classList.toggle('hidden', showRoles);
+    document.getElementById('grimoire-tab-btn-roles')?.classList.toggle('is-active', showRoles);
+    document.getElementById('grimoire-tab-btn-rules')?.classList.toggle('is-active', !showRoles);
 }
+
+// Échap ferme le Grimoire
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeGrimoireModal();
+});
 
 // Visibilité globale pour le HTML
 window.openGrimoireModal = openGrimoireModal;

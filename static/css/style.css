@@ -505,3 +505,188 @@ section.panel div {
 .unread-badge[hidden] {
   display: none;
 }
+
+/* ==========================================================
+   MODALES — base commune
+   .modal-backdrop : voile sombre flouté ; .modal-card : carte dorée.
+   data-tone sur la carte : gold | day | night | blood (couleur d'accent).
+   ========================================================== */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background-color: oklch(0.08 0.02 295 / 78%);
+  backdrop-filter: blur(6px);
+}
+.modal-backdrop.hidden { display: none; }
+
+.modal-card {
+  --tone: var(--gold);
+  --tone-glow: oklch(0.76 0.115 80 / 22%);
+  position: relative;
+  max-width: 100%;
+  border-radius: 1rem;
+  padding: 1.5rem;
+  border: 1px solid color-mix(in oklab, var(--gold-dim) 50%, transparent);
+  background-color: oklch(0.17 0.022 295 / 96%);
+  background-image: radial-gradient(ellipse at 50% 0%, var(--tone-glow), transparent 65%);
+  box-shadow:
+    var(--shadow-panel),
+    0 0 30px -8px oklch(0.76 0.115 80 / 25%),
+    inset 0 0 0 1px oklch(0.76 0.115 80 / 12%);
+  color: var(--foreground);
+  animation: modal-rise 0.35s ease-out;
+}
+.modal-card[data-tone="day"]   { --tone: var(--day);   --tone-glow: oklch(0.7 0.1 78 / 18%); }
+.modal-card[data-tone="night"] { --tone: oklch(0.62 0.14 285); --tone-glow: oklch(0.35 0.12 280 / 40%); }
+.modal-card[data-tone="blood"] { --tone: oklch(0.66 0.22 25);  --tone-glow: oklch(0.5 0.18 22 / 28%); }
+
+@keyframes modal-rise {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.modal-kicker {
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.3em;
+  color: var(--gold-dim);
+}
+.modal-title {
+  font-family: "IM Fell English SC", "Cormorant Garamond", Georgia, serif;
+  font-size: 1.5rem;
+  line-height: 1.15;
+  color: var(--tone);
+}
+.modal-card[data-tone="gold"] .modal-title {
+  background-image: var(--gradient-gilt);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.modal-icon {
+  display: flex;
+  width: 3rem;
+  height: 3rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in oklab, var(--gold-dim) 60%, transparent);
+  background-color: color-mix(in oklab, var(--tone) 12%, transparent);
+  color: var(--tone);
+}
+
+.modal-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  color: color-mix(in oklab, var(--foreground) 60%, transparent);
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+.modal-close:hover { color: var(--gold); background-color: color-mix(in oklab, var(--gold) 10%, transparent); }
+
+/* Encadrés de message dans les modales */
+.modal-notice {
+  margin-top: 1rem;
+  border-radius: 0.75rem;
+  padding: 0.875rem 1rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+.modal-notice.hidden { display: none; }
+.notice-blood {
+  border: 1px solid color-mix(in oklab, var(--blood) 55%, transparent);
+  background-color: color-mix(in oklab, var(--blood) 15%, transparent);
+  color: oklch(0.85 0.06 25);
+}
+.notice-blood strong { color: oklch(0.72 0.2 25); }
+.notice-night {
+  border: 1px solid color-mix(in oklab, var(--night) 60%, transparent);
+  background-color: color-mix(in oklab, var(--night) 18%, transparent);
+}
+
+/* Boutons des modales */
+.btn-seal,
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 0.5rem;
+  padding: 0.6rem 1rem;
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transition: filter 0.15s ease, border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+.btn-seal {
+  background-image: var(--gradient-seal);
+  box-shadow: var(--shadow-seal);
+  border: 1px solid oklch(0.76 0.115 80 / 30%);
+  color: oklch(0.88 0.16 88);
+  text-shadow: 0 1px 2px oklch(0.1 0.02 295 / 85%);
+}
+.btn-seal:hover { filter: brightness(1.1); border-color: oklch(0.76 0.115 80 / 60%); }
+.btn-ghost {
+  border: 1px solid color-mix(in oklab, var(--gold-dim) 50%, transparent);
+  background-color: color-mix(in oklab, var(--background) 50%, transparent);
+  color: color-mix(in oklab, var(--foreground) 80%, transparent);
+}
+.btn-ghost:hover { border-color: var(--gold); color: var(--gold); }
+.btn-blood {
+  background-image: linear-gradient(135deg, oklch(0.52 0.19 22), oklch(0.38 0.15 18));
+  box-shadow: 0 8px 24px -8px oklch(0.5 0.18 22 / 70%);
+}
+
+/* Grimoire : onglets, cartes, étiquettes de camp */
+.grimoire-tab {
+  flex: 1;
+  padding: 0.5rem 0;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: 1rem;
+  color: color-mix(in oklab, var(--foreground) 60%, transparent);
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.grimoire-tab:hover { color: var(--foreground); }
+.grimoire-tab.is-active {
+  color: var(--gold);
+  font-weight: 600;
+  border-bottom-color: var(--gold);
+}
+.grimoire-card {
+  border: 1px solid color-mix(in oklab, var(--gold-dim) 35%, transparent);
+  background-color: color-mix(in oklab, var(--secondary) 55%, transparent);
+}
+.role-tag {
+  flex-shrink: 0;
+  border-radius: 9999px;
+  padding: 0.1rem 0.6rem;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border: 1px solid currentColor;
+}
+.tag-demon    { color: oklch(0.66 0.22 25);  background-color: oklch(0.5 0.18 22 / 15%); }
+.tag-minion   { color: oklch(0.7 0.15 330);  background-color: oklch(0.47 0.16 315 / 18%); }
+.tag-good     { color: oklch(0.75 0.12 150); background-color: oklch(0.6 0.12 150 / 12%); }
+.tag-outsider { color: oklch(0.78 0.1 200);  background-color: oklch(0.6 0.1 200 / 12%); }
+
+/* Mots mis en avant dans le texte des modales */
+.modal-highlight-blood { color: oklch(0.72 0.2 25); font-weight: 700; font-style: normal; }
+.modal-highlight-good  { color: oklch(0.75 0.12 150); font-weight: 700; font-style: normal; }
+@media (prefers-reduced-motion: reduce) {
+  .modal-card { animation: none; }
+}
