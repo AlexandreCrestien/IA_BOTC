@@ -358,8 +358,13 @@
                 </div>
 
                 <!-- Bas : Liste des joueurs, statuts & notes de soupçon -->
-                <div class="flex-1 p-4 flex flex-col overflow-hidden">
-                    <div id="players-notes-list" class="flex-1 overflow-y-auto space-y-2 pr-1">
+                <!-- Prend toute la hauteur restante sous l'encadré d'action ; la liste défile. -->
+                <div class="flex-1 min-h-0 px-3 pb-3 pt-2 flex flex-col">
+                    <div class="flex items-baseline justify-between gap-2 mb-2 shrink-0">
+                        <h3 class="font-display text-lg text-gilt">Les convives</h3>
+                        <span id="players-count" class="text-xs opacity-60 whitespace-nowrap"></span>
+                    </div>
+                    <div id="players-notes-list" class="flex-1 min-h-0 overflow-y-auto flex flex-col gap-3 pr-1">
                         <div class="text-gray-500 italic text-sm">Chargement des joueurs...</div>
                     </div>
                 </div>

@@ -100,6 +100,8 @@ function handleServerMessage(data) {
             showNightResultModal(data.turn, data.dead_player); // data.turn et data.dead_player
             break;
         case "night_info":
+            // allies (facultatif) : révélation des alliés du camp du mal, la première nuit : [{ id, role }]
+            if (Array.isArray(data.allies)) revealAllies(data.allies);
             showNightInfoModal(data.turn, data.info); // Information spécifique reçue la nuit selon le rôle
             break;
         case "action_request":
@@ -512,40 +514,151 @@ function renderRoundTable() {
     table.innerHTML = html;
 }
 
+// Soupçons notés par le joueur, stockés à part pour survivre aux "game_state" du serveur.
+const suspicions = {}; // playerId -> valeur du select
+
+// Options de la liste "Je soupçonne…". `role` = nom du rôle (FR) pour l'exclusion du rôle du joueur.
+const SUSPICION_OPTIONS = {
+    camps: [
+        { value: "Townsfolk", label: "Villageois (gentil)" },
+        { value: "Demon",     label: "Démon (méchant)" }
+    ],
+    roles: [
+        { value: "diablotin",    label: "Diablotin (Démon)",                 role: "Diablotin",    evil: true },
+        { value: "empoisonneur", label: "Empoisonneur (Démon - Sbire)",      role: "Empoisonneur", evil: true },
+        { value: "voyante",      label: "Voyante (Villageois)",              role: "Voyante" },
+        { value: "moine",        label: "Moine (Villageois)",                role: "Moine" },
+        { value: "detective",    label: "Détective (Villageois)",            role: "Détective" },
+        { value: "majordome",    label: "Majordome (Villageois - Outsider)", role: "Majordome" }
+    ]
+};
+
+function normalizeText(s) {
+    return String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+}
+
+// Allié connu (rôles maléfiques uniquement) : { id, role } ou undefined
+function getAlly(id) {
+    return (gameState.allies || []).find(a => a.id === id);
+}
+
+// Rôle maléfique du joueur humain (Diablotin ou Empoisonneur)
+function isEvilRole() {
+    return ["imp", "poisoner"].includes(resolveRoleKey(gameState.roleInfo?.name));
+}
+
+// Le joueur est du camp du mal et ses alliés lui ont été révélés (première nuit) :
+// il sait alors que tous les autres joueurs sont du camp du bien.
+function knowsEvilTeam() {
+    return isEvilRole() && Array.isArray(gameState.allies);
+}
+
+// Camp du mal, avant la révélation : les soupçons sont verrouillés.
+function awaitsAllyReveal() {
+    return isEvilRole() && !Array.isArray(gameState.allies);
+}
+
+function revealAllies(allies) {
+    gameState.allies = allies;
+    renderPlayersList();
+}
+
+function renderSuspicionSelect(p) {
+    // On retire le rôle du joueur humain : il sait qu'aucun autre joueur ne l'a.
+    const myRole = normalizeText(gameState.roleInfo?.name);
+    const current = suspicions[p.id] || "";
+    const opt = o => `<option value="${o.value}" ${current === o.value ? 'selected' : ''}>${o.label}</option>`;
+    const label = `aria-label="Rôle soupçonné pour ${escapeHtml(p.name)}"`;
+
+    // Camp du mal, alliés pas encore révélés : liste désactivée jusqu'à la première nuit.
+    if (awaitsAllyReveal()) {
+        return `
+            <select class="suspicion-select" disabled ${label} title="Vos alliés vous seront révélés lors de la première nuit.">
+                <option selected>Révélé lors de la première nuit…</option>
+            </select>
+        `;
+    }
+
+    // Camp du mal : les non-alliés sont forcément du bien → seulement les rôles du bien, pas de camps.
+    if (knowsEvilTeam()) {
+        const goodRoles = SUSPICION_OPTIONS.roles.filter(o => !o.evil);
+        return `
+            <select class="suspicion-select" data-player-id="${escapeHtml(p.id)}" ${label}>
+                <option value="" ${current === '' ? 'selected' : ''}>Je soupçonne que ce joueur est…</option>
+                <optgroup label="Villageois - rôle inconnu">${goodRoles.map(opt).join('')}</optgroup>
+            </select>
+        `;
+    }
+
+    const roles = SUSPICION_OPTIONS.roles.filter(o => normalizeText(o.role) !== myRole);
+    return `
+        <select class="suspicion-select" data-player-id="${escapeHtml(p.id)}" ${label}>
+            <option value="" ${current === '' ? 'selected' : ''}>Je soupçonne que ce joueur est…</option>
+            <optgroup label="Camps">${SUSPICION_OPTIONS.camps.map(opt).join('')}</optgroup>
+            <optgroup label="Rôles">${roles.map(opt).join('')}</optgroup>
+        </select>
+    `;
+}
+
+// Remplace la liste de soupçons sur la carte d'un allié : son rôle est connu.
+function renderAllyTag(ally) {
+    const roleKey = resolveRoleKey(ally.role);
+    const roleLabel = roleKey ? NIGHT_ROLE_TEXTS[roleKey].label : (ally.role || "rôle inconnu");
+    return `
+        <div class="ally-tag flex items-center gap-2 rounded-md px-2 py-1 text-xs">
+            <span>Votre allié · <strong class="font-semibold">${escapeHtml(roleLabel)}</strong></span>
+        </div>
+    `;
+}
+
 function renderPlayersList() {
     const list = document.getElementById('players-notes-list');
-    const players = gameState.players || [];
-    
-    list.innerHTML = players.map(p => `
-        <div class="bg-clock-dark border border-clock-border p-2.5 rounded-xl space-y-2">
-            <div class="flex justify-between items-center text-sm">
-                <span class="font-bold ${p.alive ? 'text-gray-200' : 'text-gray-500 line-through'}">${p.name}</span>
-                <span class="text-xs px-2 py-0.5 rounded font-medium ${p.alive ? 'bg-green-900/40 text-green-400' : 'bg-red-900/40 text-red-400'}">
-                    ${p.alive ? 'Vivant' : 'Mort'}
-                </span>
-            </div>
-            ${!p.alive ? `<div class="text-xs text-gray-400">Dernier vote : ${p.has_vote ? 'Disponible' : 'Utilisé'}</div>` : ''}
-            <div class="flex items-center">
-                <select onchange="updateSuspicion('${p.id}', this.value)" class="w-full bg-clock-panel border border-clock-border text-xs rounded px-2 py-1.5 text-gray-300 focus:outline-none focus:border-clock-gold">
-                    <option value="">-- Rôle soupçonné --</option>
-                    
-                    <optgroup label="Camps">
-                        <option value="Townsfolk" ${p.suspicion === 'Townsfolk' ? 'selected' : ''}>Villageois (gentil)</option>
-                        <option value="Demon" ${p.suspicion === 'Demon' ? 'selected' : ''}>Démon (méchant)</option>
-                    </optgroup>
+    if (!list) return;
+    const allPlayers = gameState.players || [];
 
-                    <optgroup label="Rôles">
-                        <option value="diablotin" ${p.suspicion === 'diablotin' ? 'selected' : ''}>Diablotin (Démon)</option>
-                        <option value="empoisonneur" ${p.suspicion === 'empoisonneur' ? 'selected' : ''}>Empoisonneur (Démon - Sbire)</option>
-                        <option value="voyante" ${p.suspicion === 'voyante' ? 'selected' : ''}>Voyante (Villageois)</option>
-                        <option value="moine" ${p.suspicion === 'moine' ? 'selected' : ''}>Moine (Villageois)</option>
-                        <option value="detective" ${p.suspicion === 'detective' ? 'selected' : ''}>Détective (Villageois)</option>
-                        <option value="majordome" ${p.suspicion === 'majordome' ? 'selected' : ''}>Majordome (Villageois - Outsider)</option>
-                    </optgroup>
-                </select>
-            </div>
-        </div>
-    `).join('') || '<div class="text-gray-500 text-sm italic">Aucun joueur inscrit.</div>';
+    // Compteur sur tout le village (joueur humain compris)
+    const counter = document.getElementById('players-count');
+    if (counter) {
+        const alive = allPlayers.filter(p => p.alive !== false).length;
+        counter.innerText = allPlayers.length ? `${alive} vivant·e·s · ${allPlayers.length - alive} mort·e·s` : '';
+    }
+
+    // Le joueur humain n'a pas d'encadré ; les alliés connus sont affichés en premier.
+    const others = allPlayers
+        .filter(p => p.id !== playerId)
+        .sort((a, b) => Number(!!getAlly(b.id)) - Number(!!getAlly(a.id)));
+
+    if (!others.length) {
+        list.innerHTML = '<div class="text-sm italic opacity-60">Aucun convive pour le moment.</div>';
+        return;
+    }
+
+    list.innerHTML = others.map(p => {
+        const isAlive = p.alive !== false;
+        const initial = escapeHtml((p.name || '?').trim().charAt(0).toUpperCase());
+        const ally = getAlly(p.id);
+        return `
+            <article class="player-card ${isAlive ? '' : 'is-dead'} ${ally ? 'is-ally' : ''} rounded-lg px-3 py-3 flex items-center gap-3 shrink-0">
+                <!-- Avatar : initiale en attendant les images -->
+                <div class="player-avatar size-10 shrink-0 rounded-full flex items-center justify-center font-display text-base">${initial}</div>
+                <div class="min-w-0 flex-1 flex flex-col gap-2">
+                    <!-- Ligne 1 : nom + statut -->
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span class="player-name font-sans text-sm font-semibold leading-tight truncate ${isAlive ? '' : 'line-through'}">${escapeHtml(p.name)}</span>
+                        ${isAlive
+                            ? `<span class="status-alive ml-auto shrink-0 flex items-center gap-1 text-xs">Vivant</span>`
+                            : `<span class="status-dead ml-auto shrink-0 flex items-center gap-1 text-xs" title="Dernier vote : ${p.has_vote ? 'disponible' : 'utilisé'}"> Mort<span class="opacity-70">· vote ${p.has_vote ? 'dispo' : 'utilisé'}</span></span>`}
+                    </div>
+                    <!-- Ligne 2 : soupçon (ou allié connu) -->
+                    ${ally ? renderAllyTag(ally) : renderSuspicionSelect(p)}
+                </div>
+            </article>
+        `;
+    }).join('');
+
+    list.querySelectorAll('.suspicion-select').forEach(select => {
+        select.addEventListener('change', () => updateSuspicion(select.dataset.playerId, select.value));
+    });
 }
 
 // ================= ENCADRÉ DYNAMIQUE DES ACTIONS DE PHASE =================
@@ -777,6 +890,8 @@ function submitPendingAction() {
 // ================= INTERACTIONS & MODALES =================
 function assignRole(name, description) {
     gameState.roleInfo = { name, description };
+    gameState.allies = null; // inconnus tant que la première nuit ne les a pas révélés
+    renderPlayersList(); // retire le rôle du joueur des listes de soupçons (ou les verrouille si rôle maléfique)
     document.getElementById('player-role-name').innerText = name;
     document.getElementById('player-role-desc').innerText = description;
     
@@ -1053,11 +1168,9 @@ function triggerGameOver(winner, details) {
     document.getElementById('modal-gameover').classList.remove('hidden');
 }
 
-function updateSuspicion(playerId, roleType) {
-    const player = (gameState.players || []).find(p => p.id === playerId);
-    if (player) {
-        player.suspicion = roleType;
-    }
+function updateSuspicion(targetId, value) {
+    if (value) suspicions[targetId] = value;
+    else delete suspicions[targetId];
 }
 
 function escapeHtml(text) {

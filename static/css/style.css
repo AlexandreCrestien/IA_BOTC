@@ -241,3 +241,66 @@ section.panel div {
   cursor: not-allowed;
   box-shadow: none;
 }
+
+/* ==========================================================
+   Liste des convives (sidebar droite)
+   ========================================================== */
+.player-card {
+  border: 1px solid color-mix(in oklab, var(--gold-dim) 55%, transparent);
+  background-color: color-mix(in oklab, var(--gold) 5%, color-mix(in oklab, var(--background) 60%, transparent));
+  box-shadow: 0 0 12px -4px oklch(0.76 0.115 80 / 20%);
+}
+/* Joueur mort : on atténue l'avatar, le nom et la liste, mais pas le statut */
+.player-card.is-dead .player-avatar,
+.player-card.is-dead .player-name,
+.player-card.is-dead .suspicion-select {
+  opacity: 0.55;
+}
+
+/* Sélecteur renforcé : sinon "section.panel div { border-color }" écrase la bordure dorée */
+.player-card .player-avatar {
+  border: 1.5px solid var(--gold);
+  background-color: var(--secondary);
+  color: var(--gold);
+}
+
+.status-alive { color: oklch(0.72 0.12 150); }
+.status-dead  { color: oklch(0.66 0.22 25); }
+
+/* Liste déroulante des soupçons (sombre, y compris le menu natif) */
+.suspicion-select {
+  color-scheme: dark;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  background-color: color-mix(in oklab, var(--background) 70%, transparent);
+  color: color-mix(in oklab, var(--foreground) 80%, transparent);
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  transition: border-color 0.15s ease;
+}
+.suspicion-select:hover { border-color: var(--gold-dim); }
+.suspicion-select:focus { outline: none; border-color: var(--gold); }
+.suspicion-select option,
+.suspicion-select optgroup {
+  background-color: var(--popover);
+  color: var(--popover-foreground);
+}
+
+/* Allié connu (camp du mal) : carte et étiquette teintées sang */
+.player-card.is-ally {
+  border-color: color-mix(in oklab, var(--blood) 65%, transparent);
+  background-color: color-mix(in oklab, var(--blood) 8%, color-mix(in oklab, var(--background) 60%, transparent));
+  box-shadow: 0 0 12px -4px oklch(0.5 0.18 22 / 40%);
+}
+.ally-tag {
+  border: 1px solid color-mix(in oklab, var(--blood) 50%, transparent);
+  background-color: color-mix(in oklab, var(--blood) 15%, transparent);
+  color: oklch(0.72 0.14 25);
+}
+.suspicion-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  font-style: italic;
+}
+.suspicion-select:disabled:hover { border-color: var(--border); }
