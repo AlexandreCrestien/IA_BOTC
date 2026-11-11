@@ -1,13 +1,12 @@
 // ================= STATE GLOBAL DE L'APPLICATION =================
 let ws = null;
 let playerId = "";
-let currentWhisperAgentId = null; // Stocke l'agent qui demande un entretien
 let gameState = {
     day: 1,
-    phase: "day", // "day", "night", "vote"
+    phase: "discussion", // "discussion" | "nuit" | "vote" (valeurs envoyées par le serveur)
     aliveCount: 0,
     players: [], // { id, name, alive: true, role: null, suspicion: "", lastVote: null }
-    messages: { public: [] }, // channel_id -> [messages]
+    messages: { public: [] }, // channel_id -> [{ sender, content, time } | { system: true, content }]
     currentChannel: "public",
     announcement: "En attente du début de la partie...",
     roleInfo: { name: "En attente...", description: "La partie va démarrer." },
@@ -17,23 +16,32 @@ let gameState = {
 
 // ================= INITIALISATION & CONNEXION =================
 function joinGame() {
+    // Une connexion est déjà en cours ou ouverte : on ignore le double clic
+    if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) return;
+
     const input = document.getElementById('welcome-player-id');
     playerId = input.value.trim();
     if (!playerId) {
-        alert("Veuillez entrer un identifiant valide.");
+        showWelcomeError("Veuillez entrer un pseudo.");
+        input.focus();
         return;
     }
 
+    showWelcomeError(null);
+    setJoinButtonLoading(true);
+
     const wsUrl = `ws://127.0.0.1:8000/ws/${playerId}`;
     ws = new WebSocket(wsUrl);
+    let opened = false;
 
     ws.onopen = function() {
+        opened = true;
         console.log("WebSocket connectée.");
         // Masquer l'écran d'accueil et afficher l'interface de jeu
         document.getElementById('screen-welcome').classList.add('hidden');
         document.getElementById('screen-game').classList.remove('hidden');
         updateConnectionBadge(true);
-        appendSystemMessage("Connexion établie avec le serveur.");
+        appendSystemMessage("Connexion établie avec le serveur.", 'public');
     };
 
     ws.onmessage = function(event) {
@@ -46,6 +54,12 @@ function joinGame() {
     };
 
     ws.onclose = function() {
+        setJoinButtonLoading(false);
+        if (!opened) {
+            // Échec dès la connexion : le joueur est encore sur l'écran d'accueil
+            showWelcomeError("Impossible de joindre le serveur. Vérifiez qu'il est bien lancé, puis réessayez.");
+            return;
+        }
         updateConnectionBadge(false);
         showDisconnectedModal();
         appendSystemMessage("Connexion fermée par le serveur.");
@@ -53,8 +67,23 @@ function joinGame() {
 
     ws.onerror = function(error) {
         console.error("Erreur WebSocket :", error);
-        appendSystemMessage("Erreur de connexion réseau.");
+        if (opened) appendSystemMessage("Erreur de connexion réseau.");
     };
+}
+
+// Message d'erreur sous le bouton de l'écran d'accueil (null pour l'effacer)
+function showWelcomeError(text) {
+    const el = document.getElementById('welcome-error');
+    if (!el) return;
+    el.textContent = text || '';
+    el.classList.toggle('hidden', !text);
+}
+
+function setJoinButtonLoading(loading) {
+    const btn = document.getElementById('welcome-join-btn');
+    if (!btn) return;
+    btn.disabled = loading;
+    btn.textContent = loading ? "Connexion…" : "Rejoindre la partie";
 }
 
 function updateConnectionBadge(isConnected) {
@@ -78,6 +107,10 @@ function handleServerMessage(data) {
             break;
         case "game_state":
             updateGameState(data.state);
+            break;
+        case "phase_update":
+            // Changement de phase seul (ex. vote déclenché par un joueur)
+            updateGameState({ phase: data.phase, ...(data.announcement ? { announcement: data.announcement } : {}) });
             break;
         case "role_assigned":
             assignRole(data.role_name, data.description);
@@ -199,8 +232,8 @@ function receiveChatMessage(channelId, sender, content) {
     if (!gameState.messages[channelId]) {
         gameState.messages[channelId] = [];
     }
-    gameState.messages[channelId].push({ sender: sender, content: content });
-    renderChatMessages();
+    gameState.messages[channelId].push({ sender, content, time: currentTime() });
+    if (channelId === gameState.currentChannel) renderChatMessages();
 
     // Nouveau message public (hors messages du joueur lui-même) pendant qu'il regarde ailleurs
     if (channelId === 'public' && sender !== playerId && !isViewingPublic()) {
@@ -209,81 +242,69 @@ function receiveChatMessage(channelId, sender, content) {
     }
 }
 
+// Heure locale de réception d'un message (HH:MM)
+function currentTime() {
+    return new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function renderSystemLine(text) {
+    return `
+        <div class="ornament animate-rise px-2 text-center my-2">
+            <p class="max-w-[85%] mx-auto font-serif text-sm italic text-gold">${escapeHtml(text)}</p>
+        </div>
+    `;
+}
+
 function renderChatMessages() {
     const box = document.getElementById('chat-messages');
     if (!box) return;
 
-    let html = '';
-
-    // 1. En-tête conditionnel selon le canal actif
+    // 1. En-tête selon le canal actif
+    let html;
     if (gameState.currentChannel === 'public') {
-        html = `
-            <div class="ornament animate-rise px-2 text-center my-2">
-                <p class="max-w-[85%] mx-auto font-serif text-sm italic text-gold">Canal public initialisé...</p>
-            </div>
-            <div class="ornament animate-rise px-2 text-center my-2">
-                <p class="max-w-[85%] mx-auto font-serif text-sm italic text-gold">Connexion établie avec le serveur.</p>
-            </div>
-        `;
+        html = renderSystemLine("Canal public initialisé…");
     } else {
-        // Récupère le nom du canal affiché dans le header pour un message sur mesure
         const channelTitle = document.getElementById('active-channel-title')?.textContent || 'cette conversation';
-        html = `
-            <div class="ornament animate-rise px-2 text-center my-2">
-                <p class="max-w-[85%] mx-auto font-serif text-sm italic text-gold">Début de la discussion privée avec ${channelTitle}.</p>
-            </div>
-        `;
+        html = renderSystemLine(`Début de la discussion privée avec ${channelTitle}.`);
     }
 
-    // 2. Récupération des messages du canal courant
+    // 2. Messages du canal courant (messages des joueurs et messages système)
     const msgs = gameState.messages[gameState.currentChannel] || [];
 
     if (msgs.length === 0) {
-        html += `<div class="text-gray-500 italic text-center py-4 text-xs">Aucun message dans ce canal...</div>`;
+        html += `<div class="italic text-center py-4 text-xs opacity-60">Aucun message dans ce canal...</div>`;
     } else {
-        // 3. Boucle sur les messages des joueurs
-        html += msgs.map(m => `
+        html += msgs.map(m => m.system ? renderSystemLine(m.content) : `
             <div class="flex animate-rise flex-col items-start my-3">
                 <div class="mb-0.5 flex items-baseline gap-2 px-1 text-[11px]">
-                    <span class="font-semibold text-foreground/80">${escapeHtml(m.sender)}</span>
-                    <span class="text-muted-foreground">${m.time || '13:20'}</span>
+                    <span class="font-semibold opacity-80">${escapeHtml(m.sender)}</span>
+                    ${m.time ? `<span class="opacity-50">${m.time}</span>` : ''}
                 </div>
-                <p class="break-words rounded-lg px-3 py-2 text-s leading-relaxed rounded-tl-sm border border-[var(--border)] bg-[var(--card)] text-foreground">
+                <p class="break-words rounded-lg px-3 py-2 text-sm leading-relaxed rounded-tl-sm border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)]">
                     ${escapeHtml(m.content)}
                 </p>
             </div>
         `).join('');
     }
 
-    // 4. Injection dans le conteneur et défilement automatique
+    // 3. Injection dans le conteneur et défilement automatique
     box.innerHTML = html;
     box.scrollTop = box.scrollHeight;
 }
 
-function appendSystemMessage(text) {
-    const box = document.getElementById('chat-messages');
-    if (!box) return;
-
-    // Création de l'élément avec le style ornemental Lovable
-    const msgDiv = document.createElement('div');
-    msgDiv.className = "ornament animate-rise px-2 text-center my-2";
-    msgDiv.innerHTML = `
-        <p class="max-w-[85%] mx-auto font-serif text-sm italic text-gold">
-            ${escapeHtml(text)}
-        </p>
-    `;
-
-    // Ajout dans la boîte de chat
-    box.appendChild(msgDiv);
-    box.scrollTop = box.scrollHeight;
+// Message système (italique doré) : enregistré dans le canal pour survivre aux re-rendus.
+// Par défaut, il va dans le canal affiché.
+function appendSystemMessage(text, channelId = gameState.currentChannel) {
+    if (!gameState.messages[channelId]) gameState.messages[channelId] = [];
+    gameState.messages[channelId].push({ system: true, content: text });
+    if (channelId === gameState.currentChannel) renderChatMessages();
 }
 
 function handlePrivateChannelOpened(channelId, text, members = []) {
-    appendSystemMessage(text);
-    
     if (!gameState.messages[channelId]) {
         gameState.messages[channelId] = [];
     }
+    if (text) appendSystemMessage(text, channelId);
 
     const channelsContainer = document.getElementById('chat-channels');
     if (channelsContainer && !document.getElementById(`tab-${channelId}`)) {
@@ -423,7 +444,7 @@ function renderNightInfoHistory() {
         const bgStyle = isResult ? "bg-red-950/10" : "bg-secondary/50";
 
         html += `
-            <div class="panel rounded-lg border ${borderColor} ${bgStyle} p-3 text-s">
+            <div class="panel rounded-lg border ${borderColor} ${bgStyle} p-3 text-sm">
                 <div class="flex items-center justify-between mb-1">
                     <span class="${titleColor} font-serif font-bold italic">Tour ${item.turn}</span>
                 </div>
@@ -1165,28 +1186,20 @@ function acceptAgentWhisper() {
     const modal = document.getElementById('modal-agent-whisper');
     if (modal) modal.classList.add('hidden');
 
-    const agentId = currentWhisperAgent || "tobIAs";
+    const agentId = currentWhisperAgent;
+    currentWhisperAgent = null;
+    if (!agentId) return;
 
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({
             action: "respond_whisper_invitation",
             payload: { target_agent_id: agentId, accepted: true }
         }));
+        // Le salon s'ouvrira à la réception de "private_channel_opened" (même identifiant que le serveur).
+        appendSystemMessage(`Vous avez accepté l'entretien avec ${getPlayerName(agentId)}. Ouverture du salon…`);
+    } else {
+        appendSystemMessage("Connexion perdue : votre réponse n'a pas été envoyée.");
     }
-
-    handleServerMessage({
-        type: "chat",
-        channel_id: "public",
-        sender: "Grimoire",
-        content: `Un entretien privé a débuté entre vous et ${agentId}.`
-    });
-
-    const channelId = "whisper_human_" + agentId;
-    if (typeof handlePrivateChannelOpened === 'function') {
-        handlePrivateChannelOpened(channelId, `Salon privé ouvert avec ${agentId}`, [agentId]);
-    }
-
-    currentWhisperAgent = null;
 }
 
 function showVoteResultModal(turnNumber, executedPlayer, votesArray) {
@@ -1340,10 +1353,6 @@ function closeNightInfoModal() {
     if (modal) modal.classList.add('hidden');
 }
 
-// Assurer la visibilité globale pour les onclick du HTML
-window.closeVoteResultModal = closeVoteResultModal;
-window.closeNightResultModal = closeNightResultModal;
-window.closeNightInfoModal = closeNightInfoModal;
 
 
 function triggerGameOver(winner, details) {
@@ -1411,20 +1420,4 @@ function switchGrimoireTab(tabName) {
 // Échap ferme le Grimoire
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') closeGrimoireModal();
-});
-
-// Visibilité globale pour le HTML
-window.openGrimoireModal = openGrimoireModal;
-window.closeGrimoireModal = closeGrimoireModal;
-window.switchGrimoireTab = switchGrimoireTab;
-
-// ================= FERMETURE DES MODALES AU CLIC SUR LE FOND (BACKDROP) =================
-document.addEventListener('click', function(event) {
-    if (event.target.id === 'screen-welcome' || event.target.closest('#screen-welcome')) {
-        return;
-    }
-
-    if (event.target.classList.contains('fixed') && event.target.classList.contains('inset-0')) {
-        event.target.classList.add('hidden');
-    }
 });

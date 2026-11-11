@@ -16,7 +16,7 @@
     <!-- Ton fichier CSS adapté -->
     <link rel="stylesheet" href="/css/style.css">
 </head>
-<body class="bg-clock-dark text-gray-200 min-h-screen flex flex-col font-sans select-none overflow-hidden">
+<body class="min-h-screen flex flex-col font-sans overflow-hidden">
 
     <!-- ================= 1. ÉCRAN D'ACCUEIL (LOGIN) ================= -->
     <div id="screen-welcome" class="fixed inset-0 z-50 flex items-center justify-center bg-cover bg-center bg-no-repeat bg-game-background">
@@ -40,15 +40,19 @@
                 </p>
             </div>
 
-            <div class="w-full space-y-3">
-                <label class="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Votre pseudo</label>
-                <input type="text" id="welcome-player-id" placeholder="ex: Sasha" value="Sasha"
+            <!-- Formulaire : la touche Entrée rejoint la partie -->
+            <form onsubmit="event.preventDefault(); joinGame();" class="w-full space-y-3">
+                <label for="welcome-player-id" class="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Votre pseudo</label>
+                <input type="text" id="welcome-player-id" placeholder="ex : Sasha" autocomplete="nickname" autofocus
                     class="w-full bg-black/40 border border-[var(--gold)] rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[var(--gold)] text-center font-mono text-gray-200">
-            </div>
 
-            <button onclick="joinGame()" class="w-full bg-seal text-white font-display tracking-wider py-3.5 rounded-xl transition shadow-seal uppercase text-sm font-bold">
-                Rejoindre la partie
-            </button>
+                <button type="submit" id="welcome-join-btn" class="w-full bg-seal text-white font-display tracking-wider py-3.5 rounded-xl transition shadow-seal uppercase text-sm font-bold disabled:opacity-60 disabled:cursor-progress">
+                    Rejoindre la partie
+                </button>
+
+                <!-- Erreur de connexion (serveur injoignable, pseudo vide…) -->
+                <p id="welcome-error" role="alert" class="welcome-error hidden text-sm text-center"></p>
+            </form>
         </div>
     </div>
 
@@ -112,7 +116,7 @@
             <!-- SIDEBAR GAUCHE : Conversations & historiques (3 colonnes) -->
             <section class="md:col-span-3 panel border-r border-border flex flex-col h-full min-h-0 overflow-hidden">
                 <!-- Onglets principaux de la sidebar (Chat / Nuits / Votes) -->
-                <div class="flex border-b border-border bg-black/20 text-s tracking-wider uppercase font-serif shrink-0">
+                <div class="flex border-b border-border bg-black/20 text-sm tracking-wider uppercase font-serif shrink-0">
                     <button onclick="switchLeftTab('chat')" id="tab-btn-chat" class="flex-1 py-3 font-semibold text-gold border-b-2 border-[var(--gold)] transition">Chat<span id="unread-chat-tab" class="unread-badge ml-1.5 align-middle" hidden title="Nouveaux messages sur la place publique"><span class="sr-only">Nouveaux messages sur la place publique</span></span></button>
                     <button onclick="switchLeftTab('night')" id="tab-btn-night" class="flex-1 py-3 font-medium text-muted-foreground hover:text-foreground transition">Nuits</button>
                     <button onclick="switchLeftTab('votes')" id="tab-btn-votes" class="flex-1 py-3 font-medium text-muted-foreground hover:text-foreground transition">Votes</button>
@@ -177,7 +181,7 @@
                                 rows="1"
                                 placeholder="Parler au village…"
                                 aria-label="Votre message"
-                                onkeypress="if(event.key==='Enter' && !event.shiftKey) { event.preventDefault(); sendChatMessage(); }"
+                                onkeydown="if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); sendChatMessage(); }"
                                 class="max-h-32 min-h-9 flex-1 resize-none bg-transparent px-1 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed"
                             ></textarea>
                             
