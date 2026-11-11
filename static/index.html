@@ -350,17 +350,15 @@
             <!-- SIDEBAR DROITE : Actions dynamiques & Liste des joueurs (3 colonnes) -->
             <section class="md:col-span-3 panel border border-clock-border flex flex-col overflow-hidden shadow-xl h-full min-h-0">
                 
-                <!-- Haut : Encadré dynamique des actions de phase -->
-                <div class="p-4 border-b border-clock-border bg-clock-dark/50">
-                    <h3 class="text-xs font-semibold text-clock-gold uppercase tracking-wider mb-2">Actions & Décisions</h3>
-                    <div id="dynamic-action-panel" class="space-y-2 text-sm">
-                        <div class="text-gray-500 italic">En attente de la phase d'action...</div>
-                    </div>
+                <!-- Haut : Encadré dynamique des actions de phase.
+                     Masqué tant qu'aucune action n'est demandée par le serveur ;
+                     hauteur plafonnée, la liste des joueurs défile au-delà. -->
+                <div id="action-zone" class="hidden shrink-0 p-3">
+                    <article id="dynamic-action-panel" class="action-box flex flex-col max-h-[45vh] rounded-lg p-3"></article>
                 </div>
 
                 <!-- Bas : Liste des joueurs, statuts & notes de soupçon -->
                 <div class="flex-1 p-4 flex flex-col overflow-hidden">
-                    <h3 class="text-xs font-semibold text-clock-gold uppercase tracking-wider mb-2">Villageois & Notes</h3>
                     <div id="players-notes-list" class="flex-1 overflow-y-auto space-y-2 pr-1">
                         <div class="text-gray-500 italic text-sm">Chargement des joueurs...</div>
                     </div>

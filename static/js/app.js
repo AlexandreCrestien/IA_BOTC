@@ -65,6 +65,8 @@ function updateConnectionBadge(isConnected) {
         badge.className = "px-3 py-1 rounded-full text-xs font-semibold bg-red-900/50 text-red-400 border border-red-700 whitespace-nowrap";
         badge.innerText = "Déconnecté";
     }
+    // Active/désactive le bouton de validation de l'encadré d'action.
+    refreshActionSelection();
 }
 
 // ================= GESTION DES MESSAGES SERVEUR =================
@@ -99,6 +101,9 @@ function handleServerMessage(data) {
             break;
         case "night_info":
             showNightInfoModal(data.turn, data.info); // Information spécifique reçue la nuit selon le rôle
+            break;
+        case "action_request":
+            handleActionRequest(data); // Remplit l'encadré d'action de la sidebar droite
             break;
         default:
             console.log("Message non géré :", data);
@@ -383,6 +388,12 @@ function renderNightInfoHistory() {
 // ================= TABLE RONDE & ÉTAT DU JEU =================
 function updateGameState(newState) {
     gameState = { ...gameState, ...newState };
+
+    // Une action demandée pour une autre phase n'a plus lieu d'être.
+    if (pendingAction && newState.phase && newState.phase.toLowerCase() !== pendingAction.kind) {
+        pendingAction = null;
+        actionSelection = [];
+    }
     
     // 1. Mise à jour du numéro du tour
     const dayEl = document.getElementById('game-day');
@@ -537,57 +548,230 @@ function renderPlayersList() {
     `).join('') || '<div class="text-gray-500 text-sm italic">Aucun joueur inscrit.</div>';
 }
 
-function renderActionPanel() {
-    const panel = document.getElementById('dynamic-action-panel');
-    const phase = gameState.phase;
+// ================= ENCADRÉ DYNAMIQUE DES ACTIONS DE PHASE =================
+// Le serveur envoie ce qu'il faut afficher via un message "action_request" :
+//   { type: "action_request", kind: "discussion" | "vote" | "nuit",
+//     candidates: [playerId, ...], max_targets: 1 | 2,
+//     min_targets?: n, role?: "imp" | "Diablotin" | ... }
+// Seul le texte (titre, consigne, bouton) est défini côté client, selon la phase et le rôle.
 
-    if (phase === 'day') {
-        const otherPlayers = (gameState.players || []).filter(p => p.id !== playerId);
-        panel.innerHTML = `
-            <div class="text-gray-300 text-sm">Phase de discussion. Choisissez jusqu'à 2 agents pour une conversation privée.</div>
-            <div class="space-y-2 mt-2">
-                <div class="text-xs text-clock-gold font-semibold">Cible principale :</div>
-                <select id="whisper-target-1" class="w-full bg-clock-dark border border-clock-border rounded p-2 text-xs text-gray-200 focus:outline-none focus:border-clock-gold">
-                    <option value="">-- Choisir un 1er agent --</option>
-                    ${otherPlayers.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
-                </select>
+let pendingAction = null;   // { kind, candidates, maxTargets, minTargets, role } ou null
+let actionSelection = [];   // ids sélectionnés
+const NO_TARGET = "__none__"; // option "Personne" du vote
 
-                <div class="text-xs text-clock-gold font-semibold">Cible secondaire (optionnelle) :</div>
-                <select id="whisper-target-2" class="w-full bg-clock-dark border border-clock-border rounded p-2 text-xs text-gray-200 focus:outline-none focus:border-clock-gold">
-                    <option value="">-- Aucune (1 seul agent) --</option>
-                    ${otherPlayers.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
-                </select>
+const ACTION_ICONS = {
+    discussion: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>`,
+    vote: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><path d="M12 3v18"></path><path d="m19 8 3 8a5 5 0 0 1-6 0zV7"></path><path d="M3 7h1a17 17 0 0 0 8-2 17 17 0 0 0 8 2h1"></path><path d="m5 8 3 8a5 5 0 0 1-6 0zV7"></path><path d="M7 21h10"></path></svg>`,
+    nuit: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"></path></svg>`,
+    check: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="option-check size-4"><path d="M20 6 9 17l-5-5"></path></svg>`
+};
 
-                <button onclick="requestWhisper()" class="w-full bg-clock-gold/20 hover:bg-clock-gold/30 text-clock-gold border border-clock-gold/50 py-2 rounded-lg text-xs font-semibold transition uppercase tracking-wider">
-                    Proposer un chuchotement
-                </button>
-            </div>
-        `;
-    } else if (phase === 'vote') {
-        panel.innerHTML = `
-            <div class="text-blue-400 text-sm font-semibold">Phase de Vote & Exécution</div>
-            <div class="text-gray-300 text-xs">Indiquez votre choix d'exécution pour le village :</div>
-            <select id="vote-target-select" class="w-full bg-clock-dark border border-clock-border rounded p-2 text-sm text-gray-200 focus:outline-none focus:border-clock-gold">
-                <option value="">Ne voter pour personne</option>
-                ${(gameState.players || []).filter(p => p.alive).map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
-            </select>
-            <button onclick="submitVote()" class="w-full bg-clock-red hover:bg-red-800 text-white py-2 rounded-lg text-xs font-semibold transition uppercase tracking-wider">
-                Confirmer mon vote
-            </button>
-        `;
-    } else if (phase === 'night') {
-        panel.innerHTML = `
-            <div class="text-purple-400 text-sm font-semibold">Phase Nocturne</div>
-            <div class="text-gray-300 text-xs">Le village endormi... Sélectionnez vos cibles de nuit :</div>
-            <select id="night-target-select" class="w-full bg-clock-dark border border-clock-border rounded p-2 text-sm text-gray-200 focus:outline-none focus:border-clock-gold">
-                <option value="">Aucune cible</option>
-                ${(gameState.players || []).map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
-            </select>
-            <button onclick="submitNightAction()" class="w-full bg-purple-900/40 hover:bg-purple-900/60 text-purple-300 border border-purple-700 py-2 rounded-lg text-xs font-semibold transition uppercase tracking-wider">
-                Valider l'action nocturne
-            </button>
-        `;
+// Textes de la nuit selon le rôle (clé = name_EN du catalogue backend)
+const NIGHT_ROLE_TEXTS = {
+    imp:       { label: "Diablotin",    prompt: "Qui sera votre victime cette nuit ?" },
+    poisoner:  { label: "Empoisonneur", prompt: "Qui empoisonnerez-vous jusqu'à la fin de la prochaine journée ?" },
+    monk:      { label: "Moine",        prompt: "Qui protégerez-vous des griffes du Diablotin cette nuit ?" },
+    psychic:   { label: "Voyante",      prompt: "Quels sont les deux joueurs que vous souhaitez sonder ?" },
+    butler:    { label: "Majordome",    prompt: "Qui choisissez-vous comme Maître ? Vous ne pourrez voter que s'il vote aussi." }
+};
+
+// Accepte indifféremment "imp", "Diablotin", "diablotin"...
+function resolveRoleKey(role) {
+    if (!role) return null;
+    const norm = s => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+    const wanted = norm(role);
+    return Object.keys(NIGHT_ROLE_TEXTS).find(
+        key => key === wanted || norm(NIGHT_ROLE_TEXTS[key].label) === wanted
+    ) || null;
+}
+
+function getActionTexts(action) {
+    if (action.kind === "discussion") {
+        return {
+            title: "Conversation privée",
+            prompt: "Avec qui souhaitez-vous vous entretenir en privé ?",
+            submit: "Lancer la discussion privée"
+        };
     }
+    if (action.kind === "vote") {
+        return {
+            title: "Vote",
+            prompt: "Qui doit monter sur l'échafaud ?",
+            submit: "Sceller mon vote"
+        };
+    }
+    const roleKey = resolveRoleKey(action.role || gameState.roleInfo?.name);
+    const roleTexts = roleKey ? NIGHT_ROLE_TEXTS[roleKey] : null;
+    return {
+        title: roleTexts ? `Pouvoir : ${roleTexts.label}` : "Action de nuit",
+        prompt: roleTexts ? roleTexts.prompt : "Choisissez la cible de votre pouvoir.",
+        submit: "Transmettre au Maître du Jeu"
+    };
+}
+
+function getPlayerName(id) {
+    const player = (gameState.players || []).find(p => p.id === id);
+    return player ? player.name : id;
+}
+
+function handleActionRequest(data) {
+    const kind = data.kind;
+    if (!["discussion", "vote", "nuit"].includes(kind)) {
+        console.warn("action_request : kind inconnu", data);
+        return;
+    }
+    // Le vote est toujours à choix unique.
+    const maxTargets = kind === "vote" ? 1 : Math.max(1, data.max_targets || 1);
+    // Nuit : par défaut il faut choisir exactement le nombre de cibles du pouvoir.
+    // Discussion / vote : une seule sélection suffit.
+    const defaultMin = kind === "nuit" ? maxTargets : 1;
+
+    let candidates = data.candidates || [];
+    // Garde-fous, même si le serveur envoie une liste trop large :
+    //  - discussion : on peut parler à tout le monde (morts compris), sauf à soi-même ;
+    //  - vote : on ne peut voter ni contre soi-même, ni contre un mort.
+    if (kind === "discussion") {
+        candidates = candidates.filter(id => id !== playerId);
+    } else if (kind === "vote") {
+        candidates = candidates.filter(id => {
+            if (id === playerId) return false;
+            const player = (gameState.players || []).find(p => p.id === id);
+            return !player || player.alive !== false;
+        });
+    }
+
+    pendingAction = {
+        kind,
+        candidates,
+        maxTargets,
+        minTargets: Math.min(maxTargets, data.min_targets || defaultMin),
+        role: data.role || null
+    };
+    actionSelection = [];
+    renderActionPanel();
+}
+
+function clearPendingAction() {
+    pendingAction = null;
+    actionSelection = [];
+    renderActionPanel();
+}
+
+function renderActionPanel() {
+    const zone = document.getElementById('action-zone');
+    const panel = document.getElementById('dynamic-action-panel');
+    if (!zone || !panel) return;
+
+    // Aucune action en cours : l'encadré disparaît complètement.
+    if (!pendingAction) {
+        zone.classList.add('hidden');
+        panel.innerHTML = '';
+        return;
+    }
+
+    const { kind, candidates, maxTargets } = pendingAction;
+    const texts = getActionTexts(pendingAction);
+
+    const options = candidates.map(id => ({
+        id,
+        label: escapeHtml(getPlayerName(id)) + (id === playerId ? ' <span class="opacity-60">(vous)</span>' : '')
+    }));
+    if (kind === "vote") {
+        options.push({ id: NO_TARGET, label: '<span class="italic">Personne</span>' });
+    }
+
+    panel.dataset.phase = kind;
+    panel.innerHTML = `
+        <h3 class="action-title font-display text-lg flex items-center gap-2 mb-2 shrink-0">
+            ${ACTION_ICONS[kind]}
+            <span>${escapeHtml(texts.title)}</span>
+        </h3>
+        <p class="font-serif text-sm italic text-[var(--foreground)] opacity-90 mb-2 shrink-0">${escapeHtml(texts.prompt)}</p>
+        ${maxTargets > 1 ? `<p id="action-counter" class="text-xs opacity-60 mb-1 shrink-0"></p>` : ''}
+        <div class="flex flex-col gap-1 min-h-0 overflow-y-auto pr-1">
+            ${options.map(o => `
+                <button type="button" class="option-btn" data-id="${escapeHtml(o.id)}" aria-pressed="false">
+                    <span class="truncate">${o.label}</span>
+                    ${ACTION_ICONS.check}
+                </button>
+            `).join('')}
+        </div>
+        <button type="button" id="action-submit" onclick="submitPendingAction()"
+            class="action-submit mt-3 w-full shrink-0 rounded-md py-2 font-serif text-base font-semibold tracking-wide">
+            ${escapeHtml(texts.submit)}
+        </button>
+    `;
+
+    panel.querySelectorAll('.option-btn').forEach(btn => {
+        btn.addEventListener('click', () => toggleActionTarget(btn.dataset.id));
+    });
+
+    zone.classList.remove('hidden');
+    refreshActionSelection();
+}
+
+function toggleActionTarget(id) {
+    if (!pendingAction) return;
+    const max = pendingAction.maxTargets;
+
+    if (actionSelection.includes(id)) {
+        actionSelection = actionSelection.filter(t => t !== id);
+    } else if (max === 1) {
+        actionSelection = [id];
+    } else if (actionSelection.length < max) {
+        actionSelection = [...actionSelection, id];
+    }
+    refreshActionSelection();
+}
+
+// Met à jour l'état visuel sans reconstruire le HTML (préserve le scroll de la liste).
+function refreshActionSelection() {
+    if (!pendingAction) return;
+    const { maxTargets, minTargets } = pendingAction;
+    const isFull = maxTargets > 1 && actionSelection.length >= maxTargets;
+
+    document.querySelectorAll('#dynamic-action-panel .option-btn').forEach(btn => {
+        const selected = actionSelection.includes(btn.dataset.id);
+        btn.setAttribute('aria-pressed', String(selected));
+        // En multi-sélection, une fois le maximum atteint, on grise les autres options.
+        btn.disabled = isFull && !selected;
+    });
+
+    const counter = document.getElementById('action-counter');
+    if (counter) {
+        counter.innerText = `${actionSelection.length}/${maxTargets} joueur(s) sélectionné(s)`;
+    }
+
+    const submit = document.getElementById('action-submit');
+    if (submit) {
+        const connected = ws && ws.readyState === WebSocket.OPEN;
+        submit.disabled = actionSelection.length < minTargets || !connected;
+    }
+}
+
+function submitPendingAction() {
+    if (!pendingAction || actionSelection.length < pendingAction.minTargets) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        appendSystemMessage("Connexion perdue : votre choix n'a pas été envoyé.");
+        return;
+    }
+
+    const targets = [...actionSelection];
+    const names = targets.map(getPlayerName).join(', ');
+
+    if (pendingAction.kind === "discussion") {
+        ws.send(JSON.stringify({ action: "request_whisper", payload: { targets } }));
+        appendSystemMessage(`Proposition de discussion privée envoyée à : ${names}.`);
+    } else if (pendingAction.kind === "vote") {
+        const targetId = targets[0] === NO_TARGET ? null : targets[0];
+        ws.send(JSON.stringify({ action: "submit_vote", payload: { target_id: targetId } }));
+        appendSystemMessage(`Vote enregistré pour : ${targetId ? getPlayerName(targetId) : 'Personne'}.`);
+    } else if (pendingAction.kind === "nuit") {
+        ws.send(JSON.stringify({ action: "submit_night_action", payload: { targets } }));
+        appendSystemMessage(`Action nocturne confiée au Maître du Jeu : ${names}.`);
+    }
+
+    clearPendingAction();
 }
 
 // ================= INTERACTIONS & MODALES =================
@@ -614,36 +798,6 @@ function setAnnouncement(text) {
     // 1. Mettre à jour le texte
     announcementEl.innerText = `${text}`;
 
-}
-
-function requestWhisper() {
-    const target1 = document.getElementById('whisper-target-1').value;
-    const target2 = document.getElementById('whisper-target-2').value;
-
-    if (!target1) {
-        alert("Veuillez sélectionner au moins un premier agent.");
-        return;
-    }
-
-    if (target1 === target2) {
-        alert("Vous ne pouvez pas sélectionner deux fois le même agent.");
-        return;
-    }
-
-    const targets = [target1];
-    if (target2) {
-        targets.push(target2);
-    }
-
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({
-            action: "request_whisper",
-            payload: { targets: targets }
-        }));
-        
-        const panel = document.getElementById('dynamic-action-panel');
-        panel.innerHTML = `<div class="text-green-400 text-xs italic text-center py-2">✓ Proposition de discussion privée transmise. Ouverture du salon.</div>`;
-    }
 }
 
 let currentWhisperAgent = null;
@@ -906,36 +1060,9 @@ function updateSuspicion(playerId, roleType) {
     }
 }
 
-function submitVote() {
-    const select = document.getElementById('vote-target-select');
-    const targetId = select ? select.value : null;
-    
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({
-            action: "submit_vote",
-            payload: { target_id: targetId }
-        }));
-        appendSystemMessage(`Vote enregistré pour : ${targetId ? targetId : 'Personne'}`);
-    }
-}
-
-function submitNightAction() {
-    const select = document.getElementById('night-target-select');
-    const targetId = select ? select.value : null;
-    const targets = targetId ? [targetId] : [];
-
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({
-            action: "submit_night_action",
-            payload: { targets: targets }
-        }));
-        appendSystemMessage(`Action nocturne validée (${targets.length} cible(s)).`);
-    }
-}
-
 function escapeHtml(text) {
     if (!text) return '';
-    return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 // ================= GESTION DU GRIMOIRE =================
