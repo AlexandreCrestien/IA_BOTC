@@ -1,3 +1,5 @@
+'use strict';
+
 const ADMIN_API_URL = "/admin/debug/all-states";
 const TOKEN_STORAGE_KEY = 'botc_admin_token';
 
@@ -5,8 +7,15 @@ const TOKEN_STORAGE_KEY = 'botc_admin_token';
 let currentAdminData = null;
 let selectedAgentId = null;
 
-// Au chargement : si un jeton est mémorisé, on tente directement de se connecter
+// Au chargement : branchement des événements, puis connexion directe si un jeton est mémorisé
 window.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('login-form').addEventListener('submit', (event) => {
+        event.preventDefault();
+        login();
+    });
+    document.getElementById('refresh-btn').addEventListener('click', fetchAdminData);
+    document.getElementById('logout-btn').addEventListener('click', logout);
+
     const savedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
     if (savedToken) {
         document.getElementById('admin-token-input').value = savedToken;

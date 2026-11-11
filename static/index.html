@@ -10,8 +10,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Alegreya+Sans:ital,wght@0,400;0,500;0,700;1,400&family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=IM+Fell+English+SC&display=swap" rel="stylesheet">
 
-    <!-- Tailwind CSS v3 CDN -->
+    <!-- Tailwind CSS v3 CDN + configuration du thème -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/js/tailwind.config.js"></script>
 
     <!-- Ton fichier CSS adapté -->
     <link rel="stylesheet" href="/css/style.css">
@@ -20,7 +21,7 @@
 
     <!-- ================= 1. ÉCRAN D'ACCUEIL (LOGIN) ================= -->
     <div id="screen-welcome" class="fixed inset-0 z-50 flex items-center justify-center bg-cover bg-center bg-no-repeat bg-game-background">
-        <div class="panel border border-border p-8 rounded-2xl max-w-lg w-full mx-4 shadow-2xl flex flex-col items-center space-y-6 text-base">
+        <div class="panel p-8 rounded-2xl max-w-lg w-full mx-4 shadow-2xl flex flex-col items-center space-y-6 text-base">
             
             <div class="text-center space-y-3 w-full">
                 <div class="ornament text-xs tracking-[0.3em] uppercase font-serif">
@@ -41,7 +42,7 @@
             </div>
 
             <!-- Formulaire : la touche Entrée rejoint la partie -->
-            <form onsubmit="event.preventDefault(); joinGame();" class="w-full space-y-3">
+            <form id="welcome-form" class="w-full space-y-3">
                 <label for="welcome-player-id" class="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Votre pseudo</label>
                 <input type="text" id="welcome-player-id" placeholder="ex : Sasha" autocomplete="nickname" autofocus
                     class="w-full bg-black/40 border border-[var(--gold)] rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[var(--gold)] text-center font-mono text-gray-200">
@@ -62,7 +63,7 @@
         <!-- Top bar / Annonces & état du jeu -->
         <!-- Grille 3 colonnes : les côtés gardent leur largeur de contenu, l'annonce au centre
              rétrécit (et se tronque) au lieu de passer par-dessus l'encadré tour/phase. -->
-        <header class="panel border-b border-border px-6 h-16 shrink-0 relative grid grid-cols-[minmax(max-content,1fr)_minmax(0,42rem)_minmax(max-content,1fr)] items-center gap-4 shadow-md z-10">
+        <header class="panel border-b px-6 h-16 shrink-0 relative grid grid-cols-[minmax(max-content,1fr)_minmax(0,42rem)_minmax(max-content,1fr)] items-center gap-4 shadow-md z-10">
             <!-- Gauche : Titre -->
             <div class="flex items-center space-x-2 justify-self-start">
                 <span class="font-display font-bold tracking-wider text-gilt text-base uppercase">Blood on the AI Clocktower</span>
@@ -81,30 +82,30 @@
                     
                     <!-- 1. Tour de jeu -->
                     <div class="flex items-center gap-1.5">
-                        <span class="text-sm uppercase tracking-wide text-muted-foreground leading-none">Tour</span>
+                        <span class="text-sm uppercase tracking-wide leading-none">Tour</span>
                         <span id="game-day" class="font-mono text-sm font-bold leading-none text-gilt">0</span>
                     </div>
 
                     <!-- 2. Phase & Icône dynamiques -->
                     <div class="flex items-center gap-1.5">
                         <!-- Conteneur de l'icône piloté par JS -->
-                        <div id="phase-icon-container" class="panel flex size-8 items-center justify-center rounded-full border border-border bg-card shrink-0 self-center">
+                        <div id="phase-icon-container" class="phase-icon phase-tone panel flex size-8 items-center justify-center rounded-full shrink-0 self-center" data-phase="discussion">
                         </div>
                         <div class="flex items-center gap-1.5">
-                            <span class="text-sm uppercase tracking-wide text-muted-foreground leading-none">Phase</span>
-                            <span id="game-phase" class="font-mono text-sm font-bold leading-none uppercase text-[var(--gold)]">----</span>
+                            <span class="text-sm uppercase tracking-wide leading-none">Phase</span>
+                            <span id="game-phase" class="phase-tone font-display text-lg leading-none uppercase" data-phase="discussion">----</span>
                         </div>
                     </div>
 
                     <!-- 3. Joueurs vivants -->
                     <div class="flex items-center gap-1.5">
-                        <span class="text-sm uppercase tracking-wide text-muted-foreground leading-none">Vivants</span>
+                        <span class="text-sm uppercase tracking-wide leading-none">Vivants</span>
                         <strong id="alive-count" class="font-mono text-sm font-bold leading-none text-gilt">--</strong>
                     </div>
                 </div>
 
                 <!-- Badge de connexion -->
-                <div id="connection-status" class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-900/50 text-green-400 border border-green-700 whitespace-nowrap shadow-sm">
+                <div id="connection-status" class="connection-badge" data-state="online" role="status">
                     Connecté
                 </div>
             </div>
@@ -114,25 +115,27 @@
         <main class="grid grid-cols-1 md:grid-cols-12 grid-rows-[minmax(0,1fr)] h-[calc(100vh-4rem)] overflow-hidden">
 
             <!-- SIDEBAR GAUCHE : Conversations & historiques (3 colonnes) -->
-            <section class="md:col-span-3 panel border-r border-border flex flex-col h-full min-h-0 overflow-hidden">
+            <section class="md:col-span-3 panel border-r flex flex-col h-full min-h-0 overflow-hidden">
                 <!-- Onglets principaux de la sidebar (Chat / Nuits / Votes) -->
-                <div class="flex border-b border-border bg-black/20 text-sm tracking-wider uppercase font-serif shrink-0">
-                    <button onclick="switchLeftTab('chat')" id="tab-btn-chat" class="flex-1 py-3 font-semibold text-gold border-b-2 border-[var(--gold)] transition">Chat<span id="unread-chat-tab" class="unread-badge ml-1.5 align-middle" hidden title="Nouveaux messages sur la place publique"><span class="sr-only">Nouveaux messages sur la place publique</span></span></button>
-                    <button onclick="switchLeftTab('night')" id="tab-btn-night" class="flex-1 py-3 font-medium text-muted-foreground hover:text-foreground transition">Nuits</button>
-                    <button onclick="switchLeftTab('votes')" id="tab-btn-votes" class="flex-1 py-3 font-medium text-muted-foreground hover:text-foreground transition">Votes</button>
+                <div class="flex border-b bg-black/20 text-sm tracking-wider uppercase font-serif shrink-0" role="tablist">
+                    <button type="button" data-action="switch-tab" data-tab="chat" id="tab-btn-chat" class="left-tab is-active" role="tab" aria-selected="true">Chat<span id="unread-chat-tab" class="unread-badge ml-1.5 align-middle" hidden title="Nouveaux messages sur la place publique"><span class="sr-only">Nouveaux messages sur la place publique</span></span></button>
+                    <button type="button" data-action="switch-tab" data-tab="night" id="tab-btn-night" class="left-tab" role="tab" aria-selected="false">Nuits</button>
+                    <button type="button" data-action="switch-tab" data-tab="votes" id="tab-btn-votes" class="left-tab" role="tab" aria-selected="false">Votes</button>
                 </div>
 
                 <!-- Contenu onglet : Chat -->
-                <div id="tab-content-chat" class="flex-1 flex flex-col min-h-0 overflow-hidden">
+                <div id="tab-content-chat" role="tabpanel" class="flex-1 flex flex-col min-h-0 overflow-hidden">
                     
                     <!-- Navigation des canaux et chuchotements -->
-                    <nav aria-label="Canaux" class="border-b border-border/70 p-3 bg-black/10 shrink-0 flex flex-col">
+                    <nav aria-label="Canaux" class="border-b p-3 bg-black/10 shrink-0 flex flex-col">
                         <!-- Bouton Place publique -->
                         <button
                             type="button"
-                            id="tab-public" 
-                            onclick="switchChannel('public')"
-                            class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm channel-btn"
+                            id="tab-public"
+                            data-action="switch-channel"
+                            data-channel="public"
+                            class="channel-btn is-active"
+                            aria-current="true"
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4 shrink-0 text-gold" aria-hidden="true">
                                 <path d="M16 10a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 14.286V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
@@ -142,20 +145,20 @@
                             <span id="unread-public" class="unread-badge ml-auto" hidden title="Nouveaux messages sur la place publique"><span class="sr-only">Nouveaux messages</span></span>
                         </button>
 
-                        <p class="mt-3 mb-1 px-1 text-[12px] uppercase tracking-[0.2em] text-muted-foreground font-serif">Discussions privées</p>
+                        <p class="mt-3 mb-1 px-1 text-[12px] uppercase tracking-[0.2em] opacity-70 font-serif">Discussions privées</p>
                         
-                        <!-- Liste des chuchotements / agents (injectée dynamiquement par ton JS) -->
+                        <!-- Salons privés (ajoutés par handlePrivateChannelOpened) -->
                         <ul id="chat-channels" class="scrollbar-thin flex max-h-24 flex-col gap-1.5 overflow-y-auto pr-1">
                         </ul>
                     </nav>
 
                     <!-- En-tête du canal actif -->
-                    <div id="active-channel-header" class="flex items-center gap-2 px-4 py-2.5 text-sm border-b border-border/40 bg-black/5 shrink-0">
+                    <div id="active-channel-header" class="flex items-center gap-2 px-4 py-2.5 text-sm border-b bg-black/5 shrink-0">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-messages-square size-4 text-gold shrink-0" aria-hidden="true">
                             <path d="M16 10a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 14.286V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
                             <path d="M20 9a2 2 0 0 1 2 2v10.286a.71.71 0 0 1-1.212.502l-2.202-2.202A2 2 0 0 0 17.172 19H10a2 2 0 0 1-2-2v-1"></path>
                         </svg>
-                        <span id="active-channel-title" class="font-serif text-base text-foreground">Place publique</span>
+                        <span id="active-channel-title" class="font-serif text-base">Place publique</span>
                     </div>
 
                     <!-- Zone des messages du chat -->
@@ -166,7 +169,7 @@
                     </div>
 
                     <!-- Zone de saisie / Composer -->
-                    <form onsubmit="event.preventDefault(); sendChatMessage();" class="border-t border-border/70 p-3 shrink-0">
+                    <form id="chat-form" class="border-t p-3 shrink-0">
                         <div class="flex items-end gap-2 rounded-lg chat-composer p-1.5 transition-colors">
                             <!-- Icône de plume -->
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-feather mb-2 ml-1.5 size-4 shrink-0 text-gold-dim" aria-hidden="true">
@@ -181,15 +184,14 @@
                                 rows="1"
                                 placeholder="Parler au village…"
                                 aria-label="Votre message"
-                                onkeydown="if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); sendChatMessage(); }"
-                                class="max-h-32 min-h-9 flex-1 resize-none bg-transparent px-1 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed"
+                                class="max-h-32 min-h-9 flex-1 resize-none bg-transparent px-1 py-2 text-sm focus:outline-none disabled:cursor-not-allowed"
                             ></textarea>
                             
                             <!-- Bouton d'envoi -->
                             <button 
                                 type="submit" 
                                 aria-label="Envoyer"
-                                class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md cursor-pointer transition-all disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed chat-send-btn text-primary-foreground font-serif text-base font-semibold tracking-wide h-9 w-9 shrink-0"
+                                class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md cursor-pointer transition-all disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed chat-send-btn font-serif text-base font-semibold tracking-wide h-9 w-9 shrink-0"
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-send size-4" aria-hidden="true">
                                     <path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"></path>
@@ -201,13 +203,13 @@
                 </div>
 
                 <!-- Contenu onglet : Nuits -->
-                <div id="tab-content-night" class="hidden flex-1 p-2 overflow-y-auto text-sm space-y-2 font-mono scrollbar-thin text-muted-foreground">
-                    <div class="text-gray-500 italic text-center py-4">Aucune information nocturne enregistrée.</div>
+                <div id="tab-content-night" class="hidden flex-1 p-2 overflow-y-auto text-sm space-y-2 font-mono scrollbar-thin" role="tabpanel">
+                    <div class="text-center py-8 text-sm italic font-serif opacity-70">Aucun événement nocturne pour le moment.</div>
                 </div>
 
                 <!-- Contenu onglet : Votes -->
-                <div id="tab-content-votes" class="hidden flex-1 p-2 overflow-y-auto text-sm space-y-2 font-mono scrollbar-thin text-muted-foreground">
-                    <div class="text-gray-500 italic text-center py-4">Aucun historique de vote disponible.</div>
+                <div id="tab-content-votes" class="hidden flex-1 p-2 overflow-y-auto text-sm space-y-2 font-mono scrollbar-thin" role="tabpanel">
+                    <div class="text-center py-8 text-sm italic font-serif opacity-70">Aucun vote enregistré pour le moment.</div>
                 </div>
             </section>
 
@@ -225,7 +227,7 @@
 
                             <!-- Bouton Grimoire au centre de la table (ouvre la modale des règles) -->
                             <div class="absolute inset-0 flex items-center justify-center">
-                                <button onclick="openGrimoireModal()" title="Ouvrir le Grimoire : règles et rôles"
+                                <button type="button" data-action="open-grimoire" title="Ouvrir le Grimoire : règles et rôles"
                                     class="grimoire-btn group focus-visible:outline-none">
                                     <!-- Icône + titre dans le même cercle : le cercle est exactement au centre de la table -->
                                     <span class="grimoire-dial relative flex size-32 sm:size-36 flex-col items-center justify-center gap-1 rounded-full transition-transform duration-300 group-hover:scale-105">
@@ -262,7 +264,7 @@
             </section>
 
             <!-- Modale du Grimoire (Règles & Rôles) -->
-            <div id="modal-grimoire" class="modal-backdrop hidden" onclick="if (event.target === this) closeGrimoireModal()">
+            <div id="modal-grimoire" class="modal-backdrop hidden" data-action="close-grimoire" data-backdrop>
                 <div class="modal-card w-[560px] max-h-[85vh] flex flex-col" data-tone="gold" role="dialog" aria-modal="true" aria-labelledby="grimoire-title">
                     <!-- En-tête -->
                     <div class="flex items-center justify-between gap-3 mb-4 shrink-0">
@@ -273,13 +275,13 @@
                                 <h3 id="grimoire-title" class="modal-title">Grimoire du Village</h3>
                             </div>
                         </div>
-                        <button onclick="closeGrimoireModal()" class="modal-close" aria-label="Fermer le Grimoire"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-5"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button>
+                        <button type="button" data-action="close-grimoire" class="modal-close" aria-label="Fermer le Grimoire"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-5"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button>
                     </div>
 
                     <!-- Onglets internes du Grimoire -->
-                    <div class="flex border-b border-[var(--border)] mb-4 shrink-0">
-                        <button id="grimoire-tab-btn-roles" onclick="switchGrimoireTab('roles')" class="grimoire-tab is-active">Les rôles</button>
-                        <button id="grimoire-tab-btn-rules" onclick="switchGrimoireTab('rules')" class="grimoire-tab">Règles du jeu</button>
+                    <div class="flex border-b mb-4 shrink-0">
+                        <button type="button" id="grimoire-tab-btn-roles" data-action="grimoire-tab" data-tab="roles" class="grimoire-tab is-active">Les rôles</button>
+                        <button type="button" id="grimoire-tab-btn-rules" data-action="grimoire-tab" data-tab="rules" class="grimoire-tab">Règles du jeu</button>
                     </div>
 
                     <!-- Contenu défilant -->
@@ -353,13 +355,13 @@
                     </div>
 
                     <!-- Bouton Fermer -->
-                    <button onclick="closeGrimoireModal()" class="btn-seal mt-4 w-full shrink-0">Fermer le Grimoire</button>
+                    <button type="button" data-action="close-grimoire" class="btn-seal mt-4 w-full shrink-0">Fermer le Grimoire</button>
                 </div>
             </div>
 
 
             <!-- SIDEBAR DROITE : Actions dynamiques & Liste des joueurs (3 colonnes) -->
-            <section class="md:col-span-3 panel border border-clock-border flex flex-col overflow-hidden shadow-xl h-full min-h-0">
+            <section class="md:col-span-3 panel flex flex-col overflow-hidden shadow-xl h-full min-h-0">
                 
                 <!-- Haut : Encadré dynamique des actions de phase.
                      Masqué tant qu'aucune action n'est demandée par le serveur ;
@@ -376,7 +378,7 @@
                         <span id="players-count" class="text-xs opacity-60 whitespace-nowrap"></span>
                     </div>
                     <div id="players-notes-list" class="flex-1 min-h-0 overflow-y-auto flex flex-col gap-3 pr-1">
-                        <div class="text-gray-500 italic text-sm">Chargement des joueurs...</div>
+                        <div class="italic text-sm opacity-60">Chargement des joueurs...</div>
                     </div>
                 </div>
 
@@ -398,7 +400,7 @@
             <p id="modal-role-description" class="font-serif text-base italic leading-relaxed opacity-90">
                 Description de votre rôle et de votre capacité spéciale dans l'ombre du village.
             </p>
-            <button onclick="closeRoleRevealModal()" class="btn-seal mt-6 w-full">Compris, commençons à jouer !</button>
+            <button type="button" data-action="close-role-reveal" class="btn-seal mt-6 w-full">Compris, commençons à jouer !</button>
         </div>
     </div>
 
@@ -413,10 +415,10 @@
                 </div>
             </div>
             <p id="agent-whisper-text" class="font-serif text-base italic leading-relaxed opacity-90">Un agent souhaite s'entretenir discrètement avec vous.</p>
-            <!-- Boutons remplacés par showAgentWhisperModal / refuseAgentWhisper -->
+            <!-- Boutons remplacés par showAgentWhisperModal / refuseAgentWhisper (modals.js) -->
             <div id="agent-whisper-actions" class="flex gap-2 mt-5">
-                <button onclick="acceptAgentWhisper()" class="btn-seal flex-1">Accepter</button>
-                <button onclick="refuseAgentWhisper()" class="btn-ghost flex-1">Ignorer</button>
+                <button type="button" data-action="accept-whisper" class="btn-seal flex-1">Accepter</button>
+                <button type="button" data-action="refuse-whisper" class="btn-ghost flex-1">Ignorer</button>
             </div>
         </div>
     </div>
@@ -434,10 +436,7 @@
                 La partie n'est pas finie, vous pouvez encore faire gagner votre camp. Vous pouvez continuer à discuter avec les autres joueurs et il vous reste un vote pour le reste de la partie.
             </div>
 
-            <!-- Liste des votes (conservée pour compatibilité, le détail est affiché dans l'encadré d'action) -->
-            <ul id="vote-result-list" class="hidden"></ul>
-
-            <button onclick="closeVoteResultModal()" class="btn-seal mt-5 w-full">Continuer la partie</button>
+            <button type="button" data-action="close-vote-result" class="btn-seal mt-5 w-full">Continuer la partie</button>
         </div>
     </div>
 
@@ -459,7 +458,7 @@
                 La partie n'est pas finie, vous pouvez encore faire gagner les Villageois. Vous pouvez continuer à discuter avec les autres joueurs et il vous reste un vote pour le reste de la partie.
             </div>
 
-            <button onclick="closeNightResultModal()" class="btn-seal mt-5 w-full">Commencer la journée</button>
+            <button type="button" data-action="close-night-result" class="btn-seal mt-5 w-full">Commencer la journée</button>
         </div>
     </div>
 
@@ -475,7 +474,7 @@
                 <!-- Injecté dynamiquement par JS selon le rôle -->
             </div>
 
-            <button onclick="closeNightInfoModal()" class="btn-seal mt-5 w-full">Compris, laissez-moi dormir</button>
+            <button type="button" data-action="close-night-info" class="btn-seal mt-5 w-full">Compris, laissez-moi dormir</button>
         </div>
     </div>
 
@@ -489,8 +488,8 @@
                 La connexion avec le serveur a été interrompue. Les messages et actions ne sont plus transmis.
             </p>
             <div class="flex gap-2 mt-5">
-                <button onclick="location.reload()" class="btn-seal flex-1">Recharger la page</button>
-                <button onclick="closeDisconnectedModal()" class="btn-ghost flex-1">Rester ici</button>
+                <button type="button" data-action="reload" class="btn-seal flex-1">Recharger la page</button>
+                <button type="button" data-action="close-disconnected" class="btn-ghost flex-1">Rester ici</button>
             </div>
         </div>
     </div>
@@ -501,12 +500,20 @@
             <span class="modal-icon mx-auto mb-3"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="size-6"><path d="M10 14.66v1.626a2 2 0 0 1-.976 1.696A5 5 0 0 0 7 21.978"></path><path d="M14 14.66v1.626a2 2 0 0 0 .976 1.696A5 5 0 0 1 17 21.978"></path><path d="M18 9h1.5a1 1 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M6 9a6 6 0 0 0 12 0V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1z"></path><path d="M6 9H4.5a1 1 0 0 1 0-5H6"></path></svg></span>
             <p class="modal-kicker ornament">Fin de la partie</p>
             <h2 id="gameover-title" class="modal-title text-3xl my-2">Fin de la Partie</h2>
-            <p id="gameover-outcome" class="font-display text-xl hidden"></p>
+            <p id="gameover-outcome" class="gameover-outcome font-display text-xl hidden"></p>
             <p id="gameover-desc" class="font-serif text-base italic leading-relaxed opacity-90 mt-2">Le village a rendu son verdict.</p>
-            <button onclick="location.reload()" class="btn-seal mt-6 w-full">Nouvelle partie</button>
+            <button type="button" data-action="reload" class="btn-seal mt-6 w-full">Nouvelle partie</button>
         </div>
     </div>
 
-    <script src="/js/app.js"></script>
+    <!-- Scripts classiques, dans l'ordre : core (état, utilitaires) → domaines → main (événements) -->
+    <script src="/js/core.js"></script>
+    <script src="/js/connection.js"></script>
+    <script src="/js/chat.js"></script>
+    <script src="/js/game.js"></script>
+    <script src="/js/players.js"></script>
+    <script src="/js/actions.js"></script>
+    <script src="/js/modals.js"></script>
+    <script src="/js/main.js"></script>
 </body>
 </html>
