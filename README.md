@@ -73,6 +73,7 @@ cd IA_BOTC
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+python -m playwright install chromium   # navigateur des tests du frontend
 ```
 
 Copier `.env.example` en `.env`, puis remplir les clés :
@@ -129,10 +130,14 @@ python scripts/play_real_game.py    # les IA jouent seules ; l'humain reçoit de
 ## Tests
 
 ```bash
-python -m pytest tests/ -q
+python -m pytest tests/ -q                     # tout (backend + frontend)
+python -m pytest tests/ -q --ignore=tests/frontend   # backend seul
+python -m pytest tests/frontend -q             # frontend seul (ajouter --headed pour voir le navigateur)
 ```
 
 Les tests n'appellent jamais de vrai LLM : ils utilisent un faux LLM. À lancer depuis la racine du projet.
+
+Les tests du frontend (`tests/frontend/`) pilotent un vrai navigateur avec Playwright. Ils ne demandent ni serveur lancé ni connexion internet : le dossier `static/` est servi localement, et le serveur WebSocket est simulé.
 
 ## État d'avancement
 
