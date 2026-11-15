@@ -15,6 +15,11 @@ let gameState = {
     night_info_history: []
 };
 
+// Demande du moteur en attente de réponse : { kind, targets, count }
+let pendingRequest = null;
+// Prompts du moteur auxquels le joueur répond par le chat ou le panneau de salon privé
+const PROMPT_KINDS = ["public_message", "private_partners", "private_message"];
+
 // ================= INITIALISATION & CONNEXION =================
 function joinGame() {
     const input = document.getElementById('welcome-player-id');
@@ -73,6 +78,20 @@ function handleServerMessage(data) {
         case "chat":
             receiveChatMessage(data.channel_id || "public", data.sender, data.content);
             break;
+        case "state_update":
+            updateGameState(data.data);
+            break;
+        case "vote_request":
+        case "night_request":
+            setPendingRequest(data.kind, data.data);
+            break;
+        case "engine_request":
+            if (PROMPT_KINDS.includes(data.kind)) {
+                setPendingRequest(data.kind, data.data);
+            } else {
+                console.log("Demande moteur :", data.kind, data.data);
+            }
+            break;
         case "game_state":
             updateGameState(data.state);
             break;
@@ -103,6 +122,26 @@ function handleServerMessage(data) {
         default:
             console.log("Message non géré :", data);
     }
+}
+
+// ================= DEMANDES DU MOTEUR =================
+function setPendingRequest(kind, data = {}) {
+    pendingRequest = {
+        kind,
+        targets: data.targets || data.choices || [],
+        count: data.count || 1,
+    };
+    renderActionPanel();
+}
+
+function clearPendingRequest() {
+    pendingRequest = null;
+    renderActionPanel();
+}
+
+function nameOf(id) {
+    const p = (gameState.players || []).find(p => p.id === id);
+    return p ? p.name : id;
 }
 
 // ================= CHAT & ONGLETS LATÉRAUX =================
@@ -295,7 +334,7 @@ function updateGameState(newState) {
     gameState = { ...gameState, ...newState };
     
     document.getElementById('game-day').innerText = gameState.day;
-    document.getElementById('game-phase').innerText = gameState.phase === 'nuit' ? 'Nuit' : (gameState.phase === 'vote' ? 'Vote' : 'Discussion');
+    document.getElementById('game-phase').innerText = gameState.phase === 'night' ? 'Nuit' : (gameState.phase === 'vote' ? 'Vote' : 'Discussion');
     document.getElementById('alive-count').innerText = gameState.aliveCount;
 
     // Mise à jour contextuelle de l'annonce si le serveur ne donne pas d'annonce explicite dans le paquet
@@ -377,7 +416,7 @@ function renderPlayersList() {
                     ${p.alive ? 'Vivant' : 'Mort'}
                 </span>
             </div>
-            ${!p.alive ? `<div class="text-xs text-gray-400">Dernier vote : ${p.has_vote ? 'Disponible' : 'Utilisé'}</div>` : ''}
+            ${!p.alive ? `<div class="text-xs text-gray-400">Dernier vote : ${p.lastVote ?? 'aucun'}</div>` : ''}
             <div class="flex items-center">
                 <select onchange="updateSuspicion('${p.id}', this.value)" class="w-full bg-clock-panel border border-clock-border text-xs rounded px-2 py-1.5 text-gray-300 focus:outline-none focus:border-clock-gold">
                     <option value="">-- Rôle soupçonné --</option>
@@ -403,54 +442,52 @@ function renderPlayersList() {
 
 function renderActionPanel() {
     const panel = document.getElementById('dynamic-action-panel');
-    const phase = gameState.phase;
+    const req = pendingRequest;
+    const selectClass = "w-full bg-clock-dark border border-clock-border rounded p-2 text-sm text-gray-200 focus:outline-none focus:border-clock-gold";
+    const optionsOf = (ids) => ids.map(id => `<option value="${id}">${nameOf(id)}</option>`).join('');
 
-    if (phase === 'day') {
-        const otherPlayers = (gameState.players || []).filter(p => p.id !== playerId);
-        panel.innerHTML = `
-            <div class="text-gray-300 text-sm">Phase de discussion. Choisissez jusqu'à 2 agents pour une conversation privée.</div>
-            <div class="space-y-2 mt-2">
-                <div class="text-xs text-clock-gold font-semibold">Cible principale :</div>
-                <select id="whisper-target-1" class="w-full bg-clock-dark border border-clock-border rounded p-2 text-xs text-gray-200 focus:outline-none focus:border-clock-gold">
-                    <option value="">-- Choisir un 1er agent --</option>
-                    ${otherPlayers.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
-                </select>
-
-                <div class="text-xs text-clock-gold font-semibold">Cible secondaire (optionnelle) :</div>
-                <select id="whisper-target-2" class="w-full bg-clock-dark border border-clock-border rounded p-2 text-xs text-gray-200 focus:outline-none focus:border-clock-gold">
-                    <option value="">-- Aucune (1 seul agent) --</option>
-                    ${otherPlayers.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
-                </select>
-
-                <button onclick="requestWhisper()" class="w-full bg-clock-gold/20 hover:bg-clock-gold/30 text-clock-gold border border-clock-gold/50 py-2 rounded-lg text-xs font-semibold transition uppercase tracking-wider">
-                    Proposer un chuchotement
-                </button>
-            </div>
-        `;
-    } else if (phase === 'vote') {
+    if (!req) {
+        panel.innerHTML = `<div class="text-gray-500 italic">En attente de la phase d'action...</div>`;
+    } else if (req.kind === 'vote') {
         panel.innerHTML = `
             <div class="text-blue-400 text-sm font-semibold">Phase de Vote & Exécution</div>
-            <div class="text-gray-300 text-xs">Indiquez votre choix d'exécution pour le village :</div>
-            <select id="vote-target-select" class="w-full bg-clock-dark border border-clock-border rounded p-2 text-sm text-gray-200 focus:outline-none focus:border-clock-gold">
+            <select id="vote-target-select" class="${selectClass}">
                 <option value="">Ne voter pour personne</option>
-                ${(gameState.players || []).filter(p => p.alive).map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
+                ${optionsOf(req.targets)}
             </select>
             <button onclick="submitVote()" class="w-full bg-clock-red hover:bg-red-800 text-white py-2 rounded-lg text-xs font-semibold transition uppercase tracking-wider">
                 Confirmer mon vote
-            </button>
-        `;
-    } else if (phase === 'night') {
+            </button>`;
+    } else if (req.kind === 'night_choice') {
+        const selects = Array.from({ length: req.count }, (_, i) => `
+            <select class="night-target ${selectClass}">
+                <option value="">-- Cible ${i + 1} --</option>
+                ${optionsOf(req.targets)}
+            </select>`).join('');
         panel.innerHTML = `
             <div class="text-purple-400 text-sm font-semibold">Phase Nocturne</div>
-            <div class="text-gray-300 text-xs">Le village endormi... Sélectionnez vos cibles de nuit :</div>
-            <select id="night-target-select" class="w-full bg-clock-dark border border-clock-border rounded p-2 text-sm text-gray-200 focus:outline-none focus:border-clock-gold">
-                <option value="">Aucune cible</option>
-                ${(gameState.players || []).map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
-            </select>
+            ${selects}
             <button onclick="submitNightAction()" class="w-full bg-purple-900/40 hover:bg-purple-900/60 text-purple-300 border border-purple-700 py-2 rounded-lg text-xs font-semibold transition uppercase tracking-wider">
                 Valider l'action nocturne
-            </button>
-        `;
+            </button>`;
+    } else if (req.kind === 'private_partners') {
+        panel.innerHTML = `
+            <div class="text-gray-300 text-sm">Choisissez jusqu'à 2 agents pour une conversation privée.</div>
+            <select id="whisper-target-1" class="${selectClass}">
+                <option value="">-- Choisir un 1er agent --</option>
+                ${optionsOf(req.targets)}
+            </select>
+            <select id="whisper-target-2" class="${selectClass}">
+                <option value="">-- Aucune (1 seul agent) --</option>
+                ${optionsOf(req.targets)}
+            </select>
+            <button onclick="requestWhisper()" class="w-full bg-clock-gold/20 hover:bg-clock-gold/30 text-clock-gold border border-clock-gold/50 py-2 rounded-lg text-xs font-semibold transition uppercase tracking-wider">
+                Proposer un chuchotement
+            </button>`;
+    } else if (req.kind === 'public_message') {
+        panel.innerHTML = `<div class="text-gray-300 text-sm">Écris ton message public dans le chat.</div>`;
+    } else if (req.kind === 'private_message') {
+        panel.innerHTML = `<div class="text-gray-300 text-sm">Écris ton message dans le salon privé.</div>`;
     }
 }
 
@@ -802,21 +839,27 @@ function updateSuspicion(playerId, roleType) {
 
 function submitVote() {
     const select = document.getElementById('vote-target-select');
-    const targetId = select ? select.value : null;
-    
+    const targetId = select ? select.value : "";
+
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({
             action: "submit_vote",
             payload: { target_id: targetId }
         }));
-        appendSystemMessage(`Vote enregistré pour : ${targetId ? targetId : 'Personne'}`);
+        appendSystemMessage(`Vote enregistré pour : ${targetId ? nameOf(targetId) : 'Personne'}`);
+        clearPendingRequest();
     }
 }
 
 function submitNightAction() {
-    const select = document.getElementById('night-target-select');
-    const targetId = select ? select.value : null;
-    const targets = targetId ? [targetId] : [];
+    const selects = document.querySelectorAll('.night-target');
+    const targets = Array.from(selects).map(s => s.value).filter(v => v);
+    const count = pendingRequest ? pendingRequest.count : 1;
+
+    if (targets.length !== count) {
+        alert(`Il faut choisir ${count} cible(s).`);
+        return;
+    }
 
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({
@@ -824,6 +867,7 @@ function submitNightAction() {
             payload: { targets: targets }
         }));
         appendSystemMessage(`Action nocturne validée (${targets.length} cible(s)).`);
+        clearPendingRequest();
     }
 }
 

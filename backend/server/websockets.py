@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError, TypeAdapter
 
+from backend.front_state import to_front_state
 from backend.server.connection_manager import manager
 from backend.server.schemas import ClientActionPacket
 
@@ -25,13 +26,21 @@ REQUEST_TO_MESSAGE = {"night_choice": "night_request", "vote": "vote_request"}
 
 
 def register_human(player_id: str, port) -> None:
-    """À appeler quand la partie démarre, depuis une coroutine : relie le joueur à son port."""
+    """Relie le joueur à son port. Appelée par game_runner, depuis une coroutine."""
     ports[player_id] = port
     asyncio.create_task(_forward_requests(player_id, port))
 
 
+async def _send_state(player_id: str, port) -> None:
+    """Envoie au front l'état de la partie vu par ce joueur. Ignoré tant que la partie n'a pas démarré."""
+    if port is None or port.state is None or port.memory is None:
+        return
+    view = to_front_state(port.state, port.memory, player_id, tuple(port.votes_history))
+    await manager.send_to_player(player_id, {"type": "state_update", "data": view})
+
+
 async def _forward_requests(player_id: str, port) -> None:
-    """Lit les demandes du moteur, les envoie au joueur et retient celle qui attend une réponse."""
+    """Lit les demandes du moteur, envoie l'état puis la demande, et retient celle qui attend une réponse."""
     while True:
         request = await port.requests.get()
         kind = request["kind"]
@@ -39,6 +48,7 @@ async def _forward_requests(player_id: str, port) -> None:
             pending[player_id] = kind
         else:
             pending.pop(player_id, None)
+        await _send_state(player_id, port)
         data = {k: v for k, v in request.items() if k != "kind"}
         msg_type = REQUEST_TO_MESSAGE.get(kind, "engine_request")
         await manager.send_to_player(player_id, {"type": msg_type, "kind": kind, "data": data})
@@ -61,6 +71,12 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
     URL de connexion : ws://<serveur>/ws/player_human_1
     """
     await manager.connect(player_id, websocket)
+
+    # Lance la partie au premier branchement du joueur humain, puis envoie l'état si elle existe.
+    # Import local pour éviter le cycle game_runner <-> websockets.
+    from backend.server.game_runner import ensure_started
+    ensure_started(player_id)
+    await _send_state(player_id, ports.get(player_id))
 
     try:
         while True:
@@ -207,7 +223,6 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
                             player_id,
                             {"type": "error", "data": "Ce n'est pas le moment d'agir la nuit."}
                         )
-
 
                 # 6. DÉCLENCHEMENT DU VOTE (SI REFUS DE WHISPER)
                 elif action == "trigger_vote_phase":

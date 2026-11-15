@@ -1,5 +1,8 @@
+import asyncio
 import logging
+import os
 import time
+from types import SimpleNamespace
 
 import litellm
 from dotenv import load_dotenv
@@ -15,8 +18,15 @@ litellm.drop_params = True
 
 JSON_ATTEMPTS = 2
 
+# Limite de débit : un appel à la fois, avec une pause après chacun (plan gratuit Mistral).
+LLM_CONCURRENCY = 1
+CALL_PAUSE_SECONDS = 2.0
+_llm_slot = asyncio.Semaphore(LLM_CONCURRENCY)
+
 # Ordre de priorité : voir docs/choix_des_modeles.md
+# Mistral est en tête : Gemini et Groq sont en quota dépassé. La clé est lue depuis MISTRAL_API_KEY (.env).
 FAST_MODELS = [
+    "mistral/mistral-small-latest",
     "gemini/gemini-3.1-flash-lite",
     "groq/openai/gpt-oss-20b",
     "openrouter/mistralai/mistral-small-24b-instruct-2501",
@@ -26,6 +36,7 @@ FAST_MODELS = [
 ]
 
 CAPABLE_MODELS = [
+    "mistral/mistral-small-latest",
     "groq/openai/gpt-oss-120b",
     "gemini/gemini-3.1-flash-lite",
     "openrouter/deepseek/deepseek-v4.1-flash-1017",
@@ -71,15 +82,40 @@ router = Router(
     cooldown_time=60,
 )
 
+# Mode simulation : aucun appel réel, aucun token consommé. Activé avec SIMULATE_LLM=1.
+SIMULATE_LLM = os.getenv("SIMULATE_LLM") == "1"
+
+
+async def _simulated_acompletion(model, messages, **kwargs):
+    """Même forme de réponse que LiteLLM, sans réseau. Les réponses JSON sont vides."""
+    wants_json = kwargs.get("response_format") is not None
+    content = "{}" if wants_json else "Message simulé."
+    return SimpleNamespace(
+        model=f"simulated/{model}",
+        usage=SimpleNamespace(total_tokens=0),
+        choices=[SimpleNamespace(message=SimpleNamespace(content=content))],
+    )
+
+
+if SIMULATE_LLM:
+    router.acompletion = _simulated_acompletion
+    CALL_PAUSE_SECONDS = 0.5  # assez court pour aller vite, assez long pour voir le front se mettre à jour
+    logger.warning("SIMULATE_LLM=1 : aucun appel réel aux modèles, aucun token consommé.")
+
 
 async def ask_llm(profile: str, messages: list[dict], **kwargs) -> str:
     """Envoie les messages au premier modèle du profil ("fast" ou "capable") et renvoie le texte.
 
+    Un seul appel à la fois, avec une pause après chacun (voir LLM_CONCURRENCY).
     Si tous les modèles du profil échouent, l'exception remonte : c'est à l'appelant
     (l'orchestrateur) de prendre une décision par défaut.
     """
-    start = time.perf_counter()
-    response = await router.acompletion(model=f"{profile}-1", messages=messages, **kwargs)
+    async with _llm_slot:
+        start = time.perf_counter()
+        try:
+            response = await router.acompletion(model=f"{profile}-1", messages=messages, **kwargs)
+        finally:
+            await asyncio.sleep(CALL_PAUSE_SECONDS)
     logger.info("profil=%s modèle=%s durée=%.2fs tokens=%s",
                 profile, response.model, time.perf_counter() - start, response.usage.total_tokens)
     content = response.choices[0].message.content
