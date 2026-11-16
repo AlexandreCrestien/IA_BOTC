@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import random
 import time
 from types import SimpleNamespace
 
@@ -134,6 +135,16 @@ def _strip_code_fences(text: str) -> str:
     return text.strip()
 
 
+def _simulated_answer[T: BaseModel](schema: type[T], context: dict) -> T:
+    """Simulation : réponse fictive mais valide, tirée au sort parmi les options légales."""
+    options = context["options"]
+    if "number_of_targets" in context:
+        data = {"cibles": random.sample(options, context["number_of_targets"]), "raison": "simulé"}
+    else:
+        data = {"cible": random.choice(options), "raison": "simulé"}
+    return schema.model_validate(data, context=context)
+
+
 async def ask_llm_json[T: BaseModel](profile: str, messages: list[dict], schema: type[T],
                                       context: dict | None = None) -> T:
     """Comme ask_llm, mais renvoie un objet Pydantic validé.
@@ -141,7 +152,12 @@ async def ask_llm_json[T: BaseModel](profile: str, messages: list[dict], schema:
     context est transmis aux validateurs du schéma (ex. les options légales).
     Si la réponse n'est pas un JSON valide pour le schéma (ou si le modèle refuse),
     on redemande en expliquant l'erreur. Après JSON_ATTEMPTS échecs, ValueError remonte.
+    En simulation (SIMULATE_LLM=1), la réponse est tirée au sort parmi les options légales.
     """
+    if SIMULATE_LLM and context and "options" in context:
+        await asyncio.sleep(CALL_PAUSE_SECONDS)
+        return _simulated_answer(schema, context)
+
     for attempt in range(1, JSON_ATTEMPTS + 1):
         text = await ask_llm(profile, messages, response_format={"type": "json_object"})
         try:

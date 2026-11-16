@@ -8,7 +8,8 @@ from backend.rules import legal_actions
 class QueueHumanPort:
     """Implémentation de HumanPort pilotée par des files.
     Le moteur pose une demande dans `requests`, puis attend la réponse dans `answers`.
-    Le serveur lit `requests` pour prévenir le joueur, et met les réponses dans `answers`."""
+    Le serveur lit `requests` pour prévenir le joueur, et met les réponses dans `answers`.
+    Chaque demande transmet l'état courant : le serveur s'en sert pour l'affichage du front."""
 
     def __init__(self) -> None:
         self.requests: asyncio.Queue = asyncio.Queue()
@@ -30,9 +31,17 @@ class QueueHumanPort:
         legal = legal_actions(state, player_id)
         return tuple(await self._ask("night_choice", targets=list(legal.targets), count=legal.count))
 
+    async def show_night_info(self, state: GameState, turn: int, info: str, allies: Optional[list[dict]]) -> None:
+        self.state = state
+        await self._tell("night_info", turn=turn, info=info, allies=allies)
+
     async def show_night_deaths(self, state: GameState, deaths: tuple[str, ...]) -> None:
         self.state = state
         await self._tell("night_deaths", deaths=list(deaths))
+
+    async def show_public_message(self, state: GameState, author: str, text: str) -> None:
+        self.state = state
+        await self._tell("public_chat", author=author, text=text)
 
     async def public_message(self, state: GameState, player_id: str) -> Optional[str]:
         self.state = state
@@ -47,7 +56,8 @@ class QueueHumanPort:
         self.state = state
         return await self._ask("private_message")
 
-    async def show_private_replies(self, replies: list[tuple[str, str]]) -> None:
+    async def show_private_replies(self, state: GameState, replies: list[tuple[str, str]]) -> None:
+        self.state = state
         await self._tell("private_replies", replies=[{"author": pid, "text": text} for pid, text in replies])
 
     async def vote(self, state: GameState, player_id: str) -> Optional[str]:

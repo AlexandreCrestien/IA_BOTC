@@ -1,7 +1,7 @@
 """Tour complet avec l'humain et les IA.
-Ordre : nuit (IA puis humain), morts de la nuit affichées, discussion publique des IA,
-message public de l'humain, salon privé facultatif (3 messages max, 1 ou 2 IA répondant
-en parallèle), vote (IA puis humain).
+Ordre : nuit (IA puis humain), infos de nuit de l'humain, morts de la nuit affichées,
+discussion publique des IA, message public de l'humain, salon privé facultatif
+(3 messages max, 1 ou 2 IA répondant en parallèle), vote (IA puis humain).
 Chaque étape attend la précédente : l'humain n'écrit jamais pendant un appel IA.
 Un joueur mort peut encore parler et voter."""
 import asyncio
@@ -13,7 +13,7 @@ from backend.ai_turns import collect_ai_night_choices, collect_ai_votes
 from backend.conversations import public_conversation, start_private_conversation
 from backend.game_engine import TurnResult, _deaths, play_day, play_night, record_night_choices, reveal_psychic_answer
 from backend.memory_manager import MemoryManager
-from backend.models import EventType, GameState, Phase
+from backend.models import Equipe, EventType, GameState, Phase
 from backend.rules import night_steps, winner
 
 logger = logging.getLogger(__name__)
@@ -24,19 +24,44 @@ MAX_PRIVATE_PARTNERS = 2
 
 class HumanPort(Protocol):
     """Interface entre le moteur et l'humain. Chaque méthode attend la réponse de l'humain.
-    None signifie « rien » : pas de message, pas de salon privé, abstention."""
+    None signifie « rien » : pas de message, pas de salon privé, abstention.
+    Les méthodes show_* transmettent l'état courant, pour que le front affiche la bonne phase."""
 
     async def night_choice(self, state: GameState, player_id: str) -> tuple[str, ...]: ...
+    async def show_night_info(self, state: GameState, turn: int, info: str, allies: Optional[list[dict]]) -> None: ...
     async def show_night_deaths(self, state: GameState, deaths: tuple[str, ...]) -> None: ...
+    async def show_public_message(self, state: GameState, author: str, text: str) -> None: ...
     async def public_message(self, state: GameState, player_id: str) -> Optional[str]: ...
     async def private_partners(self, state: GameState, player_id: str) -> list[str]: ...
     async def private_message(self, state: GameState, player_id: str) -> Optional[str]: ...
-    async def show_private_replies(self, replies: list[tuple[str, str]]) -> None: ...
+    async def show_private_replies(self, state: GameState, replies: list[tuple[str, str]]) -> None: ...
     async def vote(self, state: GameState, player_id: str) -> Optional[str]: ...
 
 
 def _human_must_choose(state: GameState, player_id: str) -> bool:
     return any(pid == player_id and needs for pid, needs in night_steps(state))
+
+
+def _role_infos(memory: MemoryManager, human_id: str, turn: int) -> list[str]:
+    """Infos privées écrites pendant ce tour pour le joueur humain (première nuit, Voyante, Détective)."""
+    return [
+        event.content
+        for event in memory.events_for(human_id)
+        if event.type == EventType.role_info
+        and event.turn == turn
+        and event.visible_to == frozenset({human_id})
+    ]
+
+
+def _allies(state: GameState, human_id: str) -> Optional[list[dict]]:
+    """Camp du mal : les alliés révélés en première nuit. None pour le camp du bien."""
+    if state.player(human_id).role.team not in (Equipe.DEMON, Equipe.SBIRE):
+        return None
+    return [
+        {"id": p.id, "role": p.role.name_FR}
+        for p in state.players
+        if p.id != human_id and p.role.team in (Equipe.DEMON, Equipe.SBIRE)
+    ]
 
 
 async def _parallel_replies(
@@ -49,7 +74,8 @@ async def _parallel_replies(
     participants = {human_id} | {agent.player_id for agent in partners}
 
     async def ask(agent):
-        others = [memory.name_of(pid) for pid in sorted(participants - {agent.player_id})]
+        # speak_private attend des identifiants et récupère les noms lui-même
+        others = sorted(participants - {agent.player_id})
         try:
             return agent.player_id, await agent.speak_private(others)
         except Exception:
@@ -91,7 +117,7 @@ async def _private_channel(
             break
         memory.add_private(EventType.private_summary, human_id, text, participants)
         replies = await _parallel_replies(human_id, partners, memory)
-        await human.show_private_replies(replies)
+        await human.show_private_replies(state, replies)
 
 
 async def play_turn_with_human(
@@ -107,8 +133,14 @@ async def play_turn_with_human(
     if state.phase != Phase.NUIT:
         raise ValueError("un tour commence par la nuit")
 
-    # NUIT : IA en parallèle, puis l'humain
+    # NUIT : infos de première nuit de l'humain (alliés inclus), IA en parallèle, puis l'humain
     memory.set_moment(state.turn, state.phase)
+    allies = _allies(state, human_id) if state.turn == 1 else None
+    shown = _role_infos(memory, human_id, state.turn)
+    for info in shown:
+        await human.show_night_info(state, state.turn, info, allies)
+        allies = None
+
     ai_night = await collect_ai_night_choices(state, agents)
     human_night: dict[str, tuple[str, ...]] = {}
     if _human_must_choose(state, human_id):
@@ -120,6 +152,11 @@ async def play_turn_with_human(
 
     night_deaths = _deaths(state, after_night)
     await human.show_night_deaths(after_night, night_deaths)
+
+    # Infos écrites pendant la nuit (réponse de la Voyante), hors celles déjà montrées
+    for info in _role_infos(memory, human_id, state.turn)[len(shown):]:
+        await human.show_night_info(after_night, state.turn, info, None)
+
     if winner(after_night) is not None:
         return TurnResult(after_night, night_choices, {}, None, night_deaths, winner(after_night))
 
@@ -127,7 +164,9 @@ async def play_turn_with_human(
     discussion = after_night.next_phase()
     memory.set_moment(discussion.turn, discussion.phase)
     speakers = [agents[p.id] for p in discussion.players if p.id in agents]
-    await public_conversation(speakers, memory)
+    said = await public_conversation(speakers, memory)
+    for author, text in said:
+        await human.show_public_message(discussion, author, text)
 
     text = await human.public_message(discussion, human_id)
     if text:

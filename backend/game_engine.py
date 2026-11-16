@@ -193,6 +193,7 @@ def play_game(
             return state
     raise RuntimeError(f"partie non terminée après {max_turns} tours")
 
+
 def reveal_psychic_answer(
     state: GameState,
     choices: dict[str, tuple[str, ...]],
@@ -200,9 +201,10 @@ def reveal_psychic_answer(
     rng: random.Random,
 ) -> None:
     """Écrit dans la mémoire de la Voyante le résultat de son sondage de la nuit.
-    À appeler après la résolution de la nuit (state = état après la nuit), avant la discussion."""
+    À appeler après la résolution de la nuit (state = état après la nuit), avant la discussion.
+    Une Voyante morte pendant la nuit ne reçoit aucune information."""
     for player in state.players:
-        if player.role.name_EN != "psychic" or player.id not in choices:
+        if player.role.name_EN != "psychic" or player.id not in choices or not player.alive:
             continue
         probed = choices[player.id]
         found = psychic_answer(state, player.id, probed, rng)
@@ -214,6 +216,7 @@ def reveal_psychic_answer(
             f"Parmi {names}, {verdict}.",
             frozenset({player.id}),
         )
+
 
 def record_night_choices(state: GameState, choices: dict[str, tuple[str, ...]], memory: MemoryManager) -> None:
     """Chaque joueur qui a agi garde une trace privée de sa cible. Un joueur mort pendant la nuit n'en garde pas."""

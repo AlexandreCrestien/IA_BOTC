@@ -18,7 +18,7 @@ def _check_vote(state: GameState, voter_id: str, target_id: str) -> None:
 
 def vote_result(state: GameState, votes: dict[str, Optional[str]]) -> Optional[str]:
     """Renvoie l'id du joueur exécuté, ou None.
-    Exécution si la cible obtient strictement plus de la moitié des votes exprimés."""
+    Exécution si la cible obtient le plus de voix. Égalité en tête : personne n'est exécuté."""
     votes = filter_butler_votes(state, votes)
 
     for voter_id, target_id in votes.items():
@@ -29,10 +29,11 @@ def vote_result(state: GameState, votes: dict[str, Optional[str]]) -> Optional[s
     if not cast:
         return None
 
-    target_id, count = Counter(cast).most_common(1)[0]
-    if count * 2 > len(cast):
-        return target_id
-    return None
+    ranking = Counter(cast).most_common()
+    top_target, top_count = ranking[0]
+    if len(ranking) > 1 and ranking[1][1] == top_count:
+        return None
+    return top_target
 
 
 def resolve_vote(state: GameState, votes: dict[str, Optional[str]]) -> GameState:
