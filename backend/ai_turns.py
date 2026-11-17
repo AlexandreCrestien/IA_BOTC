@@ -4,7 +4,7 @@ import random
 from typing import Any, Optional
 
 from backend.conversations import public_conversation
-from backend.game_engine import TurnResult, _deaths, play_day, play_night, reveal_psychic_answer
+from backend.game_engine import TurnResult, _deaths, play_day, play_night, record_night_choices, reveal_psychic_answer
 from backend.memory_manager import MemoryManager
 from backend.models import GameState, Phase
 from backend.rules import legal_actions, night_steps, winner
@@ -38,11 +38,17 @@ async def _limited(semaphore: asyncio.Semaphore, awaitable):
         return await awaitable
 
 
+def night_situation(state: GameState) -> str:
+    alive = ", ".join(p.name for p in state.alive_players())
+    return (f"Joueurs vivants : {alive}. "
+            "Ce que tu sais contient tes choix des nuits précédentes : ne répète pas un choix sans information nouvelle.")
+
+
 async def _night_choice(agent: Any, state: GameState, player_id: str) -> tuple[str, ...]:
     legal = legal_actions(state, player_id)
     options = [_name_of(state, target) for target in legal.targets]
     try:
-        names = await agent.night_action(options, legal.count)
+        names = await agent.night_action(options, legal.count, night_situation(state))
         return tuple(_id_of(state, name) for name in names)
     except Exception:
         logger.exception("%s n'a pas pu choisir cette nuit", player_id)
@@ -97,7 +103,8 @@ async def play_turn_with_ai(
     memory.set_moment(state.turn, state.phase)
     ai_night = await collect_ai_night_choices(state, agents)
     after_night, night_choices = play_night(state, rng, lambda s, pid: ai_night.get(pid, ()))
-    reveal_psychic_answer(after_night, night_choices, memory, rng)    
+    record_night_choices(after_night, night_choices, memory)
+    reveal_psychic_answer(after_night, night_choices, memory, rng)   
     night_deaths = _deaths(state, after_night)
     if winner(after_night) is not None:
         return TurnResult(after_night, night_choices, {}, None, night_deaths, winner(after_night))

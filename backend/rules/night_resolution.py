@@ -13,13 +13,14 @@ RESOLUTION_ORDER = (
 
 
 def resolve_night(state: GameState, choices: dict[str, tuple[str, ...]]) -> GameState:
-    """Applique les choix de nuit dans l'ordre de jeu : poison, protection, meurtre, maître du Majordome.
-    choices : {id_joueur: cibles}. Un joueur absent du dictionnaire n'agit pas.
-    La Voyante ne modifie pas l'état ici."""
+    """Applique les choix de nuit dans l'ordre de jeu. Un joueur tué plus tôt dans la nuit
+    annule son action : son choix n'a aucun effet."""
     for role_name, apply in RESOLUTION_ORDER:
         for player in state.players:
             if player.role.name_EN != role_name or player.id not in choices:
                 continue
             for target_id in choices[player.id]:
+                if not state.player(player.id).alive:
+                    break
                 state = apply(state, player.id, target_id)
     return state

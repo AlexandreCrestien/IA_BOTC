@@ -38,10 +38,13 @@ class TurnResult(NamedTuple):
 def _info_text(state: GameState, info) -> str:
     subjects = ", ".join(state.player(pid).name for pid in info.subject_ids)
     if info.kind == "demon":
-        return f"Première nuit : tu es le Diablotin. Tes alliés sont : {subjects}."
-    if info.kind == "minion":
+        # Le sbire voit le démon
         return f"Première nuit : tu es l'Empoisonneur. Le Diablotin est : {subjects}."
-    return f"Première nuit : parmi {subjects}, l'un d'eux est le Diablotin."
+    if info.kind == "minion":
+        # Le démon voit le sbire
+        return f"Première nuit : tu es le Diablotin. Tes alliés sont : {subjects}."
+    # Le Détective voit un sbire parmi deux joueurs
+    return f"Première nuit : parmi {subjects}, l'un d'eux est l'Empoisonneur."
 
 
 def setup_game(
@@ -190,6 +193,7 @@ def play_game(
             return state
     raise RuntimeError(f"partie non terminée après {max_turns} tours")
 
+
 def reveal_psychic_answer(
     state: GameState,
     choices: dict[str, tuple[str, ...]],
@@ -197,9 +201,10 @@ def reveal_psychic_answer(
     rng: random.Random,
 ) -> None:
     """Écrit dans la mémoire de la Voyante le résultat de son sondage de la nuit.
-    À appeler après la résolution de la nuit (state = état après la nuit), avant la discussion."""
+    À appeler après la résolution de la nuit (state = état après la nuit), avant la discussion.
+    Une Voyante morte pendant la nuit ne reçoit aucune information."""
     for player in state.players:
-        if player.role.name_EN != "psychic" or player.id not in choices:
+        if player.role.name_EN != "psychic" or player.id not in choices or not player.alive:
             continue
         probed = choices[player.id]
         found = psychic_answer(state, player.id, probed, rng)
@@ -211,3 +216,13 @@ def reveal_psychic_answer(
             f"Parmi {names}, {verdict}.",
             frozenset({player.id}),
         )
+
+
+def record_night_choices(state: GameState, choices: dict[str, tuple[str, ...]], memory: MemoryManager) -> None:
+    """Chaque joueur qui a agi garde une trace privée de sa cible. Un joueur mort pendant la nuit n'en garde pas."""
+    for player_id, target_ids in choices.items():
+        if not target_ids or not state.player(player_id).alive:
+            continue
+        names = " et ".join(state.player(pid).name for pid in target_ids)
+        memory.add_event(EventType.night_action, game_master,
+                         f"Nuit {state.turn} : tu as choisi {names}.", frozenset({player_id}))
