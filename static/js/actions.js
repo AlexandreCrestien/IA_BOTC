@@ -136,7 +136,6 @@ const RESULT_CLOSE_BUTTON = `
     </button>`;
 
 function renderVoteResult(result) {
-    const isDead = id => (gameState.players || []).find(p => p.id === id)?.alive === false;
 
     // Verdict : seul le total de voix de la personne exécutée est indiqué.
     let verdict;
@@ -158,7 +157,7 @@ function renderVoteResult(result) {
             : `<span class="italic opacity-60">Personne</span>`;
         return `
             <li class="ballot flex items-center gap-2 rounded-md px-3 py-1.5 text-sm">
-                <span class="truncate">${escapeHtml(getPlayerName(v.voter))}${isDead(v.voter) ? ' <span class="text-xs opacity-60">(vote fantôme)</span>' : ''}</span>
+                <span class="truncate">${escapeHtml(getPlayerName(v.voter))}${v.ghost ? ' <span class="text-xs opacity-60">(vote fantôme)</span>' : ''}</span>
                 <span class="truncate ml-auto text-right">${target}</span>
             </li>
         `;

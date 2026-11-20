@@ -43,13 +43,15 @@ def test_vote_excludes_player_and_dead_then_shows_loader_and_results(game, serve
     server.send(type="vote_result", turn=2, executed="Mère Grimsby", votes=[
         {"voter": "Lord Ashcombe", "target": "Mère Grimsby"},
         {"voter": "Révérend Hale", "target": "Mère Grimsby"},
-        {"voter": "Dr. Thorne", "target": "Lord Ashcombe"},
+        {"voter": "Dr. Thorne", "target": "Lord Ashcombe", "ghost": True},
         {"voter": PLAYER, "target": None},
     ])
     panel = game.locator("#dynamic-action-panel")
     expect(panel).to_contain_text("Mère Grimsby est exécuté·e avec 2 voix.")
     expect(game.locator(".ballot")).to_have_count(4)
     expect(game.locator(".ballot", has_text="Dr. Thorne")).to_contain_text("(vote fantôme)")
+    # Le joueur exécuté ce tour-ci votait vivant : pas de mention
+    expect(game.locator(".ballot", has_text="Lord Ashcombe").first).not_to_contain_text("(vote fantôme)")
 
 
 def test_next_action_waits_while_a_result_is_displayed(game, server):

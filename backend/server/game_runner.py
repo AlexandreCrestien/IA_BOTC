@@ -69,8 +69,15 @@ async def run_game(names: dict[str, str], human_id: str, personality_names: list
 
         # Le front reçoit des noms, jamais des identifiants internes
         label = {p.id: p.name for p in _all_players(state)}
+        dead = {p.id for p in _all_players(state) if not p.alive}
         votes = [
-            {"voter": label.get(voter, voter), "target": label.get(target, target) if target else None}
+            {
+                "voter": label.get(voter, voter),
+                "target": label.get(target, target) if target else None,
+                # Vote fantôme : votant déjà mort au moment du vote. On meurt la nuit (avant le vote)
+                # ou par exécution (après) : mort en fin de tour sans avoir été exécuté = déjà mort.
+                "ghost": voter in dead and voter != result.executed,
+            }
             for voter, target in result.votes.items()
         ]
         executed = label.get(result.executed, result.executed) if result.executed else None

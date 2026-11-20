@@ -16,7 +16,7 @@ def no_game_yet(monkeypatch):
 def _state(turn):
     """État minimal : run_game lit le tour et les joueurs (pour envoyer des noms au front)."""
     return SimpleNamespace(turn=turn, players=(
-        SimpleNamespace(id="h", name="Alex"), SimpleNamespace(id="p1", name="marIA"),
+        SimpleNamespace(id="h", name="Alex", alive=True), SimpleNamespace(id="p1", name="marIA", alive=True),
     ))
 
 
@@ -54,8 +54,34 @@ def test_run_game_joue_jusqu_a_la_victoire(monkeypatch):
     queued = _queued(registered[0][1])
     # Le front reçoit des noms, jamais les identifiants internes
     assert queued[0] == {"kind": "vote_result", "turn": 1, "executed": "marIA",
-                         "votes": [{"voter": "Alex", "target": "marIA"}]}
+                         "votes": [{"voter": "Alex", "target": "marIA", "ghost": False}]}
     assert queued[-1]["kind"] == "game_over" and queued[-1]["winner"] == "bons"
+
+
+def test_bulletins_marques_vote_fantome(monkeypatch):
+    """Vote fantôme : votant déjà mort au moment du vote. Le joueur exécuté ce tour-ci votait vivant."""
+    registered = []
+    after_day = SimpleNamespace(turn=2, players=(
+        SimpleNamespace(id="h", name="Alex", alive=True),
+        SimpleNamespace(id="p1", name="marIA", alive=False),   # morte lors d'une nuit précédente
+        SimpleNamespace(id="p2", name="tobIAs", alive=False),  # exécuté ce tour-ci
+    ))
+
+    def fake_setup(names, human_id, personality_names, rng):
+        return _state(1), {}, "memoire"
+
+    async def fake_turn(state, rng, agents, memory, human_id, port):
+        return SimpleNamespace(state=after_day, game_winner="bons",
+                               votes={"h": "p2", "p1": "p2", "p2": None}, executed="p2")
+
+    monkeypatch.setattr(gr, "setup_game", fake_setup)
+    monkeypatch.setattr(gr, "play_turn_with_human", fake_turn)
+    monkeypatch.setattr(gr, "register_human", lambda pid, port: registered.append((pid, port)))
+
+    asyncio.run(gr.run_game({"h": "Alex"}, "h", [], seed=1))
+
+    votes = {v["voter"]: v["ghost"] for v in _queued(registered[0][1])[0]["votes"]}
+    assert votes == {"Alex": False, "marIA": True, "tobIAs": False}
 
 
 def test_fin_de_partie_apres_les_morts_de_la_derniere_nuit(monkeypatch):

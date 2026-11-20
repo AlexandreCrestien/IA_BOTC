@@ -122,3 +122,22 @@ def test_server_crash_offers_a_new_game(game, server):
     expect(game.locator("#gameover-title")).to_have_text("Partie interrompue")
     expect(game.locator("#gameover-desc")).to_have_text("Une erreur a interrompu la partie.")
     expect(game.locator("#gameover-outcome")).to_be_hidden()
+
+
+def test_role_reveal_is_read_before_the_dawn_modal(game, server):
+    """Au démarrage, le réveil du village peut arriver en même temps que le rôle : le rôle passe devant."""
+    server.send(type="role_assigned", role_name="Moine", description="Protégez un joueur.")
+    server.send(type="night_result", turn=1, dead_player=None)
+    expect(game.locator("#modal-night-result")).to_be_visible()
+
+    game.click("[data-action='close-role-reveal']")  # cliquable : la modale du rôle est au-dessus
+    expect(game.locator("#modal-role-reveal")).to_be_hidden()
+    game.click("[data-action='close-night-result']")
+    expect(game.locator("#modal-night-result")).to_be_hidden()
+
+
+def test_game_over_is_above_other_modals(game, server):
+    server.send(type="night_result", turn=3, dead_player="Révérend Hale")
+    server.send(type="game_over", winner="Villageois", details="Fin.")
+    game.click("#modal-gameover [data-action='reload']")  # cliquable : la fin de partie est au-dessus
+    expect(game.locator("#screen-welcome")).to_be_visible()

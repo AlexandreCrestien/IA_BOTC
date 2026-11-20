@@ -812,3 +812,10 @@ body {
   border-color: var(--gold);
   color: var(--gold);
 }
+
+/* Ordre des modales quand plusieurs s'ouvrent en même temps (elles partagent z-index 50 sinon) :
+   le rôle secret se lit en premier ; fin de partie, abandon et connexion perdue passent devant le reste. */
+#modal-role-reveal { z-index: 55; }
+#modal-gameover,
+#modal-abandon,
+#modal-disconnected { z-index: 60; }
