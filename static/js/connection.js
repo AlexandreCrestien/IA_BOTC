@@ -118,11 +118,17 @@ function handleServerMessage(data) {
             break;
         case "role_assigned":
             assignRole(data.role_name, data.description);
+            // Reconnexion d'un joueur du camp du mal : ses alliés déjà révélés
+            if (Array.isArray(data.allies)) revealAllies(data.allies);
+            break;
+        case "input_request":
+            showTurnPrompt(data); // message public ou privé attendu (facultatif)
             break;
         case "announcement":
             setAnnouncement(data.text);
             break;
         case "action_request":
+            hideTurnPrompt(); // une nouvelle étape commence : plus de saisie attendue
             handleActionRequest(data); // Remplit l'encadré d'action de la sidebar droite
             break;
         case "agent_whisper_request":
@@ -130,7 +136,9 @@ function handleServerMessage(data) {
             break;
         case "private_channel_opened":
             // members inclut le joueur humain : on ne garde que ses interlocuteurs pour le titre de l'onglet
-            handlePrivateChannelOpened(data.channel_id, data.text, (data.members || []).filter(m => m !== playerId));
+            // focus false : salon rouvert après une reconnexion, sans s'y placer
+            handlePrivateChannelOpened(data.channel_id, data.text, (data.members || []).filter(m => m !== playerId),
+                data.focus !== false);
             break;
         case "vote_result":
             addVoteHistory(data.turn, data.executed, data.votes);

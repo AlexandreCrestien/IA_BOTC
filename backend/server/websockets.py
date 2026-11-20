@@ -27,8 +27,15 @@ whisper_left: dict[str, int] = {}
 roles_sent: set[str] = set()
 forward_tasks: dict[str, asyncio.Task] = {}  # relais des demandes du moteur, par joueur
 
+# Renvoyés au front quand le joueur se reconnecte (rechargement, coupure) :
+chat_log: dict[str, list[dict]] = {}              # messages de chat envoyés (public et salons privés)
+opened_channels: dict[str, dict[str, list]] = {}  # salons privés ouverts : channel_id -> membres (noms)
+known_allies: dict[str, list[dict]] = {}          # alliés révélés au camp du mal
+
 # Demandes du moteur auxquelles le joueur doit répondre
 ANSWERABLE = {"night_choice", "vote", "public_message", "private_partners", "private_message"}
+# Étapes facultatives que le joueur peut passer, et la réponse « rien » attendue par le moteur
+SKIPPABLE = {"public_message": None, "private_message": None, "private_partners": []}
 PUBLIC_CHANNEL = "public"
 WHISPER_MESSAGES = 3  # messages privés autorisés par salon
 
@@ -48,13 +55,40 @@ def reset_player(player_id: str) -> None:
     task = forward_tasks.pop(player_id, None)
     if task is not None:
         task.cancel()
-    for store in (ports, pending, current_request, whispers, whisper_left):
+    for store in (ports, pending, current_request, whispers, whisper_left,
+                  chat_log, opened_channels, known_allies):
         store.pop(player_id, None)
     roles_sent.discard(player_id)
 
 
 async def _send(player_id: str, message: dict) -> None:
     await manager.send_to_player(player_id, message)
+
+
+async def _send_chat(player_id: str, channel_id: str, sender: str, content: str, broadcast: bool = False) -> None:
+    """Envoie un message de chat et le garde pour le renvoyer après une reconnexion.
+    broadcast=True : message de la place publique, diffusé à toutes les connexions."""
+    message = {"type": "chat", "channel_id": channel_id, "sender": sender, "content": content}
+    chat_log.setdefault(player_id, []).append(message)
+    if broadcast:
+        await manager.broadcast(message)
+    else:
+        await _send(player_id, message)
+
+
+async def _restore_session(player_id: str) -> None:
+    """Reconnexion : rouvre les salons privés et renvoie l'historique du chat.
+    Le front ne se place sur un salon que si le moteur attend un message privé (demande renvoyée ensuite)."""
+    for channel_id, members in opened_channels.get(player_id, {}).items():
+        await _send(player_id, {
+            "type": "private_channel_opened",
+            "channel_id": channel_id,
+            "members": members,
+            "text": "",
+            "focus": False,
+        })
+    for message in chat_log.get(player_id, []):
+        await _send(player_id, message)
 
 
 def _human_role(port, player_id: str):
@@ -104,11 +138,14 @@ async def _send_state(player_id: str, port) -> None:
     if player_id not in roles_sent:
         role = _human_role(port, player_id)
         roles_sent.add(player_id)
-        await _send(player_id, {
+        message = {
             "type": "role_assigned",
             "role_name": role.name_FR,
             "description": getattr(role, "description", ""),
-        })
+        }
+        if player_id in known_allies:  # reconnexion d'un joueur du camp du mal après la révélation
+            message["allies"] = known_allies[player_id]
+        await _send(player_id, message)
     await _send(player_id, {"type": "game_state", "state": to_front_state(port.state)})
 
 
@@ -154,33 +191,35 @@ async def _send_request(player_id: str, port, kind: str, request: dict) -> None:
             "min_targets": 1,
         })
 
+    # Saisie attendue (facultative) : le front affiche un bandeau au-dessus du chat, avec « Passer »
     elif kind == "public_message":
         await _send(player_id, {
-            "type": "announcement",
-            "text": "Le village attend votre message public pour passer au vote.",
+            "type": "input_request",
+            "kind": "public_message",
+            "channel_id": PUBLIC_CHANNEL,
+            "text": "C'est à vous de parler sur la place publique.",
         })
 
     elif kind == "private_message":
         left = whisper_left.get(player_id, WHISPER_MESSAGES)
         await _send(player_id, {
-            "type": "announcement",
+            "type": "input_request",
+            "kind": "private_message",
+            "channel_id": whispers.get(player_id),
+            "left": left,
             "text": f"Il vous reste {left} message(s) privé(s) avec vos interlocuteurs.",
         })
 
     elif kind == "public_chat":
         # Message public d'un agent IA, pendant la discussion du jour
-        await _send(player_id, {
-            "type": "chat",
-            "channel_id": PUBLIC_CHANNEL,
-            "sender": _name(port, request["author"]),
-            "content": request["text"],
-        })
+        await _send_chat(player_id, PUBLIC_CHANNEL, _name(port, request["author"]), request["text"])
 
     elif kind == "night_info":
         # Information privée de nuit (première nuit, Voyante). allies seulement pour le camp du mal.
         message = {"type": "night_info", "turn": request["turn"], "info": request["info"]}
         if request["allies"] is not None:
             message["allies"] = request["allies"]
+            known_allies[player_id] = request["allies"]
         await _send(player_id, message)
 
     elif kind == "night_deaths":
@@ -198,12 +237,7 @@ async def _send_request(player_id: str, port, kind: str, request: dict) -> None:
             logger.warning(f"Réponses privées sans salon ouvert pour {player_id}")
             return
         for reply in request.get("replies", []):
-            await _send(player_id, {
-                "type": "chat",
-                "channel_id": channel_id,
-                "sender": _name(port, reply["author"]),
-                "content": reply["text"],
-            })
+            await _send_chat(player_id, channel_id, _name(port, reply["author"]), reply["text"])
 
     else:
         logger.info(f"Demande du moteur sans équivalent front : {kind}")
@@ -299,6 +333,7 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
         return
     port = ports.get(player_id)
     await _send_state(player_id, port)
+    await _restore_session(player_id)
 
     # Reprise après coupure : si le moteur attendait une réponse, on la redemande
     if player_id in current_request:
@@ -325,12 +360,7 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
 
                     if channel_id == PUBLIC_CHANNEL:
                         if _answer(player_id, "public_message", content):
-                            await manager.broadcast({
-                                "type": "chat",
-                                "channel_id": PUBLIC_CHANNEL,
-                                "sender": sender,
-                                "content": content,
-                            })
+                            await _send_chat(player_id, PUBLIC_CHANNEL, sender, content, broadcast=True)
                         else:
                             await _send(player_id, {"type": "error", "data": "Le tchat public n'est pas ouvert en ce moment."})
                     else:
@@ -341,12 +371,7 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
                             await _send(player_id, {"type": "error", "data": f"Vous avez déjà utilisé vos {WHISPER_MESSAGES} messages privés."})
                         elif _answer(player_id, "private_message", content):
                             whisper_left[player_id] = left - 1
-                            await _send(player_id, {
-                                "type": "chat",
-                                "channel_id": channel_id,
-                                "sender": sender,
-                                "content": content,
-                            })
+                            await _send_chat(player_id, channel_id, sender, content)
                         else:
                             await _send(player_id, {"type": "error", "data": "Ce salon privé n'est pas ouvert ou ce n'est pas le moment d'écrire."})
 
@@ -364,17 +389,18 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
                         whispers[player_id] = channel_id
                         whisper_left[player_id] = WHISPER_MESSAGES
                         partners = ", ".join(_names(port, targets))
+                        members = sorted(_names(port, [player_id] + targets))
+                        opened_channels.setdefault(player_id, {})[channel_id] = members
 
-                        await manager.broadcast({
-                            "type": "chat",
-                            "channel_id": PUBLIC_CHANNEL,
-                            "sender": "Grimoire",
-                            "content": f"💬 {_name(port, player_id)} est entré en discussion privée avec {partners}.",
-                        })
+                        await _send_chat(
+                            player_id, PUBLIC_CHANNEL, "Grimoire",
+                            f"💬 {_name(port, player_id)} est entré en discussion privée avec {partners}.",
+                            broadcast=True,
+                        )
                         await _send(player_id, {
                             "type": "private_channel_opened",
                             "channel_id": channel_id,
-                            "members": sorted(_names(port, [player_id] + targets)),
+                            "members": members,
                             "text": f"Salon privé ouvert avec {partners}",
                         })
 
@@ -426,7 +452,15 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
                         "announcement": f"Le village (sur l'initiative de {_name(port, player_id)}) passe à la phase de vote.",
                     })
 
-                # 7. ABANDON : le front recharge la page et revient à l'accueil
+                # 7. PASSER UNE ÉTAPE FACULTATIVE (message public, salon privé, fin du salon)
+                elif action == "skip_turn":
+                    if _answer(player_id, payload.kind, SKIPPABLE[payload.kind]):
+                        if payload.kind == "private_partners":
+                            await _send(player_id, {"type": "announcement", "text": "Pas de discussion privée : place au vote."})
+                    else:
+                        await _send(player_id, {"type": "error", "data": "Il n'y a rien à passer en ce moment."})
+
+                # 8. ABANDON : le front recharge la page et revient à l'accueil
                 elif action == "abandon_game":
                     if abandon_game(player_id):
                         await _send(player_id, {"type": "game_abandoned"})

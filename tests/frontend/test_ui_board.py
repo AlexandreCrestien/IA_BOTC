@@ -58,3 +58,13 @@ def test_evil_player_sees_suspicions_locked_until_allies_are_revealed(game, serv
     good_only = game.locator(".suspicion-select").first.locator("option")
     expect(good_only.filter(has_text="Diablotin")).to_have_count(0)
     expect(game.locator(".suspicion-select:disabled")).to_have_count(0)
+
+
+def test_evil_player_keeps_allies_after_reconnection(game, server):
+    # À la reconnexion, le serveur renvoie le rôle avec les alliés déjà révélés
+    server.send(type="role_assigned", role_name="Diablotin", description="…",
+                allies=[{"id": "Mère Grimsby", "role": "poisoner"}])
+    game.click("[data-action='close-role-reveal']")
+
+    expect(game.locator(".ally-tag")).to_have_text("Votre allié · Empoisonneur")
+    expect(game.locator(".suspicion-select:disabled")).to_have_count(0)

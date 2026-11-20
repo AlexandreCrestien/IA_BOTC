@@ -246,6 +246,11 @@ function renderActionPanel() {
                 ? `<span class="action-spinner" aria-hidden="true"></span><span class="sr-only">En attente de la réponse du serveur…</span>`
                 : escapeHtml(texts.submit)}
         </button>
+        ${kind === "discussion" ? `
+        <button type="button" id="action-skip" data-action="skip-private"
+            class="action-skip mt-2 w-full shrink-0 rounded-md py-1.5 font-serif text-sm">
+            Passer au vote
+        </button>` : ''}
     `;
 
     zone.classList.remove('hidden');
@@ -290,6 +295,16 @@ function refreshActionSelection() {
         submit.disabled = waiting || actionSelection.length < minTargets || !isWsOpen();
         submit.classList.toggle('is-waiting', waiting);
     }
+}
+
+// Discussion : le joueur ne veut pas de salon privé, la partie passe au vote
+function skipPrivateDiscussion() {
+    if (!pendingAction || pendingAction.kind !== "discussion" || pendingAction.stage !== "choosing") return;
+    if (!sendAction("skip_turn", { kind: "private_partners" })) {
+        appendSystemMessage("Connexion perdue : votre choix n'a pas été envoyé.");
+        return;
+    }
+    clearPendingAction();
 }
 
 function submitPendingAction() {

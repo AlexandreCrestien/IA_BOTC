@@ -63,3 +63,63 @@ def test_vote_and_night_histories_are_recorded(game, server):
     expect(game.locator("#tab-content-votes")).to_contain_text("Lord Ashcombe a voté pour Mère Grimsby")
     game.click("#tab-btn-night")
     expect(game.locator("#tab-content-night")).to_contain_text("Révérend Hale est mort·e cette nuit.")
+
+
+# --- Saisie attendue par le moteur (bandeau au-dessus du chat) -----------------
+
+def test_public_message_prompt_can_be_skipped(game, server):
+    server.send(type="input_request", kind="public_message", channel_id="public",
+                text="C'est à vous de parler sur la place publique.")
+    prompt = game.locator("#turn-prompt")
+    expect(prompt).to_be_visible()
+    expect(prompt).to_contain_text("C'est à vous de parler sur la place publique.")
+    expect(game.locator("#turn-prompt-skip")).to_have_text("Passer")
+
+    game.click("#turn-prompt-skip")
+    assert server.wait_for("skip_turn") == {"kind": "public_message"}
+    expect(prompt).to_be_hidden()
+
+
+def test_writing_the_public_message_hides_the_prompt(game, server):
+    server.send(type="input_request", kind="public_message", channel_id="public", text="À vous.")
+    game.fill("#chat-input", "Je soupçonne Dr. Thorne.")
+    game.press("#chat-input", "Enter")
+    server.wait_for("send_chat")
+    expect(game.locator("#turn-prompt")).to_be_hidden()
+    assert server.actions("skip_turn") == []
+
+
+def test_private_message_prompt_moves_to_the_salon_and_can_end_it(game, server):
+    server.send(type="private_channel_opened", channel_id=PRIVATE,
+                members=[PLAYER, "Mère Grimsby"], text="Salon privé ouvert avec Mère Grimsby")
+    game.click("#tab-public")  # le joueur est retourné sur la place publique
+    server.send(type="input_request", kind="private_message", channel_id=PRIVATE, left=2,
+                text="Il vous reste 2 message(s) privé(s) avec vos interlocuteurs.")
+
+    expect(game.locator("#active-channel-title")).to_have_text("Mère Grimsby")
+    expect(game.locator("#turn-prompt-skip")).to_have_text("Terminer la discussion")
+    game.click("#turn-prompt-skip")
+    assert server.wait_for("skip_turn") == {"kind": "private_message"}
+
+
+def test_new_step_hides_the_prompt(game, server):
+    server.send(type="input_request", kind="public_message", channel_id="public", text="À vous.")
+    server.send(type="action_request", kind="vote", candidates=["Lord Ashcombe"])
+    expect(game.locator("#turn-prompt")).to_be_hidden()
+
+
+# --- Reprise après rechargement -----------------------------------------------
+
+def test_restored_salon_and_history_after_reconnection(game, server):
+    # Ce que le serveur renvoie à la reconnexion : salon rouvert sans s'y placer, puis l'historique
+    server.send(type="private_channel_opened", channel_id=PRIVATE,
+                members=[PLAYER, "Mère Grimsby"], text="", focus=False)
+    server.send(type="chat", channel_id="public", sender="Lord Ashcombe", content="Bonjour")
+    server.send(type="chat", channel_id=PRIVATE, sender="Mère Grimsby", content="Approchez…")
+
+    expect(game.locator(f"[data-channel='{PRIVATE}']")).to_be_visible()
+    expect(game.locator("#active-channel-title")).to_have_text("Place publique")
+    expect(game.locator("#chat-messages")).to_contain_text("Bonjour")
+
+    game.click(f"[data-channel='{PRIVATE}']")
+    expect(game.locator("#chat-messages")).to_contain_text("Approchez…")

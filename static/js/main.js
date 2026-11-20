@@ -28,6 +28,8 @@ const CLICK_ACTIONS = {
     'ask-abandon':       () => openModal('modal-abandon'),
     'cancel-abandon':    () => closeModal('modal-abandon'),
     'confirm-abandon':   () => confirmAbandon(),
+    'skip-turn':         () => skipTurnPrompt(),
+    'skip-private':      () => skipPrivateDiscussion(),
     'reload':            () => location.reload()
 };
 

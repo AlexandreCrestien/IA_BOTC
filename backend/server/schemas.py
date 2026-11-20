@@ -70,6 +70,16 @@ class TriggerVotePhaseAction(BaseAction):
     payload: TriggerVotePhasePayload = Field(default_factory=TriggerVotePhasePayload)
 
 
+class SkipTurnPayload(StrictInput):
+    kind: Literal["public_message", "private_message", "private_partners"] = Field(
+        ..., description="Étape facultative à passer : message public, message privé (fin du salon), salon privé")
+
+class SkipTurnAction(BaseAction):
+    """Passer une étape facultative attendue par le moteur."""
+    action: Literal["skip_turn"] = "skip_turn"
+    payload: SkipTurnPayload
+
+
 class AbandonGamePayload(StrictInput):
     pass
 
@@ -88,6 +98,7 @@ ClientActionPacket = Annotated[
         SubmitVoteAction,
         SubmitNightAction,
         TriggerVotePhaseAction,
+        SkipTurnAction,
         AbandonGameAction,
     ],
     Field(discriminator="action"),

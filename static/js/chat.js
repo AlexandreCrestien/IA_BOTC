@@ -40,7 +40,43 @@ function sendChatMessage() {
     if (!content) return;
     if (sendAction("send_chat", { channel_id: gameState.currentChannel, content })) {
         input.value = "";
+        // Réponse donnée dans le canal attendu : le bandeau de saisie disparaît
+        if (turnPrompt && turnPrompt.channelId === gameState.currentChannel) hideTurnPrompt();
     }
+}
+
+// ================= SAISIE ATTENDUE PAR LE MOTEUR (bandeau au-dessus du chat) =================
+// Message public ou message privé : facultatifs, le joueur peut passer.
+let turnPrompt = null; // { kind, channelId } ou null
+
+const TURN_PROMPT_SKIP_LABELS = {
+    public_message: "Passer",
+    private_message: "Terminer la discussion"
+};
+
+function showTurnPrompt(request) {
+    turnPrompt = { kind: request.kind, channelId: request.channel_id || 'public' };
+    setAnnouncement(request.text);
+
+    // On amène le joueur là où il doit écrire
+    switchLeftTab('chat');
+    if (channelTitles[turnPrompt.channelId]) switchChannel(turnPrompt.channelId);
+
+    document.getElementById('turn-prompt-text').textContent = request.text;
+    document.getElementById('turn-prompt-skip').textContent = TURN_PROMPT_SKIP_LABELS[request.kind] || "Passer";
+    document.getElementById('turn-prompt').classList.remove('hidden');
+    document.getElementById('chat-input').focus();
+}
+
+function hideTurnPrompt() {
+    turnPrompt = null;
+    document.getElementById('turn-prompt').classList.add('hidden');
+}
+
+function skipTurnPrompt() {
+    if (!turnPrompt) return;
+    sendAction("skip_turn", { kind: turnPrompt.kind });
+    hideTurnPrompt();
 }
 
 function receiveChatMessage(channelId, sender, content) {
@@ -102,7 +138,7 @@ function renderChatMessages() {
 }
 
 // ================= CANAUX =================
-function handlePrivateChannelOpened(channelId, text, members = []) {
+function handlePrivateChannelOpened(channelId, text, members = [], focus = true) {
     if (!gameState.messages[channelId]) gameState.messages[channelId] = [];
     if (text) appendSystemMessage(text, channelId);
 
@@ -120,7 +156,7 @@ function handlePrivateChannelOpened(channelId, text, members = []) {
         document.getElementById('chat-channels').appendChild(item);
     }
 
-    switchChannel(channelId);
+    if (focus) switchChannel(channelId);
 }
 
 function switchChannel(channelId) {

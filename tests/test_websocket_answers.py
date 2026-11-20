@@ -9,6 +9,9 @@ def setup_function():
     ws.pending.clear()
     ws.current_request.clear()
     ws.whispers.clear()
+    ws.chat_log.clear()
+    ws.opened_channels.clear()
+    ws.known_allies.clear()
 
 
 def test_reponse_acceptee_pour_la_demande_attendue():

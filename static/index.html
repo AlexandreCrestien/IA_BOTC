@@ -176,6 +176,11 @@
 
                     <!-- Zone de saisie / Composer -->
                     <form id="chat-form" class="border-t p-3 shrink-0">
+                        <!-- Saisie attendue par le moteur (message public ou privé), facultative -->
+                        <div id="turn-prompt" class="turn-prompt hidden" role="status">
+                            <span id="turn-prompt-text" class="font-serif italic"></span>
+                            <button type="button" id="turn-prompt-skip" data-action="skip-turn" class="turn-prompt-skip">Passer</button>
+                        </div>
                         <div class="flex items-end gap-2 rounded-lg chat-composer p-1.5 transition-colors">
                             <!-- Icône de plume -->
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-feather mb-2 ml-1.5 size-4 shrink-0 text-gold-dim" aria-hidden="true">

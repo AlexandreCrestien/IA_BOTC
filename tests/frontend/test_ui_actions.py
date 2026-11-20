@@ -88,3 +88,19 @@ def test_server_error_lets_the_player_choose_again(game, server):
     server.send(type="error", data="Cible invalide.")
     expect(game.locator("#action-submit")).to_be_enabled()
     expect(game.locator("#chat-messages")).to_contain_text("Cible invalide.")
+
+
+def test_discussion_can_be_skipped_to_go_to_the_vote(game, server):
+    server.send(type="action_request", kind="discussion", candidates=ALL_PLAYERS, max_targets=2, min_targets=1)
+    skip = game.locator("#action-skip")
+    expect(skip).to_have_text("Passer au vote")
+
+    skip.click()
+    assert server.wait_for("skip_turn") == {"kind": "private_partners"}
+    expect(game.locator("#action-zone")).to_be_hidden()
+
+
+def test_skip_button_only_for_the_discussion(game, server):
+    server.send(type="action_request", kind="vote", candidates=ALL_PLAYERS)
+    expect(game.locator("#dynamic-action-panel")).to_contain_text("Sceller mon vote")
+    expect(game.locator("#action-skip")).to_have_count(0)
