@@ -5,7 +5,7 @@ import pytest
 from backend.rules.distribution import distribute_personalities
 
 PERSONALITIES = [
-    {"personality_name_EN": n, "personality_name_FR": n}
+    {"personality_name_EN": n}
     for n in ["paranoid", "clown", "agitator", "observer", "strategist"]
 ]
 

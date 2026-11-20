@@ -121,6 +121,9 @@ function handleServerMessage(data) {
             // Reconnexion d'un joueur du camp du mal : ses alliés déjà révélés
             if (Array.isArray(data.allies)) revealAllies(data.allies);
             break;
+        case "history":
+            restoreHistories(data.nights, data.votes); // reconnexion : onglets Nuits et Votes
+            break;
         case "input_request":
             showTurnPrompt(data); // message public ou privé attendu (facultatif)
             break;

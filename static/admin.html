@@ -110,6 +110,14 @@
                 </div>
             </div>
 
+            <!-- JOUEURS : rôles, camps, personnalités (tout est visible dans l'admin) -->
+            <section class="admin-section rounded-2xl p-6 space-y-4">
+                <h2 class="admin-section-title">Joueurs</h2>
+                <div id="players-container" class="overflow-x-auto text-sm">
+                    <span class="italic opacity-60">Aucune partie en cours.</span>
+                </div>
+            </section>
+
             <!-- HISTORIQUE PUBLIC DES LLM -->
             <section class="admin-section rounded-2xl p-6 space-y-4">
                 <h2 class="admin-section-title">Historique public</h2>
@@ -134,6 +142,30 @@
                     </div>
                 </div>
             </section>
+
+            <!-- ACTIONS DE NUIT DE TOUS LES JOUEURS -->
+            <section class="admin-section rounded-2xl p-6 space-y-4">
+                <h2 class="admin-section-title">Actions de nuit</h2>
+                <div id="night-actions-container" class="admin-scroll max-h-72 overflow-y-auto pr-2 flex flex-col gap-2 text-sm">
+                    <span class="italic opacity-60">Aucune action de nuit pour l'instant.</span>
+                </div>
+            </section>
+
+            <!-- ONGLETS NUITS ET VOTES DU JOUEUR HUMAIN -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <section class="admin-section rounded-2xl p-6 space-y-4">
+                    <h2 class="admin-section-title">Nuits du joueur</h2>
+                    <div id="night-history-container" class="admin-scroll max-h-80 overflow-y-auto pr-2 flex flex-col gap-2 text-sm">
+                        <span class="italic opacity-60">Aucun événement nocturne pour l'instant.</span>
+                    </div>
+                </section>
+                <section class="admin-section rounded-2xl p-6 space-y-4">
+                    <h2 class="admin-section-title">Votes</h2>
+                    <div id="vote-history-container" class="admin-scroll max-h-80 overflow-y-auto pr-2 flex flex-col gap-3 text-sm">
+                        <span class="italic opacity-60">Aucun vote pour l'instant.</span>
+                    </div>
+                </section>
+            </div>
         </main>
     </div>
 

@@ -137,3 +137,29 @@
   font-size: 0.875rem;
   line-height: 1.5;
 }
+
+/* Tableau des joueurs */
+.admin-table {
+  border-collapse: collapse;
+}
+.admin-table th {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--gold-dim);
+  border-bottom: 1px solid var(--border);
+}
+.admin-table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 50%, transparent);
+  white-space: nowrap;
+}
+
+/* Morts de la nuit dans l'historique des nuits */
+.history-line.is-death {
+  border-color: rgb(239 68 68 / 30%);
+  background-color: rgb(69 10 10 / 15%);
+}

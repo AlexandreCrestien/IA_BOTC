@@ -56,7 +56,7 @@ def assign_players(
     ai_ids = [player_id for player_id in ids if player_id != human_id]
     personalities = distribute_personalities(
         ai_ids,
-        [{"personality_name_EN": n, "personality_name_FR": n} for n in personality_names],
+        [{"personality_name_EN": n} for n in personality_names],
         rng,
     )
     assignments = {}

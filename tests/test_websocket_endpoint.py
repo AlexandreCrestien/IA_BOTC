@@ -25,6 +25,8 @@ def setup_function():
     ws.chat_log.clear()
     ws.opened_channels.clear()
     ws.known_allies.clear()
+    ws.night_log.clear()
+    ws.vote_log.clear()
     ws.roles_sent.clear()
 
 
@@ -279,3 +281,48 @@ def test_saisie_attendue_annoncee_au_front():
     assert sent[0]["channel_id"] == "public"
     assert sent[1] == {"type": "input_request", "kind": "private_message", "channel_id": "whisper_h_imp",
                        "left": 2, "text": "Il vous reste 2 message(s) privé(s) avec vos interlocuteurs."}
+
+
+# --- Historiques des onglets Nuits et Votes -----------------------------------
+
+def test_historiques_nuits_et_votes_gardes_et_renvoyes_a_la_reconnexion():
+    from types import SimpleNamespace
+    port = QueueHumanPort()
+    port.state = SimpleNamespace(turn=2, player=lambda pid: SimpleNamespace(name={"p1": "marIA"}[pid]))
+    ws.ports["h"] = port
+
+    async def fake_send(player_id, message):
+        pass
+
+    async def scenario():
+        await ws._send_request("h", port, "night_info", {"turn": 2, "info": "L'un des deux est le Démon.", "allies": None})
+        await ws._send_request("h", port, "night_deaths", {"deaths": ["p1"]})
+        await ws.send_vote_result("h", 2, "marIA", [{"voter": "h", "target": "marIA"}, {"voter": "marIA", "target": None}])
+
+    original = ws.manager.send_to_player
+    ws.manager.send_to_player = fake_send
+    try:
+        asyncio.run(scenario())
+    finally:
+        ws.manager.send_to_player = original
+
+    assert ws.night_log["h"] == [
+        {"turn": 2, "type": "role_info", "info": "L'un des deux est le Démon."},
+        {"turn": 2, "type": "result", "info": "marIA est mort·e cette nuit."},
+    ]
+    assert ws.vote_log["h"] == [
+        {"turn": 2, "voter": "h", "target": "marIA", "executed": "marIA"},
+        {"turn": 2, "voter": "marIA", "target": None, "executed": "marIA"},
+    ]
+
+    # Reconnexion : un seul message avec les deux historiques
+    port.state = None  # l'état de la partie n'est pas l'objet de ce test
+    with make_client().websocket_connect("/ws/h") as conn:
+        conn.receive_text()  # accusé "connected"
+        history = json.loads(conn.receive_text())
+    assert history == {"type": "history", "nights": ws.night_log["h"], "votes": ws.vote_log["h"]}
+
+
+def test_nuit_sans_mort_dans_l_historique():
+    assert ws.night_death_text(None) == "Personne n'est mort cette nuit."
+    assert ws.night_death_text("marIA") == "marIA est mort·e cette nuit."

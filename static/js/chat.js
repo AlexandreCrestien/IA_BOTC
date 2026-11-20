@@ -174,6 +174,14 @@ function switchChannel(channelId) {
 }
 
 // ================= HISTORIQUES (onglets Votes et Nuits) =================
+// Reconnexion : le serveur renvoie les deux historiques complets (sans rouvrir de modale)
+function restoreHistories(nights, votes) {
+    gameState.night_info_history = Array.isArray(nights) ? nights : [];
+    gameState.vote_history = Array.isArray(votes) ? votes : [];
+    renderNightInfoHistory();
+    renderVoteHistory();
+}
+
 function renderVoteHistory() {
     const container = document.getElementById('tab-content-votes');
     const history = gameState.vote_history;

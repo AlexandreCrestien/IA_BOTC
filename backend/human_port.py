@@ -17,6 +17,7 @@ class QueueHumanPort:
         # Renseignés par game_runner et mis à jour à chaque demande : le serveur s'en sert pour le front.
         self.state: Optional[GameState] = None
         self.memory = None
+        self.agents: dict = {}
         self.votes_history: list[dict] = []
 
     async def _ask(self, kind: str, **payload):

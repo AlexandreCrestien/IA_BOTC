@@ -16,12 +16,10 @@ class Agent:
     - L'état de jeu officiel (le Player et son Role de models.py)
     - La couche IA et comportementale (le system_prompt généré par le PromptLoader, la mémoire et les actions)
     """
-    def __init__(self, player: Player, personality: str, memory: MemoryManager, system_prompt: str,
-                 personality_key: str | None = None):
+    def __init__(self, player: Player, personality_key: str, memory: MemoryManager, system_prompt: str):
         self.player = player
-        self.personality = personality  # nom affiché (français)
-        # Identifiant stable de la personnalité = nom du fichier skill (ex. "agitator").
-        self.personality_key = personality_key or personality
+        # Personnalité = nom du fichier skill (ex. "agitator"). Interne : jamais montrée au joueur.
+        self.personality_key = personality_key
         self.memory = memory
         self.system_prompt = system_prompt
 
@@ -159,7 +157,6 @@ class AgentFactory:
 
         role_file = role_obj.name_EN
         personality_file = personality_data["personality_name_EN"]
-        personality_display_name = personality_data.get("personality_name_FR", personality_file)
 
         system_prompt = self.prompt_loader.assemble_system_prompt(
             role_name=role_file,
@@ -169,7 +166,6 @@ class AgentFactory:
 
         return Agent(
             player=player_obj,
-            personality=personality_display_name,
             personality_key=personality_file,
             memory=memory,
             system_prompt=system_prompt

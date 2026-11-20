@@ -31,6 +31,8 @@ forward_tasks: dict[str, asyncio.Task] = {}  # relais des demandes du moteur, pa
 chat_log: dict[str, list[dict]] = {}              # messages de chat envoyés (public et salons privés)
 opened_channels: dict[str, dict[str, list]] = {}  # salons privés ouverts : channel_id -> membres (noms)
 known_allies: dict[str, list[dict]] = {}          # alliés révélés au camp du mal
+night_log: dict[str, list[dict]] = {}             # onglet Nuits : [{turn, type: "role_info"|"result", info}]
+vote_log: dict[str, list[dict]] = {}              # onglet Votes : [{turn, voter, target, executed}] (noms)
 
 # Demandes du moteur auxquelles le joueur doit répondre
 ANSWERABLE = {"night_choice", "vote", "public_message", "private_partners", "private_message"}
@@ -56,7 +58,7 @@ def reset_player(player_id: str) -> None:
     if task is not None:
         task.cancel()
     for store in (ports, pending, current_request, whispers, whisper_left,
-                  chat_log, opened_channels, known_allies):
+                  chat_log, opened_channels, known_allies, night_log, vote_log):
         store.pop(player_id, None)
     roles_sent.discard(player_id)
 
@@ -89,6 +91,18 @@ async def _restore_session(player_id: str) -> None:
         })
     for message in chat_log.get(player_id, []):
         await _send(player_id, message)
+    # Historiques des onglets Nuits et Votes : nécessaires à l'enquête du joueur
+    if night_log.get(player_id) or vote_log.get(player_id):
+        await _send(player_id, {
+            "type": "history",
+            "nights": night_log.get(player_id, []),
+            "votes": vote_log.get(player_id, []),
+        })
+
+
+def night_death_text(dead_name: str | None) -> str:
+    """Texte de l'onglet Nuits pour les morts de la nuit (même texte que celui écrit par le front)."""
+    return f"{dead_name} est mort·e cette nuit." if dead_name else "Personne n'est mort cette nuit."
 
 
 def _human_role(port, player_id: str):
@@ -220,15 +234,20 @@ async def _send_request(player_id: str, port, kind: str, request: dict) -> None:
         if request["allies"] is not None:
             message["allies"] = request["allies"]
             known_allies[player_id] = request["allies"]
+        night_log.setdefault(player_id, []).append(
+            {"turn": request["turn"], "type": "role_info", "info": request["info"]})
         await _send(player_id, message)
 
     elif kind == "night_deaths":
         # Le front n'affiche qu'un mort par nuit : on envoie le premier, par son nom.
         deaths = request.get("deaths") or []
+        dead_name = _name(port, deaths[0]) if deaths else None
+        night_log.setdefault(player_id, []).append(
+            {"turn": port.state.turn, "type": "result", "info": night_death_text(dead_name)})
         await _send(player_id, {
             "type": "night_result",
             "turn": port.state.turn,
-            "dead_player": _name(port, deaths[0]) if deaths else None,
+            "dead_player": dead_name,
         })
 
     elif kind == "private_replies":
@@ -288,6 +307,8 @@ def _answer(player_id: str, kind: str, value: Any) -> bool:
 # Messages de fin de vote / de fin de partie : appelés par game_runner (noms, pas identifiants)
 async def send_vote_result(player_id: str, turn: int, executed: str | None, votes: list[dict]) -> None:
     """votes : [{"voter": nom, "target": nom ou None}]. executed : nom ou None."""
+    vote_log.setdefault(player_id, []).extend(
+        {"turn": turn, "voter": v["voter"], "target": v["target"], "executed": executed} for v in votes)
     await _send(player_id, {"type": "vote_result", "turn": turn, "executed": executed, "votes": votes})
 
 

@@ -26,7 +26,7 @@ def make_agents(memory, personalities):
     """Un agent par personnalité, dans l'ordre de IDS.
     Le prompt système est l'id du joueur : le faux LLM sait ainsi qui parle."""
     return [
-        Agent(Player(id=i, name=i, role=ROLES["monk"]), p, memory, system_prompt=i, personality_key=p)
+        Agent(Player(id=i, name=i, role=ROLES["monk"]), p, memory, system_prompt=i)
         for i, p in zip(IDS, personalities)
     ]
 
@@ -105,13 +105,6 @@ def test_failing_agent_is_skipped(memory, fake_llm):
     agents = make_agents(memory, ["agitator", "paranoid"])
     said = asyncio.run(public_conversation(agents, memory, max_messages=2))
     assert said == [("bruno", "message de bruno"), ("bruno", "message de bruno")]
-
-
-def test_personality_key_is_separate_from_display_name(memory):
-    agent = Agent(Player(id="ana", name="ana", role=ROLES["monk"]), "Provocateur", memory, "prompt",
-                  personality_key="agitator")
-    assert agent.personality == "Provocateur"
-    assert agent.personality_key == "agitator"
 
 
 # --- Conversation privée -----------------------------------------------------

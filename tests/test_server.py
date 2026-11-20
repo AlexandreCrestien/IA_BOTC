@@ -46,7 +46,8 @@ def no_real_game(monkeypatch):
     monkeypatch.setattr(game_runner, "ensure_started", lambda player_id: None)
     for store in (ws_module.ports, ws_module.pending, ws_module.current_request,
                   ws_module.whispers, ws_module.whisper_left,
-                  ws_module.chat_log, ws_module.opened_channels, ws_module.known_allies):
+                  ws_module.chat_log, ws_module.opened_channels, ws_module.known_allies,
+                  ws_module.night_log, ws_module.vote_log):
         store.clear()
     ws_module.roles_sent.clear()
 

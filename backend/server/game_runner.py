@@ -59,6 +59,7 @@ async def run_game(names: dict[str, str], human_id: str, personality_names: list
     port = QueueHumanPort()
     port.memory = memory
     port.state = state
+    port.agents = agents  # lus par la route d'administration (personnalités)
     register_human(human_id, port)
 
     while True:

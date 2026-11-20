@@ -123,3 +123,17 @@ def test_restored_salon_and_history_after_reconnection(game, server):
 
     game.click(f"[data-channel='{PRIVATE}']")
     expect(game.locator("#chat-messages")).to_contain_text("Approchez…")
+
+
+def test_night_and_vote_tabs_restored_after_reconnection(game, server):
+    server.send(type="history",
+                nights=[{"turn": 1, "type": "role_info", "info": "Parmi marIA et tobIAs, l'un est le Démon."},
+                        {"turn": 2, "type": "result", "info": "Dr. Thorne est mort·e cette nuit."}],
+                votes=[{"turn": 2, "voter": "Lord Ashcombe", "target": "Mère Grimsby", "executed": "Mère Grimsby"}])
+
+    expect(game.locator(".modal-backdrop:not(.hidden)")).to_have_count(0)  # aucune modale rouverte
+    game.click("#tab-btn-night")
+    expect(game.locator("#tab-content-night")).to_contain_text("Parmi marIA et tobIAs, l'un est le Démon.")
+    expect(game.locator("#tab-content-night")).to_contain_text("Dr. Thorne est mort·e cette nuit.")
+    game.click("#tab-btn-votes")
+    expect(game.locator("#tab-content-votes")).to_contain_text("Lord Ashcombe a voté pour Mère Grimsby")

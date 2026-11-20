@@ -12,6 +12,8 @@ def setup_function():
     ws.chat_log.clear()
     ws.opened_channels.clear()
     ws.known_allies.clear()
+    ws.night_log.clear()
+    ws.vote_log.clear()
 
 
 def test_reponse_acceptee_pour_la_demande_attendue():
