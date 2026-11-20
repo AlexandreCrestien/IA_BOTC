@@ -8,7 +8,9 @@ from backend.game_engine import setup_game
 from backend.human_port import QueueHumanPort
 from backend.human_turns import play_turn_with_human
 from backend.models import Alignement
-from backend.server.websockets import register_human, send_game_over, send_vote_result
+from backend.server.websockets import (
+    register_human, reset_player, send_game_interrupted, send_game_over, send_vote_result,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +35,13 @@ WINNER_LABELS = {
     Alignement.MAUVAIS: "Démons",
 }
 
+# Une seule partie à la fois : la tâche qui la fait tourner et le pseudo du joueur humain.
 _current: Optional[asyncio.Task] = None
+_current_human: Optional[str] = None
+
+# Motifs de refus envoyés au front (affichés sur l'écran d'accueil)
+REFUSED_PSEUDO = "Ce pseudo est réservé ou invalide : choisissez-en un autre."
+REFUSED_BUSY = "Une partie est déjà en cours avec un autre joueur."
 
 
 def _winner_label(winner) -> str:
@@ -79,21 +87,29 @@ async def run_game(names: dict[str, str], human_id: str, personality_names: list
             return state
 
 
-def _log_end(task: asyncio.Task) -> None:
+def _game_running() -> bool:
+    return _current is not None and not _current.done()
+
+
+def _on_game_end(task: asyncio.Task) -> None:
+    """Fin de la tâche de partie. Si elle a planté, le joueur est prévenu (sinon son écran resterait figé)."""
     if task.cancelled():
-        return
+        return  # abandon : le joueur a déjà été prévenu
     error = task.exception()
     if error is not None:
         logger.error("Partie interrompue", exc_info=error)
+        if _current_human is not None:
+            asyncio.ensure_future(send_game_interrupted(_current_human))
 
 
 def start_game(names, human_id, personality_names, seed=None) -> asyncio.Task:
     """Lance la partie si aucune n'est en cours. Doit être appelée depuis une coroutine."""
-    global _current
-    if _current is not None and not _current.done():
+    global _current, _current_human
+    if _game_running():
         return _current
+    _current_human = human_id
     _current = asyncio.create_task(run_game(names, human_id, personality_names, seed))
-    _current.add_done_callback(_log_end)
+    _current.add_done_callback(_on_game_end)
     return _current
 
 
@@ -103,12 +119,48 @@ def _pseudo_is_valid(pseudo: str) -> bool:
     return pseudo.strip() != "" and pseudo.casefold() not in taken
 
 
-def ensure_started(player_id: str) -> None:
-    """Lance la partie au premier joueur humain qui se connecte, avec son pseudo comme nom."""
-    if _current is not None:
-        return
+def can_join(player_id: str) -> Optional[str]:
+    """Le joueur peut-il entrer ? None si oui, sinon le motif du refus. Ne lance rien."""
     if not _pseudo_is_valid(player_id):
-        logger.warning("Pseudo refusé pour la partie : %r", player_id)
-        return
+        return REFUSED_PSEUDO
+    if _game_running() and player_id != _current_human:
+        return REFUSED_BUSY
+    return None
+
+
+def ensure_started(player_id: str) -> Optional[str]:
+    """Appelée à chaque connexion. Renvoie None si le joueur peut jouer, sinon le motif du refus.
+
+    - partie en cours avec ce pseudo : reprise (le serveur renvoie l'état et la demande en attente) ;
+    - partie en cours avec un autre pseudo : refus ;
+    - aucune partie en cours (jamais lancée, terminée, plantée ou abandonnée) : nouvelle partie.
+    """
+    refusal = can_join(player_id)
+    if refusal is not None:
+        logger.warning("Connexion refusée pour %r : %s", player_id, refusal)
+        return refusal
+    if _game_running():
+        return None  # reprise de sa propre partie
+
+    # Les traces de la partie précédente ne doivent pas déborder sur la nouvelle
+    if _current_human is not None:
+        reset_player(_current_human)
     names = {player_id: player_id, **AI_NAMES}
     start_game(names, player_id, GAME_CONFIG["personality_names"], GAME_CONFIG["seed"])
+    return None
+
+
+def abandon_game(player_id: str) -> bool:
+    """Arrête la partie en cours de ce joueur. Renvoie False s'il n'a pas de partie en cours.
+
+    L'annulation interrompt le moteur où qu'il soit (attente du joueur, appel à un LLM).
+    """
+    global _current, _current_human
+    if not _game_running() or player_id != _current_human:
+        return False
+    _current.cancel()
+    reset_player(player_id)
+    _current = None
+    _current_human = None
+    logger.info("Partie abandonnée par %s", player_id)
+    return True

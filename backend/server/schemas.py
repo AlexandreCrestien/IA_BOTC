@@ -70,6 +70,15 @@ class TriggerVotePhaseAction(BaseAction):
     payload: TriggerVotePhasePayload = Field(default_factory=TriggerVotePhasePayload)
 
 
+class AbandonGamePayload(StrictInput):
+    pass
+
+class AbandonGameAction(BaseAction):
+    """Abandonner la partie en cours (le joueur revient à l'accueil)."""
+    action: Literal["abandon_game"] = "abandon_game"
+    payload: AbandonGamePayload = Field(default_factory=AbandonGamePayload)
+
+
 # Le type d'action est choisi uniquement d'après le champ "action" (obligatoire dans le paquet reçu).
 ClientActionPacket = Annotated[
     Union[
@@ -78,7 +87,8 @@ ClientActionPacket = Annotated[
         RespondWhisperInvitationAction,
         SubmitVoteAction,
         SubmitNightAction,
-        TriggerVotePhaseAction,  # <--- AJOUTÉ ICI
+        TriggerVotePhaseAction,
+        AbandonGameAction,
     ],
     Field(discriminator="action"),
 ]

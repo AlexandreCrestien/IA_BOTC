@@ -7,6 +7,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.server.websockets import router as ws_router
 from backend.server.admin import router as admin_router
+# Chargé dès le démarrage (moteur de jeu, LiteLLM : quelques secondes) plutôt qu'à la première
+# connexion d'un joueur, qui attendrait sinon devant l'écran d'accueil.
+import backend.server.game_runner  # noqa: E402,F401
 
 # Configuration des logs pour avoir un suivi propre dans la console
 logging.basicConfig(

@@ -105,6 +105,12 @@
                 </div>
 
                 <!-- Badge de connexion -->
+                <!-- Abandonner la partie (confirmation demandée) : icône seule pour rester compact -->
+                <button type="button" id="abandon-btn" data-action="ask-abandon" class="header-icon-btn"
+                    title="Abandonner et lancer une nouvelle partie" aria-label="Abandonner et lancer une nouvelle partie">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
+                </button>
+
                 <div id="connection-status" class="connection-badge" data-state="online" role="status">
                     Connecté
                 </div>
@@ -490,6 +496,22 @@
             <div class="flex gap-2 mt-5">
                 <button type="button" data-action="reload" class="btn-seal flex-1">Recharger la page</button>
                 <button type="button" data-action="close-disconnected" class="btn-ghost flex-1">Rester ici</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modale de confirmation d'abandon -->
+    <div id="modal-abandon" class="modal-backdrop hidden" data-action="cancel-abandon" data-backdrop>
+        <div class="modal-card w-[420px] text-center" data-tone="blood" role="alertdialog" aria-modal="true" aria-labelledby="abandon-title">
+            <span class="modal-icon mx-auto mb-3"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-6" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg></span>
+            <p class="modal-kicker ornament">Quitter la table</p>
+            <h3 id="abandon-title" class="modal-title my-2">Abandonner la partie ?</h3>
+            <p class="font-serif text-base italic leading-relaxed opacity-90">
+                La partie en cours sera perdue. Vous reviendrez à l'accueil pour en lancer une nouvelle.
+            </p>
+            <div class="flex gap-2 mt-5">
+                <button type="button" data-action="cancel-abandon" class="btn-ghost flex-1">Continuer à jouer</button>
+                <button type="button" data-action="confirm-abandon" class="btn-seal btn-blood flex-1">Abandonner</button>
             </div>
         </div>
     </div>

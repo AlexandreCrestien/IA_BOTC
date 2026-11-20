@@ -154,6 +154,36 @@ function triggerGameOver(winner, details) {
     openModal('modal-gameover');
 }
 
+// La partie a planté côté serveur : même fenêtre que la fin de partie, avec un autre message
+function showGameInterrupted(text) {
+    gameIsOver = true;
+    document.getElementById('gameover-title').textContent = "Partie interrompue";
+    document.getElementById('gameover-desc').textContent = text || "Une erreur a interrompu la partie.";
+    document.getElementById('gameover-outcome').classList.add('hidden');
+    document.getElementById('gameover-card').dataset.tone = 'blood';
+    openModal('modal-gameover');
+}
+
+// ================= ABANDON =================
+// Délai de secours : si le serveur ne confirme pas l'abandon, on revient quand même à l'accueil
+const ABANDON_FALLBACK_MS = 3000;
+
+function confirmAbandon() {
+    closeModal('modal-abandon');
+    // Partie déjà finie ou connexion perdue : rien à prévenir côté serveur
+    if (gameIsOver || !sendAction("abandon_game")) {
+        leaveGame();
+        return;
+    }
+    setTimeout(leaveGame, ABANDON_FALLBACK_MS);
+}
+
+// Retour à l'accueil (page rechargée : le front repart d'un état vierge)
+function leaveGame() {
+    gameIsOver = true; // pas de fenêtre « Connexion perdue » pendant le rechargement
+    location.reload();
+}
+
 // ================= CONNEXION PERDUE =================
 function showDisconnectedModal() {
     const gameVisible = !document.getElementById('screen-game').classList.contains('hidden');

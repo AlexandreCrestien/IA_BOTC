@@ -25,17 +25,32 @@ current_request: dict[str, tuple[str, dict]] = {}
 whispers: dict[str, str] = {}
 whisper_left: dict[str, int] = {}
 roles_sent: set[str] = set()
+forward_tasks: dict[str, asyncio.Task] = {}  # relais des demandes du moteur, par joueur
 
 # Demandes du moteur auxquelles le joueur doit répondre
 ANSWERABLE = {"night_choice", "vote", "public_message", "private_partners", "private_message"}
 PUBLIC_CHANNEL = "public"
 WHISPER_MESSAGES = 3  # messages privés autorisés par salon
 
+# Code de fermeture WebSocket quand la connexion est refusée (le front affiche le motif sur l'accueil)
+CLOSE_REFUSED = 4001
+
 
 def register_human(player_id: str, port) -> None:
     """Relie le joueur à son port. Appelée par game_runner, depuis une coroutine."""
+    reset_player(player_id)
     ports[player_id] = port
-    asyncio.create_task(_forward_requests(player_id, port))
+    forward_tasks[player_id] = asyncio.create_task(_forward_requests(player_id, port))
+
+
+def reset_player(player_id: str) -> None:
+    """Efface tout ce que le serveur retient de la partie de ce joueur (fin de partie, abandon)."""
+    task = forward_tasks.pop(player_id, None)
+    if task is not None:
+        task.cancel()
+    for store in (ports, pending, current_request, whispers, whisper_left):
+        store.pop(player_id, None)
+    roles_sent.discard(player_id)
 
 
 async def _send(player_id: str, message: dict) -> None:
@@ -246,18 +261,42 @@ async def send_game_over(player_id: str, winner: str, details: str) -> None:
     await _send(player_id, {"type": "game_over", "winner": winner, "details": details})
 
 
+async def send_game_interrupted(player_id: str) -> None:
+    """La partie a planté : le front propose d'en relancer une."""
+    await _send(player_id, {
+        "type": "game_interrupted",
+        "text": "Une erreur a interrompu la partie. Vous pouvez en lancer une nouvelle.",
+    })
+
+
 @router.websocket("/ws/{player_id}")
 async def websocket_endpoint(websocket: WebSocket, player_id: str):
     """
     Endpoint WebSocket principal pour le joueur connecté.
     URL de connexion : ws://<serveur>/ws/<pseudo>
     """
-    await manager.connect(player_id, websocket)
+    # Import local pour éviter le cycle game_runner <-> websockets
+    from backend.server.game_runner import abandon_game, can_join, ensure_started
 
-    # Lance la partie au premier branchement du joueur humain, puis envoie l'état si elle existe.
-    # Import local pour éviter le cycle game_runner <-> websockets.
-    from backend.server.game_runner import ensure_started
-    ensure_started(player_id)
+    # Refus (pseudo invalide, partie d'un autre joueur) : on accepte avant de refermer,
+    # sinon le navigateur ne peut pas lire le motif du refus.
+    refusal = can_join(player_id)
+    if refusal is not None:
+        await websocket.accept()
+        await websocket.close(code=CLOSE_REFUSED, reason=refusal)
+        logger.info(f"Connexion refusée pour {player_id} : {refusal}")
+        return
+
+    # Le joueur voit l'écran de jeu tout de suite, avant la mise en place de la partie (quelques secondes)
+    await manager.connect(player_id, websocket)
+    await _send(player_id, {"type": "connected"})
+
+    # Nouvelle partie, ou reprise de la partie en cours
+    refusal = ensure_started(player_id)
+    if refusal is not None:  # cas limite : un autre joueur a lancé une partie entre-temps
+        await websocket.close(code=CLOSE_REFUSED, reason=refusal)
+        manager.disconnect(player_id, websocket)
+        return
     port = ports.get(player_id)
     await _send_state(player_id, port)
 
@@ -350,7 +389,7 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
 
                 # 4. VOTE (target_id = null pour « Personne »)
                 elif action == "submit_vote":
-                    target = _id_from_name(port, payload.target_id)
+                    target = _id_from_name(port, payload.target_id or None)  # "" ou null : « Personne »
                     error = _check_answer(player_id, "vote", target)
 
                     if error:
@@ -387,6 +426,13 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
                         "announcement": f"Le village (sur l'initiative de {_name(port, player_id)}) passe à la phase de vote.",
                     })
 
+                # 7. ABANDON : le front recharge la page et revient à l'accueil
+                elif action == "abandon_game":
+                    if abandon_game(player_id):
+                        await _send(player_id, {"type": "game_abandoned"})
+                    else:
+                        await _send(player_id, {"type": "error", "data": "Aucune partie en cours à abandonner."})
+
                 else:
                     logger.warning(f"Action non reconnue reçue de {player_id}: {action}")
 
@@ -399,7 +445,7 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
                 await _send(player_id, {"type": "error", "data": f"Action non valide : {e.errors()}"})
 
     except WebSocketDisconnect:
-        manager.disconnect(player_id)
+        manager.disconnect(player_id, websocket)
         # Le rôle sera renvoyé à la prochaine connexion (le front repart d'une page vide)
         roles_sent.discard(player_id)
         logger.info(f"Déconnexion de la WebSocket pour le joueur : {player_id} ; la partie attend sa reconnexion.")

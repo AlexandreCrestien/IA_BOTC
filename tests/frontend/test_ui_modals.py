@@ -88,3 +88,37 @@ def test_grimoire_tabs_backdrop_and_escape(game):
     game.click("[data-action='open-grimoire']")
     game.keyboard.press("Escape")
     expect(grimoire).to_be_hidden()
+
+
+def test_abandon_asks_for_confirmation_and_can_be_cancelled(game, server):
+    game.click("#abandon-btn")
+    expect(game.locator("#modal-abandon")).to_be_visible()
+
+    game.click("button[data-action='cancel-abandon']")
+    expect(game.locator("#modal-abandon")).to_be_hidden()
+    assert server.actions("abandon_game") == []
+
+
+def test_abandon_returns_to_welcome_for_a_new_game(game, server):
+    game.click("#abandon-btn")
+    game.click("button[data-action='confirm-abandon']")
+    server.wait_for("abandon_game")
+
+    server.send(type="game_abandoned")
+    expect(game.locator("#screen-welcome")).to_be_visible()  # page rechargée : accueil vierge
+    expect(game.locator("#welcome-player-id")).to_have_value("")
+    expect(game.locator("#modal-disconnected")).to_be_hidden()
+
+
+def test_abandon_after_game_over_goes_straight_to_welcome(game, server):
+    server.send(type="game_over", winner="Villageois", details="Fin.")
+    game.click("#modal-gameover [data-action='reload']")  # bouton « Nouvelle partie » de la fin de partie
+    expect(game.locator("#screen-welcome")).to_be_visible()
+    assert server.actions("abandon_game") == []
+
+
+def test_server_crash_offers_a_new_game(game, server):
+    server.send(type="game_interrupted", text="Une erreur a interrompu la partie.")
+    expect(game.locator("#gameover-title")).to_have_text("Partie interrompue")
+    expect(game.locator("#gameover-desc")).to_have_text("Une erreur a interrompu la partie.")
+    expect(game.locator("#gameover-outcome")).to_be_hidden()

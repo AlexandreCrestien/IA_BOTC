@@ -1,9 +1,11 @@
 import json
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from backend.human_port import QueueHumanPort
+from backend.server import game_runner
 from backend.server import websockets as ws
 
 
@@ -16,7 +18,16 @@ def make_client() -> TestClient:
 def setup_function():
     ws.ports.clear()
     ws.pending.clear()
+    ws.current_request.clear()
     ws.whispers.clear()
+    ws.whisper_left.clear()
+    ws.roles_sent.clear()
+
+
+@pytest.fixture(autouse=True)
+def no_real_game(monkeypatch):
+    """Se connecter ne doit pas lancer une vraie partie : le port est fourni par chaque test."""
+    monkeypatch.setattr(game_runner, "ensure_started", lambda player_id: None)
 
 
 def test_vote_vide_arrive_comme_none():
@@ -25,6 +36,7 @@ def test_vote_vide_arrive_comme_none():
     ws.pending["h"] = "vote"
 
     with make_client().websocket_connect("/ws/h") as conn:
+        conn.receive_text()  # accusé "connected"
         conn.send_text(json.dumps({"action": "submit_vote", "payload": {"target_id": ""}}))
         reply = json.loads(conn.receive_text())
 
@@ -38,6 +50,7 @@ def test_vote_avec_cible_arrive_telle_quelle():
     ws.pending["h"] = "vote"
 
     with make_client().websocket_connect("/ws/h") as conn:
+        conn.receive_text()  # accusé "connected"
         conn.send_text(json.dumps({"action": "submit_vote", "payload": {"target_id": "imp"}}))
         conn.receive_text()
 
@@ -50,6 +63,7 @@ def test_vote_hors_phase_est_refuse():
     ws.pending["h"] = "night_choice"
 
     with make_client().websocket_connect("/ws/h") as conn:
+        conn.receive_text()  # accusé "connected"
         conn.send_text(json.dumps({"action": "submit_vote", "payload": {"target_id": "imp"}}))
         reply = json.loads(conn.receive_text())
 
@@ -63,6 +77,7 @@ def test_action_de_nuit_arrive_en_tuple():
     ws.pending["h"] = "night_choice"
 
     with make_client().websocket_connect("/ws/h") as conn:
+        conn.receive_text()  # accusé "connected"
         conn.send_text(json.dumps({"action": "submit_night_action", "payload": {"targets": ["imp"]}}))
         conn.receive_text()
 
@@ -75,6 +90,7 @@ def test_champ_inconnu_est_refuse():
     ws.pending["h"] = "vote"
 
     with make_client().websocket_connect("/ws/h") as conn:
+        conn.receive_text()  # accusé "connected"
         conn.send_text(json.dumps({"action": "submit_vote", "payload": {"targt_id": "imp"}}))
         reply = json.loads(conn.receive_text())
 
@@ -88,6 +104,7 @@ def test_whisper_ouvre_le_salon_et_repond_au_moteur():
     ws.pending["h"] = "private_partners"
 
     with make_client().websocket_connect("/ws/h") as conn:
+        conn.receive_text()  # accusé "connected"
         conn.send_text(json.dumps({"action": "request_whisper", "payload": {"targets": ["imp"]}}))
         first = json.loads(conn.receive_text())
         second = json.loads(conn.receive_text())

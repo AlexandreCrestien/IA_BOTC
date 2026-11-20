@@ -755,3 +755,24 @@ body {
 /* Fin de partie : victoire / défaite du joueur */
 .gameover-outcome[data-outcome="win"]  { color: var(--gold); }
 .gameover-outcome[data-outcome="loss"] { color: oklch(0.66 0.22 25); }
+
+/* Bouton icône de l'en-tête (abandon) : compact, même sur petit écran */
+.header-icon-btn {
+  display: flex;
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  border: 1px solid var(--border);
+  color: var(--gold-dim);
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+.header-icon-btn:hover,
+.header-icon-btn:focus-visible {
+  color: oklch(0.72 0.2 25);
+  border-color: color-mix(in oklab, var(--blood) 70%, transparent);
+  background-color: color-mix(in oklab, var(--blood) 12%, transparent);
+  outline: none;
+}

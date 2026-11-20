@@ -6,6 +6,9 @@ from fastapi.testclient import TestClient
 from pydantic import TypeAdapter, ValidationError
 
 import backend.server.admin as admin
+from backend.human_port import QueueHumanPort
+from backend.server import game_runner
+from backend.server import websockets as ws_module
 from backend.server.app import app
 from backend.server.connection_manager import ConnectionManager, manager
 from backend.server.schemas import (
@@ -34,6 +37,26 @@ def clean_manager():
     manager.active_connections.clear()
     yield
     manager.active_connections.clear()
+
+
+@pytest.fixture(autouse=True)
+def no_real_game(monkeypatch):
+    """Se connecter au WebSocket ne doit pas lancer une vraie partie (et donc de vrais appels LLM).
+    Les états par joueur du serveur sont remis à zéro à chaque test."""
+    monkeypatch.setattr(game_runner, "ensure_started", lambda player_id: None)
+    for store in (ws_module.ports, ws_module.pending, ws_module.current_request,
+                  ws_module.whispers, ws_module.whisper_left):
+        store.clear()
+    ws_module.roles_sent.clear()
+
+
+def waiting_for(player_id: str, kind: str) -> QueueHumanPort:
+    """Simule un moteur qui attend la réponse `kind` du joueur.
+    (Sans demande mémorisée : le serveur ne la renvoie donc pas à la connexion.)"""
+    port = QueueHumanPort()
+    ws_module.ports[player_id] = port
+    ws_module.pending[player_id] = kind
+    return port
 
 
 @pytest.fixture
@@ -184,12 +207,14 @@ def test_websocket_registers_and_unregisters_player(client):
 
 def test_websocket_invalid_json_returns_error(client):
     with client.websocket_connect("/ws/humain") as ws:
+        ws.receive_json()  # accusé "connected"
         ws.send_text("pas du json")
         assert ws.receive_json() == {"type": "error", "data": "Format JSON invalide."}
 
 
 def test_websocket_invalid_action_returns_error(client):
     with client.websocket_connect("/ws/humain") as ws:
+        ws.receive_json()  # accusé "connected"
         ws.send_text(json.dumps({"action": "voler_le_role", "payload": {}}))
         message = ws.receive_json()
         assert message["type"] == "error"
@@ -197,12 +222,14 @@ def test_websocket_invalid_action_returns_error(client):
 
 
 def test_websocket_valid_action_sends_no_error(client):
+    waiting_for("humain", "vote")
     with client.websocket_connect("/ws/humain") as ws:
+        ws.receive_json()  # accusé "connected"
         ws.send_text(json.dumps({"action": "submit_vote", "payload": {"target_id": "ana"}}))
-        # Une action valide renvoie une confirmation d'annonce, on vérifie que ce n'est pas une erreur de parsing
+        # Une action valide et attendue renvoie une confirmation d'annonce, pas une erreur de parsing
         response = ws.receive_json()
         assert response["type"] == "announcement"
-        
+
         # On envoie ensuite un message invalide : la première réponse reçue doit être son erreur.
         ws.send_text("pas du json")
         assert ws.receive_json()["data"] == "Format JSON invalide."
@@ -210,6 +237,7 @@ def test_websocket_valid_action_sends_no_error(client):
 
 def test_websocket_connection_stays_open_after_error(client):
     with client.websocket_connect("/ws/humain") as ws:
+        ws.receive_json()  # accusé "connected"
         ws.send_text("pas du json")
         ws.receive_json()
         ws.send_text("toujours pas du json")
@@ -238,6 +266,17 @@ def test_connect_accepts_and_registers():
     asyncio.run(cm.connect("humain", ws))
     assert ws.accepted
     assert cm.active_connections == {"humain": ws}
+
+
+def test_disconnect_of_an_old_connection_keeps_the_new_one():
+    """Rechargement ou second onglet : fermer l'ancienne connexion ne doit pas couper la nouvelle."""
+    cm, old, new = ConnectionManager(), FakeWebSocket(), FakeWebSocket()
+    asyncio.run(cm.connect("humain", old))
+    asyncio.run(cm.connect("humain", new))
+    cm.disconnect("humain", old)
+    assert cm.active_connections == {"humain": new}
+    cm.disconnect("humain", new)
+    assert cm.active_connections == {}
 
 
 def test_disconnect_unknown_player_does_nothing():
@@ -287,7 +326,10 @@ def test_broadcast_without_connections_does_nothing():
 
 def test_websocket_public_chat_broadcast(client):
     """Vérifie qu'un message public envoyé par un joueur est bien diffusé à tous."""
+    waiting_for("joueur1", "public_message")  # le moteur attend le message public de joueur1
     with client.websocket_connect("/ws/joueur1") as ws1, client.websocket_connect("/ws/joueur2") as ws2:
+        ws1.receive_json()  # accusés "connected"
+        ws2.receive_json()
         # Le joueur 1 envoie un message public
         ws1.send_text(json.dumps({
             "action": "send_chat",
@@ -305,9 +347,19 @@ def test_websocket_public_chat_broadcast(client):
         assert msg2 == msg1
 
 
+def test_websocket_public_chat_refused_when_not_asked(client):
+    """Le moteur n'attend pas de message public : le message est refusé, et n'est pas diffusé."""
+    with client.websocket_connect("/ws/humain") as ws:
+        ws.receive_json()  # accusé "connected"
+        ws.send_text(json.dumps({"action": "send_chat", "payload": {"channel_id": "public", "content": "Coucou"}}))
+        assert ws.receive_json()["type"] == "error"
+
+
 def test_websocket_request_whisper(client):
     """Vérifie qu'une demande de chuchotement prévient le public puis ouvre le canal privé."""
+    waiting_for("humain", "private_partners")
     with client.websocket_connect("/ws/humain") as ws:
+        ws.receive_json()  # accusé "connected"
         ws.send_text(json.dumps({
             "action": "request_whisper",
             "payload": {"targets": ["agent_1"]}
@@ -328,6 +380,7 @@ def test_websocket_request_whisper(client):
 def test_websocket_trigger_vote_phase(client):
     """Vérifie que déclencher le vote diffuse bien l'information à tout le monde."""
     with client.websocket_connect("/ws/humain") as ws:
+        ws.receive_json()  # accusé "connected"
         ws.send_text(json.dumps({
             "action": "trigger_vote_phase",
             "payload": {}
@@ -336,3 +389,30 @@ def test_websocket_trigger_vote_phase(client):
         response = ws.receive_json()
         assert response["type"] == "phase_update"
         assert response["phase"] == "vote"
+
+def test_websocket_refused_connection_is_closed_with_reason(client, monkeypatch):
+    """Pseudo refusé : la connexion est acceptée puis fermée avec le code 4001 et le motif."""
+    from starlette.websockets import WebSocketDisconnect
+    monkeypatch.setattr(game_runner, "can_join", lambda player_id: "Ce pseudo est réservé.")
+    with client.websocket_connect("/ws/marIA") as ws:
+        with pytest.raises(WebSocketDisconnect) as closed:
+            ws.receive_json()
+    assert closed.value.code == ws_module.CLOSE_REFUSED
+    assert closed.value.reason == "Ce pseudo est réservé."
+    assert "marIA" not in manager.active_connections
+
+
+def test_websocket_abandon_without_game_returns_error(client, monkeypatch):
+    monkeypatch.setattr(game_runner, "abandon_game", lambda player_id: False)
+    with client.websocket_connect("/ws/humain") as ws:
+        ws.receive_json()  # accusé "connected"
+        ws.send_text(json.dumps({"action": "abandon_game", "payload": {}}))
+        assert ws.receive_json()["type"] == "error"
+
+
+def test_websocket_abandon_confirms_to_the_player(client, monkeypatch):
+    monkeypatch.setattr(game_runner, "abandon_game", lambda player_id: True)
+    with client.websocket_connect("/ws/humain") as ws:
+        ws.receive_json()  # accusé "connected"
+        ws.send_text(json.dumps({"action": "abandon_game", "payload": {}}))
+        assert ws.receive_json() == {"type": "game_abandoned"}

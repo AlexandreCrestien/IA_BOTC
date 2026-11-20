@@ -25,6 +25,9 @@ const CLICK_ACTIONS = {
     'close-night-result':() => closeNightResultModal(),
     'close-night-info':  () => closeNightInfoModal(),
     'close-disconnected':() => closeDisconnectedModal(),
+    'ask-abandon':       () => openModal('modal-abandon'),
+    'cancel-abandon':    () => closeModal('modal-abandon'),
+    'confirm-abandon':   () => confirmAbandon(),
     'reload':            () => location.reload()
 };
 
@@ -63,7 +66,10 @@ document.getElementById('chat-input').addEventListener('keydown', (event) => {
     }
 });
 
-// Échap ferme le Grimoire
+// Échap ferme le Grimoire et la confirmation d'abandon
 document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') closeGrimoireModal();
+    if (event.key === 'Escape') {
+        closeGrimoireModal();
+        closeModal('modal-abandon');
+    }
 });

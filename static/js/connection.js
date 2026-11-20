@@ -3,6 +3,9 @@
    ========================================================== */
 'use strict';
 
+// Code de fermeture envoyé par le serveur quand il refuse la connexion (motif dans event.reason)
+const CLOSE_REFUSED = 4001;
+
 // ================= CONNEXION =================
 function joinGame() {
     // Une connexion est déjà en cours ou ouverte : on ignore le double clic
@@ -21,16 +24,19 @@ function joinGame() {
 
     ws = new WebSocket(`${SERVER_WS_URL}/${playerId}`);
     let opened = false;
+    let entered = false; // écran de jeu affiché
 
     ws.onopen = () => {
         opened = true;
-        document.getElementById('screen-welcome').classList.add('hidden');
-        document.getElementById('screen-game').classList.remove('hidden');
-        updateConnectionBadge(true);
-        appendSystemMessage("Connexion établie avec le serveur.", 'public');
     };
 
     ws.onmessage = (event) => {
+        // On n'entre dans le jeu qu'au premier message du serveur : une connexion refusée
+        // (acceptée puis aussitôt refermée) ne fait donc pas clignoter l'écran de jeu.
+        if (!entered) {
+            entered = true;
+            enterGameScreen();
+        }
         let data;
         try {
             data = JSON.parse(event.data);
@@ -41,11 +47,18 @@ function joinGame() {
         handleServerMessage(data);
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
         setJoinButtonLoading(false);
-        if (!opened) {
+        if (event.code === CLOSE_REFUSED) {
+            // Refus du serveur (pseudo invalide, partie d'un autre joueur) : motif affiché sur l'accueil
+            showWelcomeError(event.reason || "Le serveur a refusé la connexion.");
+            return;
+        }
+        if (!entered) {
             // Échec dès la connexion : le joueur est encore sur l'écran d'accueil
-            showWelcomeError("Impossible de joindre le serveur. Vérifiez qu'il est bien lancé, puis réessayez.");
+            showWelcomeError(opened
+                ? "Le serveur a fermé la connexion. Réessayez."
+                : "Impossible de joindre le serveur. Vérifiez qu'il est bien lancé, puis réessayez.");
             return;
         }
         updateConnectionBadge(false);
@@ -57,6 +70,14 @@ function joinGame() {
         console.error("Erreur WebSocket :", error);
         if (opened) appendSystemMessage("Erreur de connexion réseau.");
     };
+}
+
+function enterGameScreen() {
+    setJoinButtonLoading(false);
+    document.getElementById('screen-welcome').classList.add('hidden');
+    document.getElementById('screen-game').classList.remove('hidden');
+    updateConnectionBadge(true);
+    appendSystemMessage("Connexion établie avec le serveur.", 'public');
 }
 
 // Message d'erreur sous le bouton de l'écran d'accueil (null pour l'effacer)
@@ -83,6 +104,8 @@ function updateConnectionBadge(isConnected) {
 // ================= MESSAGES DU SERVEUR =================
 function handleServerMessage(data) {
     switch (data.type) {
+        case "connected":
+            break; // accusé de connexion : l'écran de jeu est affiché par ws.onmessage
         case "chat":
             receiveChatMessage(data.channel_id || "public", data.sender, data.content);
             break;
@@ -134,6 +157,12 @@ function handleServerMessage(data) {
             break;
         case "game_over":
             triggerGameOver(data.winner, data.details);
+            break;
+        case "game_abandoned":
+            leaveGame(); // retour à l'accueil, où le joueur peut lancer une nouvelle partie
+            break;
+        case "game_interrupted":
+            showGameInterrupted(data.text);
             break;
         case "error":
             appendSystemMessage(data.data || "Erreur du serveur.");

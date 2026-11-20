@@ -7,6 +7,7 @@ from backend.server import websockets as ws
 def setup_function():
     ws.ports.clear()
     ws.pending.clear()
+    ws.current_request.clear()
     ws.whispers.clear()
 
 
@@ -61,7 +62,8 @@ def test_forward_retient_la_demande_et_l_envoie(monkeypatch):
         await asyncio.sleep(0.01)
         assert ws.pending.get("h") == "vote"
 
-        await port.requests.put({"kind": "night_deaths", "deaths": []})
+        # Une simple information (message public d'une IA) n'attend pas de réponse
+        await port.requests.put({"kind": "public_chat", "author": "imp", "text": "Bonjour"})
         await asyncio.sleep(0.01)
         assert "h" not in ws.pending
 
@@ -69,8 +71,7 @@ def test_forward_retient_la_demande_et_l_envoie(monkeypatch):
 
     asyncio.run(scenario())
 
+    # Le front reçoit des messages qu'il sait afficher (actions.js, chat.js)
     assert sent[0][0] == "h"
-    assert sent[0][1]["type"] == "vote_request"
-    assert sent[0][1]["kind"] == "vote"
-    assert sent[1][1]["type"] == "engine_request"
-    assert sent[1][1]["kind"] == "night_deaths"
+    assert sent[0][1] == {"type": "action_request", "kind": "vote", "candidates": ["imp", "h"]}
+    assert sent[1][1] == {"type": "chat", "channel_id": "public", "sender": "imp", "content": "Bonjour"}

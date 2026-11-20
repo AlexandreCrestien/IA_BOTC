@@ -85,9 +85,20 @@ class FakeServer:
         self.received = []
         page.route_web_socket("**/ws/**", self._on_connect)
 
+    refusal = None  # motif de refus de la prochaine connexion (voir refuse())
+
     def _on_connect(self, ws_route):
         self.route = ws_route
+        if self.refusal is not None:
+            # Comme le vrai serveur : connexion acceptée puis fermée avec le code 4001 et le motif
+            ws_route.close(code=4001, reason=self.refusal)
+            return
         ws_route.on_message(lambda message: self.received.append(json.loads(message)))
+        ws_route.send(json.dumps({"type": "connected"}))  # accusé envoyé par le vrai serveur
+
+    def refuse(self, reason):
+        """La prochaine connexion sera refusée avec ce motif."""
+        self.refusal = reason
 
     def send(self, **message):
         self.route.send(json.dumps(message))

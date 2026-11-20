@@ -38,12 +38,20 @@ class FakeHuman:
         self.messages = list(messages)
         self.deaths_seen = None
         self.replies_seen = []
+        self.night_infos = []
+        self.public_seen = []
 
     async def night_choice(self, state, player_id):
         return ()
 
+    async def show_night_info(self, state, turn, info, allies):
+        self.night_infos.append((turn, info, allies))
+
     async def show_night_deaths(self, state, deaths):
         self.deaths_seen = deaths
+
+    async def show_public_message(self, state, author, text):
+        self.public_seen.append((author, text))
 
     async def public_message(self, state, player_id):
         return None
@@ -54,7 +62,7 @@ class FakeHuman:
     async def private_message(self, state, player_id):
         return self.messages.pop(0) if self.messages else None
 
-    async def show_private_replies(self, replies):
+    async def show_private_replies(self, state, replies):
         self.replies_seen.append(replies)
 
     async def vote(self, state, player_id):

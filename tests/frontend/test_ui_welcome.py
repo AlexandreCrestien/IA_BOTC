@@ -41,3 +41,14 @@ def test_unreachable_server_shows_error_and_reenables_button(page, static_url):
     expect(page.locator("#welcome-error")).to_contain_text("Impossible de joindre le serveur")
     expect(page.locator("#welcome-join-btn")).to_be_enabled()
     expect(page.locator("#screen-game")).to_be_hidden()
+
+
+def test_refused_connection_shows_reason_on_welcome(page, server, static_url):
+    server.refuse("Une partie est déjà en cours avec un autre joueur.")
+    page.goto(f"{static_url}/index.html")
+    page.fill("#welcome-player-id", PLAYER)
+    page.click("#welcome-join-btn")
+
+    expect(page.locator("#welcome-error")).to_have_text("Une partie est déjà en cours avec un autre joueur.")
+    expect(page.locator("#screen-game")).to_be_hidden()  # pas de passage par l'écran de jeu
+    expect(page.locator("#welcome-join-btn")).to_be_enabled()
