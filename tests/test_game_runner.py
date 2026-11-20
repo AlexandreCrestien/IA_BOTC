@@ -20,10 +20,17 @@ def _state(turn):
     ))
 
 
+def _queued(port):
+    """Messages posés par run_game dans la file du joueur, dans l'ordre."""
+    items = []
+    while not port.requests.empty():
+        items.append(port.requests.get_nowait())
+    return items
+
+
 def test_run_game_joue_jusqu_a_la_victoire(monkeypatch):
     calls = []
     registered = []
-    sent = []
     states = [_state(1), _state(2), _state(3)]
 
     def fake_setup(names, human_id, personality_names, rng):
@@ -35,26 +42,41 @@ def test_run_game_joue_jusqu_a_la_victoire(monkeypatch):
             return SimpleNamespace(state=states[1], game_winner=None, votes={"h": "p1"}, executed="p1")
         return SimpleNamespace(state=states[2], game_winner="bons", votes={"h": None}, executed=None)
 
-    async def fake_vote_result(player_id, turn, executed, votes):
-        sent.append(("vote_result", turn, executed, votes))
-
-    async def fake_game_over(player_id, winner, details):
-        sent.append(("game_over", winner))
-
     monkeypatch.setattr(gr, "setup_game", fake_setup)
     monkeypatch.setattr(gr, "play_turn_with_human", fake_turn)
     monkeypatch.setattr(gr, "register_human", lambda pid, port: registered.append((pid, port)))
-    monkeypatch.setattr(gr, "send_vote_result", fake_vote_result)
-    monkeypatch.setattr(gr, "send_game_over", fake_game_over)
 
     final = asyncio.run(gr.run_game({"h": "Alex"}, "h", [], seed=1))
 
     assert final is states[2]
     assert calls == [1, 2]
     assert registered[0][0] == "h"
+    queued = _queued(registered[0][1])
     # Le front reçoit des noms, jamais les identifiants internes
-    assert sent[0] == ("vote_result", 1, "marIA", [{"voter": "Alex", "target": "marIA"}])
-    assert sent[-1] == ("game_over", "bons")
+    assert queued[0] == {"kind": "vote_result", "turn": 1, "executed": "marIA",
+                         "votes": [{"voter": "Alex", "target": "marIA"}]}
+    assert queued[-1]["kind"] == "game_over" and queued[-1]["winner"] == "bons"
+
+
+def test_fin_de_partie_apres_les_morts_de_la_derniere_nuit(monkeypatch):
+    """Partie gagnée pendant la nuit : les morts de la nuit (posés par le moteur) passent avant
+    le résultat du tour et la fin de partie, car tout passe par la même file."""
+    registered = []
+
+    def fake_setup(names, human_id, personality_names, rng):
+        return _state(1), {}, "memoire"
+
+    async def fake_turn(state, rng, agents, memory, human_id, port):
+        await port.requests.put({"kind": "night_deaths", "deaths": ["p1"]})  # le moteur annonce le mort
+        return SimpleNamespace(state=_state(1), game_winner="mal", votes={}, executed=None)
+
+    monkeypatch.setattr(gr, "setup_game", fake_setup)
+    monkeypatch.setattr(gr, "play_turn_with_human", fake_turn)
+    monkeypatch.setattr(gr, "register_human", lambda pid, port: registered.append((pid, port)))
+
+    asyncio.run(gr.run_game({"h": "Alex"}, "h", [], seed=1))
+
+    assert [item["kind"] for item in _queued(registered[0][1])] == ["night_deaths", "vote_result", "game_over"]
 
 
 def test_start_game_ne_lance_pas_deux_parties(monkeypatch):

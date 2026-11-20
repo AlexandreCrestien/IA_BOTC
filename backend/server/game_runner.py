@@ -8,9 +8,7 @@ from backend.game_engine import setup_game
 from backend.human_port import QueueHumanPort
 from backend.human_turns import play_turn_with_human
 from backend.models import Alignement
-from backend.server.websockets import (
-    register_human, reset_player, send_game_interrupted, send_game_over, send_vote_result,
-)
+from backend.server.websockets import register_human, reset_player, send_game_interrupted
 
 logger = logging.getLogger(__name__)
 
@@ -76,15 +74,17 @@ async def run_game(names: dict[str, str], human_id: str, personality_names: list
             for voter, target in result.votes.items()
         ]
         executed = label.get(result.executed, result.executed) if result.executed else None
-        await send_vote_result(human_id, turn, executed, votes)
+        # Même file que les messages du moteur : le front reçoit tout dans l'ordre
+        # (sinon la fin de partie pourrait arriver avant les morts de la dernière nuit).
+        await port.requests.put({"kind": "vote_result", "turn": turn, "executed": executed, "votes": votes})
 
         if result.game_winner is not None:
             logger.info("Partie terminée, vainqueur : %s", result.game_winner)
-            await send_game_over(
-                human_id,
-                _winner_label(result.game_winner),
-                "Le village a rendu son dernier verdict.",
-            )
+            await port.requests.put({
+                "kind": "game_over",
+                "winner": _winner_label(result.game_winner),
+                "details": "Le village a rendu son dernier verdict.",
+            })
             return state
 
 

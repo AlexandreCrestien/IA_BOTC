@@ -43,7 +43,7 @@ def _ask_numbers(prompt, options):
 
 
 class TerminalHuman:
-    """Implémentation de HumanPort dans le terminal."""
+    """Implémentation de HumanPort dans le terminal (mêmes méthodes que backend/human_port.py)."""
 
     def __init__(self, memory):
         self.memory = memory
@@ -61,9 +61,18 @@ class TerminalHuman:
             print("Choix incomplet : un choix aléatoire sera fait.")
         return tuple(picked)
 
+    async def show_night_info(self, state, turn, info, allies):
+        print(f"\n[Nuit {turn}] Information : {info}")
+        if allies:
+            names = ", ".join(f"{state.player(a['id']).name} ({a['role']})" for a in allies)
+            print(f"[Nuit {turn}] Tes alliés : {names}")
+
     async def show_night_deaths(self, state, deaths):
         names = ", ".join(state.player(pid).name for pid in deaths) or "personne"
         print(f"\n-- Morts de la nuit : {names}")
+
+    async def show_public_message(self, state, author, text):
+        print(f"  [Public] {self.memory.name_of(author)} : {text}")
 
     async def public_message(self, state, player_id):
         print("\n[Discussion] Ce que tu sais :")
@@ -84,7 +93,7 @@ class TerminalHuman:
         text = input("Ton message privé (vide = fin) : ").strip()
         return text or None
 
-    async def show_private_replies(self, replies):
+    async def show_private_replies(self, state, replies):
         for pid, text in replies:
             print(f"  {self.memory.name_of(pid)} : {text}")
 

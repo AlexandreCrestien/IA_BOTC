@@ -1,101 +1,72 @@
-"""Simule la partie sans appel LLM, pour vérifier que serveur, moteur et messages sont reliés.
+"""Simule une partie sans appel LLM et affiche chaque message reçu par le front.
 
-- Les appels IA renvoient une réponse fixe (aucun réseau, aucun quota).
-- Le joueur humain est joué automatiquement : vote, nuit, message public, salon privé.
-- Chaque message reçu par le front est affiché.
+- Les IA répondent en mode simulation (SIMULATE_LLM=1 : aucun réseau, aucun quota).
+- Le joueur humain est joué automatiquement : action de nuit, message public, salon privé, vote.
+- Utile pour voir rapidement ce que le serveur envoie au front pendant une partie entière.
+  Pour un contrôle détaillé (avec vérifications), voir scripts/test_complet.py.
 
 Lancement depuis la racine du projet :
     python scripts/simulate_ai.py
-Si la partie se termine sans plus de message, arrête avec Ctrl+C (la lecture WebSocket attend).
 """
 import json
+import os
 import sys
+from collections import Counter
 from pathlib import Path
-from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+os.environ["SIMULATE_LLM"] = "1"  # doit être défini avant l'import de llm_client
 
 from fastapi.testclient import TestClient  # noqa: E402
 
 from backend import llm_client  # noqa: E402
-from backend.server.app import app, GAME_CONFIG  # noqa: E402
+from backend.server.app import app  # noqa: E402
 
-HUMAN = GAME_CONFIG["human_id"]
-MAX_MESSAGES = 300  # garde-fou pour ne pas tourner indéfiniment
+llm_client.CALL_PAUSE_SECONDS = 0  # pas de pause entre les appels simulés
 
-# 1. Pas de pause entre appels : la simulation doit être rapide.
-llm_client.CALL_PAUSE_SECONDS = 0
-
-
-# 2. Faux routeur : même forme de réponse que LiteLLM, sans réseau.
-async def fake_acompletion(model, messages, **kwargs):
-    wants_json = kwargs.get("response_format") is not None
-    content = "{}" if wants_json else "Message simulé."
-    return SimpleNamespace(
-        model=f"simulated/{model}",
-        usage=SimpleNamespace(total_tokens=0),
-        choices=[SimpleNamespace(message=SimpleNamespace(content=content))],
-    )
+HUMAN = "Simulateur"  # pseudo du joueur humain
+MAX_MESSAGES = 5000  # garde-fou pour ne pas tourner indéfiniment
 
 
-llm_client.router.acompletion = fake_acompletion
+def send(ws, action, payload=None):
+    ws.send_text(json.dumps({"action": action, "payload": payload or {}}))
 
 
-def send(ws, packet):
-    ws.send_text(json.dumps(packet))
+def answer(ws, msg):
+    """Réponse automatique du joueur humain, comme s'il cliquait dans le front."""
+    if msg["type"] == "action_request":
+        candidates = [c for c in msg["candidates"] if c != HUMAN]
+        if msg["kind"] == "vote":
+            send(ws, "submit_vote", {"target_id": candidates[0] if candidates else None})
+        elif msg["kind"] == "nuit":
+            send(ws, "submit_night_action", {"targets": msg["candidates"][: msg.get("min_targets", 1)]})
+        elif msg["kind"] == "discussion":
+            send(ws, "request_whisper", {"targets": candidates[:1]})
 
-
-def answer(ws, msg, state):
-    """Réponse automatique du joueur humain à chaque demande du serveur."""
-    kind = msg.get("kind")
-    data = msg.get("data", {})
-
-    if msg["type"] == "vote_request":
-        targets = data.get("targets", [])
-        send(ws, {"action": "submit_vote", "payload": {"target_id": targets[0] if targets else ""}})
-
-    elif msg["type"] == "night_request":
-        count = data.get("count", 1)
-        send(ws, {"action": "submit_night_action",
-                  "payload": {"targets": data.get("targets", [])[:count]}})
-
-    elif kind == "public_message":
-        send(ws, {"action": "send_chat",
-                  "payload": {"channel_id": "public", "content": "Bonjour, je suis l'humain."}})
-
-    elif kind == "private_partners":
-        choices = data.get("choices", [])
-        if choices:
-            send(ws, {"action": "request_whisper", "payload": {"targets": choices[:1]}})
-
-    elif kind == "private_message" and state["channel"]:
-        send(ws, {"action": "send_chat",
-                  "payload": {"channel_id": state["channel"], "content": "Que sais-tu ?"}})
+    elif msg["type"] == "input_request":
+        if msg["kind"] == "public_message":
+            send(ws, "send_chat", {"channel_id": "public", "content": "Bonjour, je suis l'humain."})
+        elif msg["kind"] == "private_message":
+            send(ws, "send_chat", {"channel_id": msg["channel_id"], "content": "Que sais-tu ?"})
 
 
 def main():
-    state = {"channel": None}
-    counts = {}
-
+    counts = Counter()
+    # « with » : une seule boucle asyncio, comme avec le vrai serveur
     with TestClient(app) as client:
         with client.websocket_connect(f"/ws/{HUMAN}") as ws:
-            print("POST /game/start ->", client.post("/game/start").json())
-
             for _ in range(MAX_MESSAGES):
                 msg = json.loads(ws.receive_text())
-                key = msg.get("kind") or msg.get("type")
-                counts[key] = counts.get(key, 0) + 1
-                print(f"[{key}]", json.dumps(msg, ensure_ascii=False)[:200])
-
-                if msg.get("type") == "private_channel_opened":
-                    state["channel"] = msg["channel_id"]
-
-                if msg.get("type") in ("vote_request", "night_request", "engine_request"):
-                    answer(ws, msg, state)
+                counts[msg["type"]] += 1
+                shown = {k: v for k, v in msg.items() if k != "state"}  # l'état complet est trop long
+                print(f"[{msg['type']}]", json.dumps(shown, ensure_ascii=False)[:200])
+                answer(ws, msg)
+                if msg["type"] in ("game_over", "game_interrupted"):
+                    break
 
     print("\nRésumé des messages reçus :")
-    for key, n in sorted(counts.items(), key=lambda kv: -kv[1]):
-        print(f"  {key} : {n}")
+    for kind, n in counts.most_common():
+        print(f"  {kind} : {n}")
 
 
 if __name__ == "__main__":

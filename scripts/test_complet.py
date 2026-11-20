@@ -5,7 +5,9 @@ Ce que le script vérifie, sur une partie entière jouée en mode simulé :
 - les cas d'erreur (JSON invalide, action inconnue, champ en trop, message vide, action hors phase) ;
 - les demandes d'action (nuit, vote, discussion) et leur validation
   (nombre de cibles, cible inconnue, se désigner soi-même) ;
-- la reconnexion en pleine nuit (rôle et demande en attente renvoyés) ;
+- la reconnexion en pleine nuit (rôle, demande en attente, salons, chat et historiques renvoyés) ;
+- les étapes facultatives : passer son message public, « Passer au vote », terminer un salon privé ;
+- l'abandon d'une partie, puis le lancement d'une nouvelle ;
 - la phase affichée pendant la discussion des IA ;
 - les messages publics et privés (relais, expéditeurs affichés par leur nom, réponses des IA) ;
 - les infos de nuit selon le rôle, les résultats de nuit et de vote, la fin de partie.
@@ -39,7 +41,7 @@ from backend.server.app import app  # noqa: E402
 
 llm_client.CALL_PAUSE_SECONDS = 0  # pas de pause entre les appels simulés
 
-HUMAN = game_runner.GAME_CONFIG["human_id"]
+HUMAN = "Testeur"  # pseudo du joueur humain : la partie se lance à sa première connexion
 RECV_TIMEOUT = 30  # secondes sans aucun message avant de déclarer la partie bloquée
 MAX_MESSAGES = 20000  # garde-fou contre une boucle
 MAX_PRIVATE_MESSAGES = 3
@@ -52,6 +54,7 @@ WINNERS = {"Villageois", "Démons"}
 
 # Champs obligatoires par type de message, d'après connection.js (handleServerMessage)
 REQUIRED = {
+    "connected": (),
     "role_assigned": ("role_name", "description"),
     "game_state": ("state",),
     "action_request": ("kind", "candidates"),
@@ -65,6 +68,10 @@ REQUIRED = {
     "error": ("data",),
     "announcement": ("text",),
     "phase_update": ("phase",),
+    "input_request": ("kind", "channel_id", "text"),
+    "history": ("nights", "votes"),
+    "game_abandoned": (),
+    "game_interrupted": ("text",),
 }
 
 
@@ -115,6 +122,13 @@ class Session:
     def send_raw(self, text: str) -> None:
         self.ws.send_text(text)
 
+    def recv_until(self, types: set[str]) -> dict:
+        """Ignore les messages de la partie jusqu'à recevoir l'un des types attendus."""
+        while True:
+            msg = self.recv()
+            if msg.get("type") in types:
+                return msg
+
     def recv(self) -> dict:
         future = self.pool.submit(self.ws.receive_json)
         try:
@@ -124,40 +138,41 @@ class Session:
 
 
 def negative_tests(client: TestClient, report: Report) -> None:
-    """Cas d'erreur, sur une connexion qui n'a pas de partie : aucune demande en cours."""
-    session = Session(client, "Testeur")
+    """Cas d'erreur. La connexion lance une partie : les messages de la partie sont ignorés,
+    seule la réponse du serveur à chaque envoi est vérifiée. La partie est ensuite abandonnée."""
+    session = Session(client, HUMAN)
     session.open()
     try:
-        session.send_raw("{pas du json")
         msg = session.recv()
-        report.check(msg.get("type") == "error" and "JSON" in str(msg.get("data")),
-                     "JSON invalide refusé", str(msg))
+        report.check(msg.get("type") == "connected", "accusé de connexion reçu en premier", str(msg))
+
+        session.send_raw("{pas du json")
+        msg = session.recv_until({"error"})
+        report.check("JSON" in str(msg.get("data")), "JSON invalide refusé", str(msg))
 
         session.send_raw(json.dumps({"action": "action_inconnue", "payload": {}}))
-        msg = session.recv()
-        report.check(msg.get("type") == "error", "action inconnue refusée", str(msg))
+        session.recv_until({"error"})
+        report.check(True, "action inconnue refusée")
 
         session.send_raw(json.dumps({"action": "send_chat",
                                      "payload": {"channel_id": "public", "content": "x", "en_trop": 1}}))
-        msg = session.recv()
-        report.check(msg.get("type") == "error", "champ inconnu refusé", str(msg))
+        msg = session.recv_until({"error"})
+        report.check("Action non valide" in str(msg.get("data")), "champ inconnu refusé", str(msg))
 
         session.send("send_chat", {"channel_id": "public", "content": ""})
-        msg = session.recv()
-        report.check(msg.get("type") == "error", "message vide refusé", str(msg))
+        msg = session.recv_until({"error"})
+        report.check("Action non valide" in str(msg.get("data")), "message vide refusé", str(msg))
 
-        session.send("submit_vote", {"target_id": None})
-        msg = session.recv()
-        report.check(msg.get("type") == "error" and "moment" in str(msg.get("data")),
-                     "vote hors demande refusé", str(msg))
+        session.send("skip_turn", {"kind": "vote"})
+        msg = session.recv_until({"error"})
+        report.check("Action non valide" in str(msg.get("data")), "le vote ne peut pas être passé", str(msg))
 
-        session.send("submit_night_action", {"targets": [HUMAN]})
-        msg = session.recv()
-        report.check(msg.get("type") == "error", "action de nuit hors demande refusée", str(msg))
+        # Les refus « hors demande » dépendent de ce que le moteur attend : ils sont testés
+        # pendant la partie, quand le moteur attend l'action de nuit (voir Game.out_of_turn_probes).
 
-        session.send("request_whisper", {"targets": ["p1"]})
-        msg = session.recv()
-        report.check(msg.get("type") == "error", "discussion privée hors demande refusée", str(msg))
+        session.send("abandon_game")
+        session.recv_until({"game_abandoned"})
+        report.check(True, "abandon de la partie confirmé")
     finally:
         session.close()
 
@@ -192,6 +207,13 @@ class Game:
         self.night_results = []
         self.errors = []
         self.game_over = None
+        self.replaying = False  # reconnexion : le serveur renvoie salons, chat et historiques
+        self.public_requests = 0
+        self.public_skipped = 0
+        self.discussions = 0
+        self.private_skipped = 0
+        self.salons_ended_early = 0
+        self.history = None
 
     # ---------- boucle de réception ----------
 
@@ -236,6 +258,9 @@ class Game:
     def on_role_assigned(self, msg: dict) -> None:
         self.role = msg.get("role_name")
         self.report.check(self.role in ROLES_FR, "rôle connu du front", str(self.role))
+        if msg.get("allies") is not None:  # reconnexion après la révélation des alliés
+            self.report.check(self.role in EVIL_ROLES, "alliés renvoyés seulement au camp du mal", str(self.role))
+            self.report.check(msg["allies"] == self.allies, "alliés renvoyés à l'identique", str(msg["allies"]))
 
     def on_game_state(self, msg: dict) -> None:
         state = msg.get("state", {})
@@ -259,12 +284,13 @@ class Game:
     def on_night_result(self, msg: dict) -> None:
         self.night_results.append(msg)
         dead = msg.get("dead_player")
-        self.report.check(dead is None or dead in self.names, "mort de nuit identifiable", str(dead))
+        # Le serveur envoie des noms (jamais les identifiants internes)
+        self.report.check(dead is None or dead in self.names.values(), "mort de nuit identifiable", str(dead))
 
     def on_vote_result(self, msg: dict) -> None:
         self.votes.append(msg)
         executed = msg.get("executed")
-        self.report.check(executed is None or executed in self.names, "joueur exécuté identifiable", str(executed))
+        self.report.check(executed is None or executed in self.names.values(), "joueur exécuté identifiable", str(executed))
         self.report.check(all({"voter", "target"} <= set(v) for v in msg.get("votes", [])),
                           "bulletins de vote complets (voter, target)")
 
@@ -280,20 +306,49 @@ class Game:
                           str(msg.get("winner")))
 
     def on_announcement(self, msg: dict) -> None:
-        text = str(msg.get("text", ""))
-        if "message public" in text:
-            # Le moteur attend le message public de l'humain
-            self.public_sent += 1
-            self.session.send("send_chat", {"channel_id": "public", "content": "Bonjour, je suis l'humain."})
-        elif "privé(s)" in text:
-            # Le moteur attend un message privé : « Il vous reste N message(s) privé(s) ... »
-            left = int(text.split("Il vous reste ")[1].split()[0])
+        pass
+
+    def on_input_request(self, msg: dict) -> None:
+        """Saisie attendue (facultative) : message public ou message privé."""
+        kind = msg.get("kind")
+        if kind == "public_message":
+            # Un jour sur deux, le joueur passe son message public
+            self.public_requests += 1
+            if self.public_requests % 2 == 0:
+                self.public_skipped += 1
+                self.session.send("skip_turn", {"kind": "public_message"})
+            else:
+                self.public_sent += 1
+                self.session.send("send_chat", {"channel_id": "public", "content": "Bonjour, je suis l'humain."})
+        elif kind == "private_message":
+            left = int(msg.get("left", -1))
             self.report.check(left == MAX_PRIVATE_MESSAGES - len(self.private_left_seen),
                               "compte des messages privés restants", f"annoncé {left}")
+            self.report.check(msg.get("channel_id") == self.private_channel,
+                              "message privé attendu dans le salon ouvert", str(msg.get("channel_id")))
             self.private_left_seen.append(left)
-            self.send_private_message()
+            # Premier salon : les 3 messages ; salons suivants : 1 message, puis « Terminer la discussion »
+            if self.discussions > 1 and len(self.private_left_seen) > 1:
+                self.salons_ended_early += 1
+                self.session.send("skip_turn", {"kind": "private_message"})
+            else:
+                self.send_private_message()
+        else:
+            self.report.check(False, "saisie attendue connue du front", str(kind))
+
+    def on_history(self, msg: dict) -> None:
+        """Reconnexion : historiques des onglets Nuits et Votes."""
+        self.history = msg
+        expected_nights = len(self.night_infos) + len(self.night_results)
+        self.report.check(len(msg["nights"]) == expected_nights, "historique des nuits complet à la reconnexion",
+                          f"{len(msg['nights'])} entrées, {expected_nights} attendues")
+        expected_votes = sum(len(v.get("votes", [])) for v in self.votes)
+        self.report.check(len(msg["votes"]) == expected_votes, "historique des votes complet à la reconnexion",
+                          f"{len(msg['votes'])} bulletins, {expected_votes} attendus")
 
     def on_private_channel_opened(self, msg: dict) -> None:
+        if msg.get("focus") is False:  # salon rouvert à la reconnexion, rien de nouveau
+            return
         self.private_channel = msg["channel_id"]
         self.private_left_seen = []
         self.report.check(HUMAN in msg["members"], "salon privé : le joueur humain est membre")
@@ -306,6 +361,8 @@ class Game:
             self.send_private_message()
 
     def on_chat(self, msg: dict) -> None:
+        if self.replaying:
+            return  # historique du chat renvoyé à la reconnexion : déjà compté
         sender, channel = msg.get("sender"), msg.get("channel_id")
         if sender == HUMAN:
             if channel == "public":
@@ -338,6 +395,7 @@ class Game:
             self.report.check(list(msg.get("candidates", [])) == self.reconnecting,
                               "demande en attente renvoyée à la reconnexion")
             self.reconnecting = None
+            self.replaying = False
         if kind == "nuit":
             self.answer_night(msg)
         elif kind == "vote":
@@ -345,9 +403,24 @@ class Game:
         else:
             self.answer_discussion(msg)
 
+    def out_of_turn_probes(self) -> None:
+        """Le moteur attend l'action de nuit : tout le reste doit être refusé, sans débloquer la nuit."""
+        checks = [
+            ("submit_vote", {"target_id": None}, "vote hors demande refusé"),
+            ("request_whisper", {"targets": ["p1"]}, "discussion privée hors demande refusée"),
+            ("send_chat", {"channel_id": "public", "content": "Trop tôt"}, "message public hors demande refusé"),
+            ("skip_turn", {"kind": "public_message"}, "passer une étape non attendue refusé"),
+        ]
+        for action, payload, name in checks:
+            reply = self.send_and_wait(action, payload, {"error", "announcement", "chat"})
+            self.report.check(reply.get("type") == "error", name, str(reply))
+
     def answer_night(self, msg: dict) -> None:
         cands = list(msg.get("candidates", []))
         count = int(msg.get("max_targets", 1))
+        if "out_of_turn" not in self.probes:
+            self.probes.add("out_of_turn")
+            self.out_of_turn_probes()
         if "reconnect" not in self.probes:
             self.probes.add("reconnect")
             self.reconnect(cands)
@@ -368,11 +441,17 @@ class Game:
     def reconnect(self, cands: list) -> None:
         """Coupure en pleine nuit : à la reconnexion, le rôle et la demande doivent revenir."""
         roles_before = self.counts["role_assigned"]
+        # Historiques attendus seulement s'il y a déjà eu une info de nuit, une nuit ou un vote
+        history_expected = bool(self.night_infos or self.night_results or self.votes)
+        self.history = None
         self.session.close()
         self.session.open()
         self.reconnecting = cands
+        self.replaying = True
         self.wait_for({"action_request"})
         self.report.check(self.counts["role_assigned"] > roles_before, "rôle renvoyé à la reconnexion")
+        if history_expected:
+            self.report.check(self.history is not None, "historiques renvoyés à la reconnexion")
 
     def answer_vote(self, msg: dict) -> None:
         cands = list(msg.get("candidates", []))
@@ -391,6 +470,13 @@ class Game:
     def answer_discussion(self, msg: dict) -> None:
         cands = list(msg.get("candidates", []))
         self.private_channel = None
+        self.discussions += 1
+        if self.discussions == 2:
+            # Deuxième jour : pas de salon privé, « Passer au vote »
+            self.private_skipped += 1
+            reply = self.send_and_wait("skip_turn", {"kind": "private_partners"}, {"announcement", "error"})
+            self.report.check(reply.get("type") == "announcement", "« Passer au vote » accepté", str(reply))
+            return
         if "whisper" not in self.probes:
             self.probes.add("whisper")
             reply = self.send_and_wait("request_whisper", {"targets": [HUMAN]},
@@ -423,7 +509,8 @@ class Game:
         texts = [str(m.get("info", "")) for m in self.night_infos]
 
         r.check(self.game_over is not None, "la partie se termine par game_over")
-        r.check(self.night_acks >= 1, "choix de nuit confirmés (night_action_ack)", str(self.night_acks))
+        if self.counts["action_request"] and any(p in self.probes for p in ("night", "reconnect")):
+            r.check(self.night_acks >= 1, "choix de nuit confirmés (night_action_ack)", str(self.night_acks))
         r.check(self.ai_public > 0, "messages publics des IA reçus par le front")
         r.check(self.echo_seen == self.public_sent, "message public de l'humain relayé",
                 f"envoyés {self.public_sent}, relayés {self.echo_seen}")
@@ -442,8 +529,20 @@ class Game:
         if self.role == "Détective":
             r.check(any("Première nuit : parmi" in t for t in texts), "Détective : information reçue")
 
+        if "out_of_turn" not in self.probes:
+            r.note("refus hors demande non testés : aucune demande de nuit pour ce rôle")
         if "reconnect" not in self.probes:
             r.note("reconnexion non testée : aucune demande de nuit pour ce rôle")
+        if self.public_requests >= 2:
+            r.check(self.public_skipped >= 1, "message public passé au moins une fois")
+        else:
+            r.note("passer le message public non testé : partie trop courte")
+        if self.discussions < 2:
+            r.note("« Passer au vote » non testé : partie trop courte")
+        if self.discussions < 3:
+            r.note("fin anticipée d'un salon privé non testée : partie trop courte")
+        else:
+            r.check(self.salons_ended_early >= 1, "salon privé terminé avant 3 messages")
         if "vote" not in self.probes:
             r.note("validation du vote non testée : joueur humain sans vote")
         if self.errors:
@@ -476,33 +575,36 @@ def main() -> None:
 
     game_runner.GAME_CONFIG["seed"] = args.seed
     report = Report()
-    client = TestClient(app)
-
-    negative_tests(client, report)
 
     log_file = None
     if args.log:
         args.log.parent.mkdir(parents=True, exist_ok=True)
         log_file = args.log.open("w", encoding="utf-8")
 
-    session = Session(client, HUMAN)
-    game = Game(session, report, log_file)
-    started = time.time()
-    try:
-        session.open()
-        game.play()
-    except Stalled as exc:
-        report.check(False, "la partie avance sans blocage", str(exc))
-    except Exception as exc:  # noqa: BLE001 : toute erreur doit apparaître dans le bilan
-        report.check(False, "aucune exception pendant la partie", repr(exc))
-        traceback.print_exc()
-    finally:
+    # « with » : une seule boucle asyncio pour tout le test, comme avec le vrai serveur.
+    # Sans lui, chaque connexion a sa propre boucle, fermée à la déconnexion : la partie
+    # serait détruite au test de reconnexion.
+    with TestClient(app) as client:
+        negative_tests(client, report)
+
+        session = Session(client, HUMAN)
+        game = Game(session, report, log_file)
+        started = time.time()
         try:
-            session.close()
-        except Exception:  # noqa: BLE001
-            pass
-        if log_file:
-            log_file.close()
+            session.open()
+            game.play()
+        except Stalled as exc:
+            report.check(False, "la partie avance sans blocage", str(exc))
+        except Exception as exc:  # noqa: BLE001 : toute erreur doit apparaître dans le bilan
+            report.check(False, "aucune exception pendant la partie", repr(exc))
+            traceback.print_exc()
+        finally:
+            try:
+                session.close()
+            except Exception:  # noqa: BLE001
+                pass
+            if log_file:
+                log_file.close()
 
     game.final_checks()
     summary(game, report, args, time.time() - started)

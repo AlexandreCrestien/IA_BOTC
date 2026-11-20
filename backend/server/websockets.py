@@ -258,6 +258,13 @@ async def _send_request(player_id: str, port, kind: str, request: dict) -> None:
         for reply in request.get("replies", []):
             await _send_chat(player_id, channel_id, _name(port, reply["author"]), reply["text"])
 
+    # Fin de tour et fin de partie (posées dans la file par game_runner, pour garder l'ordre)
+    elif kind == "vote_result":
+        await send_vote_result(player_id, request["turn"], request["executed"], request["votes"])
+
+    elif kind == "game_over":
+        await send_game_over(player_id, request["winner"], request["details"])
+
     else:
         logger.info(f"Demande du moteur sans équivalent front : {kind}")
 

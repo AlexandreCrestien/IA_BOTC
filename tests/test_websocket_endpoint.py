@@ -326,3 +326,29 @@ def test_historiques_nuits_et_votes_gardes_et_renvoyes_a_la_reconnexion():
 def test_nuit_sans_mort_dans_l_historique():
     assert ws.night_death_text(None) == "Personne n'est mort cette nuit."
     assert ws.night_death_text("marIA") == "marIA est mort·e cette nuit."
+
+
+def test_resultat_du_tour_et_fin_de_partie_relayes_depuis_la_file():
+    """game_runner pose vote_result et game_over dans la file : ils sont relayés comme les autres."""
+    sent = []
+
+    async def fake_send(player_id, message):
+        sent.append(message)
+
+    async def scenario():
+        port = QueueHumanPort()
+        await ws._send_request("h", port, "vote_result", {"turn": 3, "executed": None, "votes": []})
+        await ws._send_request("h", port, "game_over", {"winner": "Villageois", "details": "Fin."})
+
+    original = ws.manager.send_to_player
+    ws.manager.send_to_player = fake_send
+    try:
+        asyncio.run(scenario())
+    finally:
+        ws.manager.send_to_player = original
+
+    assert sent == [
+        {"type": "vote_result", "turn": 3, "executed": None, "votes": []},
+        {"type": "game_over", "winner": "Villageois", "details": "Fin."},
+    ]
+    assert ws.vote_log["h"] == []  # aucun bulletin à retenir ce tour-là
