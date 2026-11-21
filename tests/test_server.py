@@ -6,11 +6,13 @@ from fastapi.testclient import TestClient
 from pydantic import TypeAdapter, ValidationError
 
 import backend.server.admin as admin
-from backend.human_port import QueueHumanPort
+from backend.models import GameState, Player
+from backend.rules import get_role
 from backend.server import game_runner
 from backend.server import websockets as ws_module
 from backend.server.app import app
 from backend.server.connection_manager import ConnectionManager, manager
+from server_helpers import waiting_session
 from backend.server.schemas import (
     ClientActionPacket,
     RequestWhisperAction,
@@ -46,13 +48,17 @@ def no_real_game(monkeypatch, clean_server):
     monkeypatch.setattr(game_runner, "ensure_started", lambda player_id: None)
 
 
-def waiting_for(player_id: str, kind: str) -> QueueHumanPort:
-    """Simule un moteur qui attend la réponse `kind` du joueur.
-    (Sans demande mémorisée : le serveur ne la renvoie donc pas à la connexion.)"""
-    port = QueueHumanPort()
-    ws_module.ports[player_id] = port
-    ws_module.pending[player_id] = kind
-    return port
+def waiting_for(player_id: str, kind: str, **request):
+    """Simule un moteur qui attend la réponse `kind` du joueur. La demande n'a pas d'état de partie :
+    à la connexion, le serveur renvoie seulement la demande, sans rôle ni état."""
+    players = tuple(Player(id=pid, name=pid.capitalize(), role=get_role("monk")) for pid in (player_id, "ana", "agent_1"))
+    return waiting_session(player_id, kind, GameState(players=players), **request)
+
+
+def skip_resent_request(ws):
+    """À la connexion : accusé, rôle et état de la partie, puis la demande en attente renvoyée."""
+    while ws.receive_json()["type"] not in ("action_request", "input_request"):
+        pass
 
 
 @pytest.fixture
@@ -218,9 +224,9 @@ def test_websocket_invalid_action_returns_error(client):
 
 
 def test_websocket_valid_action_sends_no_error(client):
-    waiting_for("humain", "vote")
+    waiting_for("humain", "vote", targets=["ana"])
     with client.websocket_connect("/ws/humain") as ws:
-        ws.receive_json()  # accusé "connected"
+        skip_resent_request(ws)
         ws.send_text(json.dumps({"action": "submit_vote", "payload": {"target_id": "ana"}}))
         # Une action valide et attendue renvoie une confirmation d'annonce, pas une erreur de parsing
         response = ws.receive_json()
@@ -324,8 +330,8 @@ def test_websocket_public_chat_broadcast(client):
     """Vérifie qu'un message public envoyé par un joueur est bien diffusé à tous."""
     waiting_for("joueur1", "public_message")  # le moteur attend le message public de joueur1
     with client.websocket_connect("/ws/joueur1") as ws1, client.websocket_connect("/ws/joueur2") as ws2:
-        ws1.receive_json()  # accusés "connected"
-        ws2.receive_json()
+        skip_resent_request(ws1)
+        ws2.receive_json()  # accusé "connected"
         # Le joueur 1 envoie un message public
         ws1.send_text(json.dumps({
             "action": "send_chat",
@@ -353,9 +359,9 @@ def test_websocket_public_chat_refused_when_not_asked(client):
 
 def test_websocket_request_whisper(client):
     """Vérifie qu'une demande de chuchotement prévient le public puis ouvre le canal privé."""
-    waiting_for("humain", "private_partners")
+    waiting_for("humain", "private_partners", choices=["agent_1"])
     with client.websocket_connect("/ws/humain") as ws:
-        ws.receive_json()  # accusé "connected"
+        skip_resent_request(ws)
         ws.send_text(json.dumps({
             "action": "request_whisper",
             "payload": {"targets": ["agent_1"]}
@@ -395,6 +401,7 @@ def test_websocket_abandon_without_game_returns_error(client, monkeypatch):
 
 def test_websocket_abandon_confirms_to_the_player(client, monkeypatch):
     monkeypatch.setattr(game_runner, "abandon_game", lambda player_id: True)
+    waiting_session("humain")  # partie en cours (sans demande en attente)
     with client.websocket_connect("/ws/humain") as ws:
         ws.receive_json()  # accusé "connected"
         ws.send_text(json.dumps({"action": "abandon_game", "payload": {}}))

@@ -5,6 +5,8 @@ from typing import Optional
 from fastapi import APIRouter, Header, HTTPException, status, Depends
 from dotenv import load_dotenv
 
+from backend.server.session import current_session
+
 load_dotenv()
 
 logger = logging.getLogger(__name__)
@@ -59,28 +61,47 @@ def _channel(memory, event, reader: str) -> str:
     return f"privé avec {', '.join(others)}"
 
 
+def _night_history(session) -> list[dict]:
+    """Onglet Nuits du joueur humain, avec des noms (le front du jeu, lui, reçoit des identifiants)."""
+    history = []
+    for entry in session.night_log:
+        if entry.type == "result":
+            dead = session.state.player(entry.dead_player).name if entry.dead_player else None
+            info = f"{dead} est mort·e cette nuit." if dead else "Personne n'est mort cette nuit."
+        else:
+            info = entry.info
+        history.append({"turn": entry.turn, "type": entry.type, "info": info})
+    return history
+
+
+def _vote_history(session) -> list[dict]:
+    """Onglet Votes du joueur humain, avec des noms."""
+    def name(player_id):
+        return session.state.player(player_id).name if player_id else None
+    return [
+        {"turn": v.turn, "voter": name(v.voter), "target": name(v.target), "executed": name(v.executed)}
+        for v in session.vote_log
+    ]
+
+
 def build_debug_state() -> dict:
     """État complet de la partie pour le panneau d'administration (noms, jamais d'identifiants)."""
-    # Imports locaux : la partie vit dans game_runner / websockets, qui importent eux-mêmes l'application
-    from backend.server import game_runner
-    from backend.server import websockets as ws
-
-    human_id = game_runner._current_human
-    port = ws.ports.get(human_id) if human_id else None
-    if port is None or port.state is None or port.memory is None:
+    session = current_session()
+    if session is None or session.state is None or session.memory is None:
         return {"game_in_progress": False, "message": "Aucune partie n'a encore été lancée."}
 
-    state, memory, agents = port.state, port.memory, port.agents or {}
+    state, memory, agents, human_id = session.state, session.memory, session.agents, session.human_id
     ai_ids = [p.id for p in state.players if p.id != human_id]
 
     return {
-        "game_in_progress": game_runner._game_running(),
-        "status": "en cours" if game_runner._game_running() else "terminée",
+        "game_in_progress": session.running,
+        "status": "en cours" if session.running else "terminée",
         "human": memory.name_of(human_id),
         "turn": state.turn,
         "phase": state.phase.value,
         "agents": [memory.name_of(pid) for pid in ai_ids],
-        "channels": [", ".join(members) for members in ws.opened_channels.get(human_id, {}).values()],
+        "channels": [", ".join(memory.name_of(pid) for pid in members)
+                     for members in session.opened_channels.values()],
         "players": [
             {
                 "name": p.name,
@@ -120,6 +141,6 @@ def build_debug_state() -> dict:
             key=lambda action: action["turn"],
         ),
         # Onglets Nuits et Votes du joueur humain
-        "night_history": ws.night_log.get(human_id, []),
-        "vote_history": ws.vote_log.get(human_id, []),
+        "night_history": _night_history(session),
+        "vote_history": _vote_history(session),
     }

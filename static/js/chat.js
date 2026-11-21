@@ -111,7 +111,7 @@ function renderChatMessage(m) {
     return `
         <div class="flex animate-rise flex-col items-start my-3">
             <div class="mb-0.5 flex items-baseline gap-2 px-1 text-[11px]">
-                <span class="font-semibold opacity-80">${escapeHtml(m.sender)}</span>
+                <span class="font-semibold opacity-80">${escapeHtml(getPlayerName(m.sender))}</span>
                 ${m.time ? `<span class="opacity-50">${m.time}</span>` : ''}
             </div>
             <p class="chat-bubble break-words rounded-lg rounded-tl-sm px-3 py-2 text-sm leading-relaxed">${escapeHtml(m.content)}</p>
@@ -143,7 +143,7 @@ function handlePrivateChannelOpened(channelId, text, members = [], focus = true)
     if (text) appendSystemMessage(text, channelId);
 
     if (!channelTitles[channelId]) {
-        channelTitles[channelId] = members.length ? members.join(', ') : 'Privé';
+        channelTitles[channelId] = members.length ? members.map(getPlayerName).join(', ') : 'Privé';
 
         const item = document.createElement('li');
         const button = document.createElement('button');
@@ -232,7 +232,7 @@ function renderNightInfoHistory() {
         return `
             <div class="panel night-history-item ${isResult ? 'is-result' : ''} rounded-lg p-3 text-sm">
                 <div class="night-history-turn font-serif font-bold italic mb-1">Tour ${escapeHtml(item.turn)}</div>
-                <p class="font-sans leading-relaxed">${escapeHtml(item.info || '')}</p>
+                <p class="font-sans leading-relaxed">${escapeHtml(isResult ? nightDeathText(item.dead_player) : (item.info || ''))}</p>
             </div>
         `;
     }).join('') + '</div>';

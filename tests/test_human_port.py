@@ -76,4 +76,11 @@ def test_annonce_de_mort_ne_bloque_pas_le_moteur():
         return await port.requests.get()
 
     request = asyncio.run(main())
-    assert request == {"kind": "night_deaths", "deaths": ["mort"]}
+    assert request == {"kind": "night_deaths", "state": state, "deaths": ["mort"]}
+
+
+def test_chaque_demande_transmet_l_etat_courant():
+    port = QueueHumanPort()
+    state = make_state()
+    _, request = run_with_server(port, None, lambda: port.public_message(state, "h"))
+    assert request["state"] is state

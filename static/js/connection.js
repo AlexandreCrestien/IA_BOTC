@@ -131,7 +131,7 @@ function handleServerMessage(data) {
             handleActionRequest(data); // Remplit l'encadré d'action de la sidebar droite
             break;
         case "agent_whisper_request":
-            showAgentWhisperModal(data.agent_id, data.agent_name, data.message);
+            showAgentWhisperModal(data.agent_id);
             break;
         case "private_channel_opened":
             // members inclut le joueur humain : on ne garde que ses interlocuteurs pour le titre de l'onglet
@@ -150,7 +150,7 @@ function handleServerMessage(data) {
         case "night_info":
             // allies (facultatif) : révélation des alliés du camp du mal, la première nuit : [{ id, role }]
             if (Array.isArray(data.allies)) revealAllies(data.allies);
-            addNightHistory(data.turn, "role_info", data.info);
+            addNightHistory({ turn: data.turn, type: "role_info", info: data.info });
             if (pendingAction?.kind === "nuit" && pendingAction.stage === "waiting") {
                 // Réponse à l'action de nuit du joueur : affichée dans l'encadré plutôt qu'en modale
                 showNightResultInPanel(data.info);

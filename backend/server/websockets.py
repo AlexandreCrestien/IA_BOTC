@@ -1,14 +1,32 @@
-import asyncio
+"""Endpoint WebSocket du joueur humain : connexion, reprise après coupure, et actions reçues du front.
+Ce que le serveur envoie au front est dans protocol.py ; la partie en cours dans session.py."""
 import json
 import logging
-from typing import Any
+from typing import Awaitable, Callable
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from pydantic import TypeAdapter, ValidationError
+from pydantic import BaseModel, TypeAdapter, ValidationError
 
-from backend.front_state import PUBLIC_CHANNEL, to_front_state, whisper_channel_id
+from backend.server import game_runner
 from backend.server.connection_manager import manager
-from backend.server.schemas import ClientActionPacket
+from backend.server.protocol import (
+    PUBLIC_CHANNEL,
+    open_whisper,
+    restore,
+    send,
+    send_chat,
+    send_request,
+    send_state,
+)
+from backend.server.schemas import (
+    Announcement,
+    ClientActionPacket,
+    Connected,
+    Error,
+    GameAbandoned,
+    NightActionAck,
+)
+from backend.server.session import WHISPER_MESSAGES, GameSession, current_session
 
 logger = logging.getLogger(__name__)
 
@@ -16,297 +34,23 @@ router = APIRouter()
 
 action_validator = TypeAdapter(ClientActionPacket)
 
-# Par joueur humain : port du moteur, demande en attente de réponse (kind), dernière demande
-# à réafficher en cas de reconnexion, salon privé ouvert, messages privés restants,
-# et rôles déjà envoyés au front (renvoyés à chaque connexion).
-ports: dict[str, Any] = {}
-pending: dict[str, str] = {}
-current_request: dict[str, tuple[str, dict]] = {}
-whispers: dict[str, str] = {}
-whisper_left: dict[str, int] = {}
-roles_sent: set[str] = set()
-forward_tasks: dict[str, asyncio.Task] = {}  # relais des demandes du moteur, par joueur
-
-# Renvoyés au front quand le joueur se reconnecte (rechargement, coupure) :
-chat_log: dict[str, list[dict]] = {}              # messages de chat envoyés (public et salons privés)
-opened_channels: dict[str, dict[str, list]] = {}  # salons privés ouverts : channel_id -> membres (noms)
-known_allies: dict[str, list[dict]] = {}          # alliés révélés au camp du mal
-night_log: dict[str, list[dict]] = {}             # onglet Nuits : [{turn, type: "role_info"|"result", info}]
-vote_log: dict[str, list[dict]] = {}              # onglet Votes : [{turn, voter, target, executed}] (noms)
-
-# Demandes du moteur auxquelles le joueur doit répondre
-ANSWERABLE = {"night_choice", "vote", "public_message", "private_partners", "private_message", "agent_invitation"}
 # Étapes facultatives que le joueur peut passer, et la réponse « rien » attendue par le moteur
 SKIPPABLE = {"public_message": None, "private_message": None, "private_partners": []}
-WHISPER_MESSAGES = 3  # messages privés autorisés par salon
 
 # Code de fermeture WebSocket quand la connexion est refusée (le front affiche le motif sur l'accueil)
 CLOSE_REFUSED = 4001
 
 
-def register_human(player_id: str, port) -> None:
-    """Relie le joueur à son port. Appelée par game_runner, depuis une coroutine."""
-    reset_player(player_id)
-    ports[player_id] = port
-    forward_tasks[player_id] = asyncio.create_task(_forward_requests(player_id, port))
+async def _error(session: GameSession, text: str) -> None:
+    await send(session.human_id, Error(data=text))
 
 
-# Toutes les données gardées par joueur (hors tâche de relais et rôles envoyés)
-PLAYER_STORES = (ports, pending, current_request, whispers, whisper_left,
-                 chat_log, opened_channels, known_allies, night_log, vote_log)
-
-
-def reset_player(player_id: str) -> None:
-    """Efface tout ce que le serveur retient de la partie de ce joueur (fin de partie, abandon)."""
-    task = forward_tasks.pop(player_id, None)
-    if task is not None:
-        task.cancel()
-    for store in PLAYER_STORES:
-        store.pop(player_id, None)
-    roles_sent.discard(player_id)
-
-
-async def _send(player_id: str, message: dict) -> None:
-    await manager.send_to_player(player_id, message)
-
-
-async def _send_chat(player_id: str, channel_id: str, sender: str, content: str, broadcast: bool = False) -> None:
-    """Envoie un message de chat et le garde pour le renvoyer après une reconnexion.
-    broadcast=True : message de la place publique, diffusé à toutes les connexions."""
-    message = {"type": "chat", "channel_id": channel_id, "sender": sender, "content": content}
-    chat_log.setdefault(player_id, []).append(message)
-    if broadcast:
-        await manager.broadcast(message)
-    else:
-        await _send(player_id, message)
-
-
-async def _restore_session(player_id: str) -> None:
-    """Reconnexion : rouvre les salons privés et renvoie l'historique du chat.
-    Le front ne se place sur un salon que si le moteur attend un message privé (demande renvoyée ensuite)."""
-    for channel_id, members in opened_channels.get(player_id, {}).items():
-        await _send(player_id, {
-            "type": "private_channel_opened",
-            "channel_id": channel_id,
-            "members": members,
-            "text": "",
-            "focus": False,
-        })
-    for message in chat_log.get(player_id, []):
-        await _send(player_id, message)
-    # Historiques des onglets Nuits et Votes : nécessaires à l'enquête du joueur
-    if night_log.get(player_id) or vote_log.get(player_id):
-        await _send(player_id, {
-            "type": "history",
-            "nights": night_log.get(player_id, []),
-            "votes": vote_log.get(player_id, []),
-        })
-
-
-def night_death_text(dead_name: str | None) -> str:
-    """Texte de l'onglet Nuits pour les morts de la nuit (même texte que celui écrit par le front)."""
-    return f"{dead_name} est mort·e cette nuit." if dead_name else "Personne n'est mort cette nuit."
-
-
-def _human_role(port, player_id: str):
-    return port.state.player(player_id).role
-
-
-# Noms affichés : le front ne voit jamais les identifiants internes (p1, p2...)
-def _name(port, player_id: str) -> str:
-    """Nom affiché pour un identifiant. Repli : l'identifiant lui-même."""
-    if port is None or port.state is None:
-        return player_id
-    try:
-        return port.state.player(player_id).name
-    except Exception:
-        return player_id
-
-
-def _names(port, player_ids) -> list[str]:
-    return [_name(port, p) for p in player_ids]
-
-
-def _id_from_name(port, value):
-    """Nom choisi dans le front -> identifiant du moteur. Renvoie value si aucun joueur ne correspond."""
-    if port is None or port.state is None or value is None:
-        return value
-    wanted = str(value).casefold()
-    for player in port.state.players:
-        if player.name.casefold() == wanted:
-            return player.id
-    return value
-
-
-async def _open_whisper(player_id: str, port, partner_ids: list[str]) -> None:
-    """Ouvre le salon privé du joueur avec ses interlocuteurs (identifiants), annoncé sur la place publique.
-    Le salon est enregistré avant tout envoi : les réponses des agents le trouvent."""
-    channel_id = whisper_channel_id([player_id] + partner_ids)
-    whispers[player_id] = channel_id
-    whisper_left[player_id] = WHISPER_MESSAGES
-    partners = ", ".join(_names(port, partner_ids))
-    members = sorted(_names(port, [player_id] + partner_ids))
-    opened_channels.setdefault(player_id, {})[channel_id] = members
-
-    await _send_chat(
-        player_id, PUBLIC_CHANNEL, "Grimoire",
-        f"💬 {_name(port, player_id)} est entré en discussion privée avec {partners}.",
-        broadcast=True,
-    )
-    await _send(player_id, {
-        "type": "private_channel_opened",
-        "channel_id": channel_id,
-        "members": members,
-        "text": f"Salon privé ouvert avec {partners}",
-    })
-
-
-def _current_request(player_id: str) -> dict | None:
-    entry = current_request.get(player_id)
-    return entry[1] if entry else None
-
-
-async def _send_state(player_id: str, port) -> None:
-    """Envoie le rôle (à chaque connexion), puis l'état de la partie. Ignoré tant que la partie n'a pas démarré."""
-    if port is None or port.state is None:
-        return
-    if player_id not in roles_sent:
-        role = _human_role(port, player_id)
-        roles_sent.add(player_id)
-        message = {
-            "type": "role_assigned",
-            "role_name": role.name_FR,
-            "description": getattr(role, "description", ""),
-        }
-        if player_id in known_allies:  # reconnexion d'un joueur du camp du mal après la révélation
-            message["allies"] = known_allies[player_id]
-        await _send(player_id, message)
-    await _send(player_id, {"type": "game_state", "state": to_front_state(port.state)})
-
-
-async def _forward_requests(player_id: str, port) -> None:
-    """Lit les demandes du moteur, envoie l'état puis la demande, et retient celle qui attend une réponse."""
-    while True:
-        request = await port.requests.get()
-        kind = request["kind"]
-        if kind in ANSWERABLE:
-            pending[player_id] = kind
-            current_request[player_id] = (kind, request)
-        else:
-            pending.pop(player_id, None)
-        await _send_state(player_id, port)
-        await _send_request(player_id, port, kind, request)
-
-
-async def _send_request(player_id: str, port, kind: str, request: dict) -> None:
-    """Traduit une demande du moteur en message compris par le front, avec des noms."""
-    if kind == "night_choice":
-        await _send(player_id, {
-            "type": "action_request",
-            "kind": "nuit",
-            "candidates": _names(port, request["targets"]),
-            "max_targets": request["count"],
-            "min_targets": request["count"],
-            "role": _human_role(port, player_id).name_EN,
-        })
-
-    elif kind == "vote":
-        await _send(player_id, {
-            "type": "action_request",
-            "kind": "vote",
-            "candidates": _names(port, request["targets"]),
-        })
-
-    elif kind == "private_partners":
-        await _send(player_id, {
-            "type": "action_request",
-            "kind": "discussion",
-            "candidates": _names(port, request["choices"]),
-            "max_targets": 2,
-            "min_targets": 1,
-        })
-
-    elif kind == "agent_invitation":
-        # Le joueur n'a choisi personne à temps : un agent lui propose un entretien (modale)
-        name = _name(port, request["agent"])
-        await _send(player_id, {"type": "agent_whisper_request", "agent_id": name, "agent_name": name})
-
-    # Saisie attendue (facultative) : le front affiche un bandeau au-dessus du chat, avec « Passer »
-    elif kind == "public_message":
-        await _send(player_id, {
-            "type": "input_request",
-            "kind": "public_message",
-            "channel_id": PUBLIC_CHANNEL,
-            "text": "C'est à vous de parler sur la place publique.",
-        })
-
-    elif kind == "private_message":
-        left = whisper_left.get(player_id, WHISPER_MESSAGES)
-        await _send(player_id, {
-            "type": "input_request",
-            "kind": "private_message",
-            "channel_id": whispers.get(player_id),
-            "left": left,
-            "text": f"Il vous reste {left} message(s) privé(s) avec vos interlocuteurs.",
-        })
-
-    elif kind == "public_chat":
-        # Message public d'un agent IA, pendant la discussion du jour
-        await _send_chat(player_id, PUBLIC_CHANNEL, _name(port, request["author"]), request["text"])
-
-    elif kind == "agent_meeting":
-        # Deux agents s'entretiennent en privé pendant le salon du joueur : annonce publique
-        first, second = _names(port, request["agents"])
-        await _send_chat(player_id, PUBLIC_CHANNEL, "Grimoire",
-                         f"💬 {first} et {second} se sont entretenus en privé.", broadcast=True)
-
-    elif kind == "night_info":
-        # Information privée de nuit (première nuit, Voyante). allies seulement pour le camp du mal.
-        message = {"type": "night_info", "turn": request["turn"], "info": request["info"]}
-        if request["allies"] is not None:
-            message["allies"] = request["allies"]
-            known_allies[player_id] = request["allies"]
-        night_log.setdefault(player_id, []).append(
-            {"turn": request["turn"], "type": "role_info", "info": request["info"]})
-        await _send(player_id, message)
-
-    elif kind == "night_deaths":
-        # Le front n'affiche qu'un mort par nuit : on envoie le premier, par son nom.
-        deaths = request.get("deaths") or []
-        dead_name = _name(port, deaths[0]) if deaths else None
-        night_log.setdefault(player_id, []).append(
-            {"turn": port.state.turn, "type": "result", "info": night_death_text(dead_name)})
-        await _send(player_id, {
-            "type": "night_result",
-            "turn": port.state.turn,
-            "dead_player": dead_name,
-        })
-
-    elif kind == "private_replies":
-        channel_id = whispers.get(player_id)
-        if channel_id is None:
-            logger.warning(f"Réponses privées sans salon ouvert pour {player_id}")
-            return
-        for reply in request.get("replies", []):
-            await _send_chat(player_id, channel_id, _name(port, reply["author"]), reply["text"])
-
-    # Fin de tour et fin de partie (posées dans la file par game_runner, pour garder l'ordre)
-    elif kind == "vote_result":
-        await send_vote_result(player_id, request["turn"], request["executed"], request["votes"])
-
-    elif kind == "game_over":
-        await send_game_over(player_id, request["winner"], request["details"])
-
-    else:
-        logger.info(f"Demande du moteur sans équivalent front : {kind}")
-
-
-def _check_answer(player_id: str, kind: str, value) -> str | None:
+def check_answer(session: GameSession, kind: str, value) -> str | None:
     """Message d'erreur si la réponse ne respecte pas la demande en cours, sinon None.
-    Si la demande attendue n'est pas celle-ci, renvoie None : _answer refusera la réponse."""
-    request = _current_request(player_id)
-    if request is None or pending.get(player_id) != kind:
+    Si la demande attendue n'est pas celle-ci, renvoie None : session.answer refusera la réponse."""
+    if not session.waits_for(kind):
         return None
+    request = session.pending
 
     if kind == "night_choice":
         if len(value) != request["count"] or len(set(value)) != len(value):
@@ -314,7 +58,7 @@ def _check_answer(player_id: str, kind: str, value) -> str | None:
         allowed = request["targets"]
 
     elif kind == "private_partners":
-        if not 1 <= len(value) <= 2 or len(set(value)) != len(value) or player_id in value:
+        if not 1 <= len(value) <= 2 or len(set(value)) != len(value) or session.human_id in value:
             return "Choisissez 1 ou 2 interlocuteurs, sans vous-même."
         allowed = request["choices"]
 
@@ -332,197 +76,174 @@ def _check_answer(player_id: str, kind: str, value) -> str | None:
     return None
 
 
-def _answer(player_id: str, kind: str, value: Any) -> bool:
-    """Donne la réponse au moteur seulement si c'est la demande attendue. Renvoie False sinon."""
-    port = ports.get(player_id)
-    if port is None or pending.get(player_id) != kind:
-        return False
-    del pending[player_id]
-    current_request.pop(player_id, None)
-    port.answers.put_nowait(value)
-    return True
+# --- Actions du joueur (une fonction par action, payload validé par schemas.py) -------------
+
+async def on_send_chat(session: GameSession, payload) -> None:
+    """Message sur la place publique ou dans le salon privé, seulement quand le moteur l'attend."""
+    channel_id, content, me = payload.channel_id, payload.content, session.human_id
+
+    if channel_id == PUBLIC_CHANNEL:
+        if session.answer("public_message", content):
+            await send_chat(session, PUBLIC_CHANNEL, me, content, broadcast=True)
+        else:
+            await _error(session, "Le tchat public n'est pas ouvert en ce moment.")
+        return
+
+    closed = "Ce salon privé n'est pas ouvert ou ce n'est pas le moment d'écrire."
+    if session.whisper != channel_id or not session.waits_for("private_message"):
+        await _error(session, closed)
+    elif session.whisper_left <= 0:
+        await _error(session, f"Vous avez déjà utilisé vos {WHISPER_MESSAGES} messages privés.")
+    elif session.answer("private_message", content):
+        session.whisper_left -= 1
+        await send_chat(session, channel_id, me, content)
+    else:
+        await _error(session, closed)
 
 
-# Messages de fin de vote / de fin de partie : appelés par game_runner (noms, pas identifiants)
-async def send_vote_result(player_id: str, turn: int, executed: str | None, votes: list[dict]) -> None:
-    """votes : [{"voter": nom, "target": nom ou None}]. executed : nom ou None."""
-    vote_log.setdefault(player_id, []).extend(
-        {"turn": turn, "voter": v["voter"], "target": v["target"], "executed": executed} for v in votes)
-    await _send(player_id, {"type": "vote_result", "turn": turn, "executed": executed, "votes": votes})
+async def on_request_whisper(session: GameSession, payload) -> None:
+    """Le joueur choisit 1 ou 2 interlocuteurs pour son salon privé."""
+    targets = list(payload.targets)
+    error = check_answer(session, "private_partners", targets)
+    if error:
+        await _error(session, error)
+    elif not session.answer("private_partners", targets):
+        await _error(session, "Ce n'est pas le moment de demander une discussion privée.")
+    else:
+        await open_whisper(session, targets)
 
 
-async def send_game_over(player_id: str, winner: str, details: str) -> None:
-    await _send(player_id, {"type": "game_over", "winner": winner, "details": details})
+async def on_discussion_timeout(session: GameSession, payload) -> None:
+    """Aucun choix de salon privé à temps : un agent va proposer un entretien."""
+    if not session.answer("private_partners", None):
+        await _error(session, "Ce n'est pas le moment de choisir une discussion privée.")
 
 
-async def send_game_interrupted(player_id: str) -> None:
-    """La partie a planté : le front propose d'en relancer une."""
-    await _send(player_id, {
-        "type": "game_interrupted",
-        "text": "Une erreur a interrompu la partie. Vous pouvez en lancer une nouvelle.",
-    })
+async def on_respond_whisper_invitation(session: GameSession, payload) -> None:
+    """Réponse à la proposition d'entretien d'un agent (refus : place au vote)."""
+    agent_id = session.pending["agent"] if session.waits_for("agent_invitation") else None
+    if agent_id is None or payload.target_agent_id != agent_id:
+        await _error(session, "Aucune proposition d'entretien en attente.")
+    elif session.answer("agent_invitation", payload.accepted):
+        if payload.accepted:
+            await open_whisper(session, [agent_id])
+        else:
+            await send(session.human_id, Announcement(text="Entretien refusé : place au vote."))
+
+
+async def on_submit_vote(session: GameSession, payload) -> None:
+    """Vote (target_id vide ou null : « Personne »)."""
+    target = payload.target_id or None
+    error = check_answer(session, "vote", target)
+    if error:
+        await _error(session, error)
+    elif session.answer("vote", target):
+        shown = session.state.player(target).name if target else "Personne"
+        await send(session.human_id, Announcement(text=f"Votre vote pour {shown} a bien été pris en compte."))
+    else:
+        await _error(session, "Ce n'est pas le moment de voter.")
+
+
+async def on_submit_night_action(session: GameSession, payload) -> None:
+    targets = list(payload.targets)
+    error = check_answer(session, "night_choice", targets)
+    if error:
+        await _error(session, error)
+    elif session.answer("night_choice", tuple(targets)):
+        await send(session.human_id, NightActionAck(text="Le Maître du Jeu a bien reçu votre choix."))
+    else:
+        await _error(session, "Ce n'est pas le moment d'agir la nuit.")
+
+
+async def on_skip_turn(session: GameSession, payload) -> None:
+    """Passer une étape facultative : message public, salon privé, fin du salon."""
+    if not session.answer(payload.kind, SKIPPABLE[payload.kind]):
+        await _error(session, "Il n'y a rien à passer en ce moment.")
+    elif payload.kind == "private_partners":
+        await send(session.human_id, Announcement(text="Pas de discussion privée : place au vote."))
+
+
+async def on_abandon_game(session: GameSession, payload) -> None:
+    """Abandon : le front recharge la page et revient à l'accueil."""
+    if game_runner.abandon_game(session.human_id):
+        await send(session.human_id, GameAbandoned())
+    else:
+        await _error(session, "Aucune partie en cours à abandonner.")
+
+
+ACTIONS: dict[str, Callable[[GameSession, BaseModel], Awaitable[None]]] = {
+    "send_chat": on_send_chat,
+    "request_whisper": on_request_whisper,
+    "discussion_timeout": on_discussion_timeout,
+    "respond_whisper_invitation": on_respond_whisper_invitation,
+    "submit_vote": on_submit_vote,
+    "submit_night_action": on_submit_night_action,
+    "skip_turn": on_skip_turn,
+    "abandon_game": on_abandon_game,
+}
+
+
+# --- Connexion --------------------------------------------------------------------------
+
+async def _resume(session: GameSession) -> None:
+    """Nouvelle connexion : rôle et état, chat, salons et historiques, puis la demande en attente."""
+    session.role_sent = False  # le front repart d'une page vide
+    await send_state(session)
+    await restore(session)
+    if session.pending is not None:
+        await send_request(session, session.pending)
+
+
+async def _handle(player_id: str, raw_data: str) -> None:
+    """Valide une action reçue et la confie à son traitement."""
+    try:
+        packet = action_validator.validate_python(json.loads(raw_data))
+    except json.JSONDecodeError:
+        logger.warning("Message JSON invalide reçu de %s", player_id)
+        await manager.send_to_player(player_id, Error(data="Format JSON invalide.").model_dump())
+        return
+    except ValidationError as e:
+        logger.warning("Action non valide reçue de %s : %s", player_id, e.errors())
+        await manager.send_to_player(player_id, Error(data=f"Action non valide : {e.errors()}").model_dump())
+        return
+
+    logger.info("Action reçue de %s -> %s | %s", player_id, packet.action, packet.payload)
+    session = current_session()
+    if session is None or session.human_id != player_id:
+        await manager.send_to_player(player_id, Error(data="Aucune partie en cours.").model_dump())
+        return
+    await ACTIONS[packet.action](session, packet.payload)
 
 
 @router.websocket("/ws/{player_id}")
 async def websocket_endpoint(websocket: WebSocket, player_id: str):
-    """
-    Endpoint WebSocket principal pour le joueur connecté.
-    URL de connexion : ws://<serveur>/ws/<pseudo>
-    """
-    # Import local pour éviter le cycle game_runner <-> websockets
-    from backend.server.game_runner import abandon_game, can_join, ensure_started
-
+    """Endpoint WebSocket du joueur. URL de connexion : ws://<serveur>/ws/<pseudo>"""
     # Refus (pseudo invalide, partie d'un autre joueur) : on accepte avant de refermer,
     # sinon le navigateur ne peut pas lire le motif du refus.
-    refusal = can_join(player_id)
+    refusal = game_runner.can_join(player_id)
     if refusal is not None:
         await websocket.accept()
         await websocket.close(code=CLOSE_REFUSED, reason=refusal)
-        logger.info(f"Connexion refusée pour {player_id} : {refusal}")
+        logger.info("Connexion refusée pour %s : %s", player_id, refusal)
         return
 
     # Le joueur voit l'écran de jeu tout de suite, avant la mise en place de la partie (quelques secondes)
     await manager.connect(player_id, websocket)
-    await _send(player_id, {"type": "connected"})
+    await manager.send_to_player(player_id, Connected().model_dump())
 
     # Nouvelle partie, ou reprise de la partie en cours
-    refusal = ensure_started(player_id)
+    refusal = game_runner.ensure_started(player_id)
     if refusal is not None:  # cas limite : un autre joueur a lancé une partie entre-temps
         await websocket.close(code=CLOSE_REFUSED, reason=refusal)
         manager.disconnect(player_id, websocket)
         return
-    port = ports.get(player_id)
-    await _send_state(player_id, port)
-    await _restore_session(player_id)
-
-    # Reprise après coupure : si le moteur attendait une réponse, on la redemande
-    if player_id in current_request:
-        kind, request = current_request[player_id]
-        await _send_request(player_id, port, kind, request)
+    session = current_session()
+    if session is not None and session.human_id == player_id:
+        await _resume(session)
 
     try:
         while True:
-            raw_data = await websocket.receive_text()
-
-            try:
-                action_packet = action_validator.validate_python(json.loads(raw_data))
-                action = action_packet.action
-                payload = action_packet.payload
-                port = ports.get(player_id)
-
-                logger.info(f"Action reçue de {player_id} -> Type: {action} | Payload: {payload}")
-
-                # 1. CHAT (place publique ou salon privé)
-                if action == "send_chat":
-                    channel_id = payload.channel_id
-                    content = payload.content
-                    sender = _name(port, player_id)
-
-                    if channel_id == PUBLIC_CHANNEL:
-                        if _answer(player_id, "public_message", content):
-                            await _send_chat(player_id, PUBLIC_CHANNEL, sender, content, broadcast=True)
-                        else:
-                            await _send(player_id, {"type": "error", "data": "Le tchat public n'est pas ouvert en ce moment."})
-                    else:
-                        left = whisper_left.get(player_id, WHISPER_MESSAGES)
-                        if whispers.get(player_id) != channel_id or pending.get(player_id) != "private_message":
-                            await _send(player_id, {"type": "error", "data": "Ce salon privé n'est pas ouvert ou ce n'est pas le moment d'écrire."})
-                        elif left <= 0:
-                            await _send(player_id, {"type": "error", "data": f"Vous avez déjà utilisé vos {WHISPER_MESSAGES} messages privés."})
-                        elif _answer(player_id, "private_message", content):
-                            whisper_left[player_id] = left - 1
-                            await _send_chat(player_id, channel_id, sender, content)
-                        else:
-                            await _send(player_id, {"type": "error", "data": "Ce salon privé n'est pas ouvert ou ce n'est pas le moment d'écrire."})
-
-                # 2. DEMANDE DE CONVERSATION PRIVÉE (les noms choisis sont convertis en identifiants)
-                elif action == "request_whisper":
-                    targets = [_id_from_name(port, t) for t in payload.targets]
-                    error = _check_answer(player_id, "private_partners", targets)
-
-                    if error:
-                        await _send(player_id, {"type": "error", "data": error})
-                    elif not _answer(player_id, "private_partners", targets):
-                        await _send(player_id, {"type": "error", "data": "Ce n'est pas le moment de demander une discussion privée."})
-                    else:
-                        await _open_whisper(player_id, port, targets)
-
-                # 3. AUCUN CHOIX DE SALON PRIVÉ À TEMPS : un agent va proposer un entretien
-                elif action == "discussion_timeout":
-                    if not _answer(player_id, "private_partners", None):
-                        await _send(player_id, {"type": "error", "data": "Ce n'est pas le moment de choisir une discussion privée."})
-
-                # 4. RÉPONSE À LA PROPOSITION D'ENTRETIEN D'UN AGENT (refus : place au vote)
-                elif action == "respond_whisper_invitation":
-                    request = _current_request(player_id) if pending.get(player_id) == "agent_invitation" else None
-                    agent_id = request["agent"] if request else None
-                    if agent_id is None or _id_from_name(port, payload.target_agent_id) != agent_id:
-                        await _send(player_id, {"type": "error", "data": "Aucune proposition d'entretien en attente."})
-                    elif _answer(player_id, "agent_invitation", payload.accepted):
-                        if payload.accepted:
-                            await _open_whisper(player_id, port, [agent_id])
-                        else:
-                            await _send(player_id, {"type": "announcement", "text": "Entretien refusé : place au vote."})
-
-                # 5. VOTE (target_id = null pour « Personne »)
-                elif action == "submit_vote":
-                    target = _id_from_name(port, payload.target_id or None)  # "" ou null : « Personne »
-                    error = _check_answer(player_id, "vote", target)
-
-                    if error:
-                        await _send(player_id, {"type": "error", "data": error})
-                    elif _answer(player_id, "vote", target):
-                        shown = _name(port, target) if target else "Personne"
-                        await _send(player_id, {
-                            "type": "announcement",
-                            "text": f"Votre vote pour {shown} a bien été pris en compte.",
-                        })
-                    else:
-                        await _send(player_id, {"type": "error", "data": "Ce n'est pas le moment de voter."})
-
-                # 6. ACTION DE NUIT (noms convertis en identifiants)
-                elif action == "submit_night_action":
-                    targets = [_id_from_name(port, t) for t in payload.targets]
-                    error = _check_answer(player_id, "night_choice", targets)
-
-                    if error:
-                        await _send(player_id, {"type": "error", "data": error})
-                    elif _answer(player_id, "night_choice", tuple(targets)):
-                        await _send(player_id, {
-                            "type": "night_action_ack",
-                            "text": "Le Maître du Jeu a bien reçu votre choix.",
-                        })
-                    else:
-                        await _send(player_id, {"type": "error", "data": "Ce n'est pas le moment d'agir la nuit."})
-
-                # 7. PASSER UNE ÉTAPE FACULTATIVE (message public, salon privé, fin du salon)
-                elif action == "skip_turn":
-                    if _answer(player_id, payload.kind, SKIPPABLE[payload.kind]):
-                        if payload.kind == "private_partners":
-                            await _send(player_id, {"type": "announcement", "text": "Pas de discussion privée : place au vote."})
-                    else:
-                        await _send(player_id, {"type": "error", "data": "Il n'y a rien à passer en ce moment."})
-
-                # 8. ABANDON : le front recharge la page et revient à l'accueil
-                elif action == "abandon_game":
-                    if abandon_game(player_id):
-                        await _send(player_id, {"type": "game_abandoned"})
-                    else:
-                        await _send(player_id, {"type": "error", "data": "Aucune partie en cours à abandonner."})
-
-                else:
-                    logger.warning(f"Action non reconnue reçue de {player_id}: {action}")
-
-            except json.JSONDecodeError:
-                logger.warning(f"Message JSON invalide reçu de {player_id}")
-                await _send(player_id, {"type": "error", "data": "Format JSON invalide."})
-
-            except ValidationError as e:
-                logger.warning(f"Erreur de validation de l'action pour {player_id}: {e.errors()}")
-                await _send(player_id, {"type": "error", "data": f"Action non valide : {e.errors()}"})
-
+            await _handle(player_id, await websocket.receive_text())
     except WebSocketDisconnect:
         manager.disconnect(player_id, websocket)
-        # Le rôle sera renvoyé à la prochaine connexion (le front repart d'une page vide)
-        roles_sent.discard(player_id)
-        logger.info(f"Déconnexion de la WebSocket pour le joueur : {player_id} ; la partie attend sa reconnexion.")
+        logger.info("Déconnexion de %s ; la partie attend sa reconnexion.", player_id)

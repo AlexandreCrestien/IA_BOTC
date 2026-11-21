@@ -50,7 +50,7 @@ PHASES = {"nuit", "discussion", "vote"}
 KINDS_PHASE = {"nuit": "nuit", "vote": "vote", "discussion": "discussion"}
 ROLES_FR = {"Diablotin", "Empoisonneur", "Voyante", "Moine", "Détective", "Majordome"}
 EVIL_ROLES = {"Diablotin", "Empoisonneur"}
-WINNERS = {"Villageois", "Démons"}
+WINNERS = {"good", "evil"}
 
 # Champs obligatoires par type de message, d'après connection.js (handleServerMessage)
 REQUIRED = {
@@ -71,7 +71,7 @@ REQUIRED = {
     "history": ("nights", "votes"),
     "game_abandoned": (),
     "game_interrupted": ("text",),
-    "agent_whisper_request": ("agent_id", "agent_name"),
+    "agent_whisper_request": ("agent_id",),
 }
 
 
@@ -288,12 +288,13 @@ class Game:
         self.night_results.append(msg)
         dead = msg.get("dead_player")
         # Le serveur envoie des noms (jamais les identifiants internes)
-        self.report.check(dead is None or dead in self.names.values(), "mort de nuit identifiable", str(dead))
+        self.report.check(dead is None or dead in self.names, "mort de nuit désigné par son identifiant", str(dead))
 
     def on_vote_result(self, msg: dict) -> None:
         self.votes.append(msg)
         executed = msg.get("executed")
-        self.report.check(executed is None or executed in self.names.values(), "joueur exécuté identifiable", str(executed))
+        self.report.check(executed is None or executed in self.names, "joueur exécuté désigné par son identifiant",
+                          str(executed))
         self.report.check(all({"voter", "target"} <= set(v) for v in msg.get("votes", [])),
                           "bulletins de vote complets (voter, target)")
 
@@ -305,8 +306,7 @@ class Game:
 
     def on_game_over(self, msg: dict) -> None:
         self.game_over = msg
-        self.report.check(msg.get("winner") in WINNERS, "libellé de victoire lisible en français",
-                          str(msg.get("winner")))
+        self.report.check(msg.get("winner") in WINNERS, "camp vainqueur (good / evil)", str(msg.get("winner")))
 
     def on_announcement(self, msg: dict) -> None:
         pass
@@ -357,9 +357,9 @@ class Game:
         self.channels_opened += 1
         self.report.check(HUMAN in msg["members"], "salon privé : le joueur humain est membre")
         partners = [m for m in msg["members"] if m != HUMAN]
-        self.report.check(all(m in self.names.values() for m in partners),
-                          "salon privé : membres affichés par leur nom",
-                          f"reçu {partners}, attendu {list(self.names.values())}")
+        self.report.check(all(m in self.names for m in partners),
+                          "salon privé : membres désignés par leur identifiant",
+                          f"reçu {partners}, attendu parmi {list(self.names)}")
         if self.private_pending:
             self.private_pending = False
             self.send_private_message()
@@ -376,8 +376,8 @@ class Game:
             if "se sont entretenus en privé" in str(msg.get("content")):
                 self.agent_meetings += 1
             return
-        self.report.check(sender in self.names.values(), "expéditeur affiché par son nom",
-                          f"« {sender} » reçu, le front affichera cet identifiant")
+        self.report.check(sender in self.names, "expéditeur désigné par son identifiant",
+                          f"« {sender} » reçu, le front ne pourra pas afficher son nom")
         if channel == "public":
             self.ai_public += 1
             self.report.check(self.phase == "discussion", "discussion des IA affichée en phase « discussion »",
@@ -387,7 +387,7 @@ class Game:
 
     def on_agent_whisper_request(self, msg: dict) -> None:
         """Proposition d'entretien d'un agent : acceptée la première fois, refusée ensuite."""
-        self.report.check(msg["agent_id"] in self.names.values(), "proposition d'entretien : agent désigné par son nom",
+        self.report.check(msg["agent_id"] in self.names, "proposition d'entretien : agent désigné par son identifiant",
                           str(msg["agent_id"]))
         accepted = not self.invitations
         self.invitations.append(accepted)

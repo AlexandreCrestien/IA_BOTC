@@ -4,31 +4,31 @@ import random
 import pytest
 
 from backend.game_engine import record_night_choices, setup_game
-from backend.human_port import QueueHumanPort
 from backend.models import EventType
-from backend.server import admin, game_runner
-from backend.server import websockets as ws
+from backend.server import admin
+from backend.server.schemas import NightHistoryEntry, VoteHistoryEntry
+from backend.server.session import GameSession, set_current_session
 
 NAMES = {"h": "Alex", "p1": "marIA", "p2": "tobIAs", "p3": "mAIsie", "p4": "adrIAn", "p5": "dIAne"}
 PERSONALITIES = ["agitator", "clown", "observer", "paranoid", "strategist"]
 
 
 @pytest.fixture
-def game(monkeypatch):
-    """Partie mise en place par le vrai moteur (sans appel LLM), reliée au serveur comme par game_runner."""
+def session(clean_server, monkeypatch):
+    """Partie mise en place par le vrai moteur (sans appel LLM), dans la session courante comme par game_runner."""
     state, agents, memory = setup_game(NAMES, "h", PERSONALITIES, random.Random(0))
-    port = QueueHumanPort()
-    port.state, port.memory, port.agents = state, memory, agents
-    monkeypatch.setattr(game_runner, "_current_human", "h")
-    monkeypatch.setattr(game_runner, "_game_running", lambda: True)
-    monkeypatch.setitem(ws.ports, "h", port)
-    yield state, memory
-    for store in (ws.night_log, ws.vote_log, ws.opened_channels):
-        store.pop("h", None)
+    session = GameSession(human_id="h", state=state, memory=memory, agents=agents)
+    monkeypatch.setattr(GameSession, "running", property(lambda self: True))
+    set_current_session(session)
+    return session
 
 
-def test_sans_partie(monkeypatch):
-    monkeypatch.setattr(game_runner, "_current_human", None)
+@pytest.fixture
+def game(session):
+    return session.state, session.memory
+
+
+def test_sans_partie(clean_server):
     view = admin.build_debug_state()
     assert view["game_in_progress"] is False
     assert view["message"] == "Aucune partie n'a encore été lancée."
@@ -71,9 +71,17 @@ def test_actions_de_nuit_de_tous_les_joueurs(game):
     assert ("Alex", "Nuit 1 : tu as choisi mAIsie.") in actions
 
 
-def test_historiques_du_joueur(game):
-    ws.night_log["h"] = [{"turn": 1, "type": "result", "info": "Personne n'est mort cette nuit."}]
-    ws.vote_log["h"] = [{"turn": 1, "voter": "Alex", "target": None, "executed": None}]
+def test_historiques_du_joueur_avec_des_noms(session):
+    session.night_log += [
+        NightHistoryEntry(turn=1, type="role_info", info="Tu es la Voyante."),
+        NightHistoryEntry(turn=2, type="result", dead_player="p1"),
+        NightHistoryEntry(turn=3, type="result", dead_player=None),
+    ]
+    session.vote_log.append(VoteHistoryEntry(turn=1, voter="h", target="p2", executed="p2"))
+    session.opened_channels["whisper_h_p1"] = ["h", "p1"]
     view = admin.build_debug_state()
-    assert view["night_history"] == ws.night_log["h"]
-    assert view["vote_history"] == ws.vote_log["h"]
+
+    assert [n["info"] for n in view["night_history"]] == [
+        "Tu es la Voyante.", "marIA est mort·e cette nuit.", "Personne n'est mort cette nuit."]
+    assert view["vote_history"] == [{"turn": 1, "voter": "Alex", "target": "tobIAs", "executed": "tobIAs"}]
+    assert view["channels"] == ["Alex, marIA"]

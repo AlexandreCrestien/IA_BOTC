@@ -1,3 +1,5 @@
+"""Endpoint WebSocket et relais vers le front : réponses au moteur, salons, reprise après coupure,
+étapes facultatives, historiques, proposition d'entretien d'un agent."""
 import asyncio
 import json
 
@@ -5,9 +7,20 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from backend.human_port import QueueHumanPort
-from backend.server import game_runner
+from backend.models import GameState, Phase, Player
+from backend.rules import get_role
+from backend.server import game_runner, protocol
 from backend.server import websockets as ws
+from backend.server.schemas import NightHistoryEntry, VoteHistoryEntry
+from server_helpers import waiting_session
+
+NAMES = {"h": "Alex", "imp": "Imp", "p1": "marIA", "moine": "Moine"}
+ROLES = {"h": "psychic", "imp": "imp", "p1": "poisoner", "moine": "monk"}
+
+
+def make_state(dead=()) -> GameState:
+    return GameState(turn=2, phase=Phase.DISCUSSION, players=tuple(
+        Player(id=pid, name=NAMES[pid], role=get_role(ROLES[pid]), alive=pid not in dead) for pid in NAMES))
 
 
 def make_client() -> TestClient:
@@ -18,444 +31,327 @@ def make_client() -> TestClient:
 
 @pytest.fixture(autouse=True)
 def no_real_game(monkeypatch, clean_server):
-    """Se connecter ne doit pas lancer une vraie partie : le port est fourni par chaque test."""
+    """Se connecter ne doit pas lancer une vraie partie : la session est préparée par chaque test."""
     monkeypatch.setattr(game_runner, "ensure_started", lambda player_id: None)
 
 
+def waiting(kind=None, **request):
+    """Session de « h » dont le moteur attend `kind`, avec un état de partie réel."""
+    return waiting_session("h", kind, make_state(), **request)
+
+
+def connect(conn) -> list[dict]:
+    """Messages reçus à la connexion (accusé, rôle, état, chat, demande renvoyée…).
+    On s'arrête sur la réponse à un JSON invalide : tout ce qui précède a été envoyé à la connexion."""
+    conn.send_text("pas du json")
+    received = []
+    while True:
+        message = json.loads(conn.receive_text())
+        if message == {"type": "error", "data": "Format JSON invalide."}:
+            return received
+        received.append(message)
+
+
+def act(conn, action, **payload) -> dict:
+    conn.send_text(json.dumps({"action": action, "payload": payload}))
+    return json.loads(conn.receive_text())
+
+
+def relay(session, *requests) -> list[dict]:
+    """Le relais traduit des demandes du moteur (comme forward_requests, sans la file).
+    Renvoie les messages envoyés au joueur (et diffusés), sans vraie connexion."""
+    sent = []
+
+    async def fake_send(*args):
+        sent.append(args[-1])
+
+    async def scenario():
+        for request in requests:
+            await protocol.send_request(session, {"state": session.state, **request})
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(protocol.manager, "send_to_player", fake_send)
+        patch.setattr(protocol.manager, "broadcast", fake_send)
+        asyncio.run(scenario())
+    return sent
+
+
+# --- Réponses au moteur (identifiants des joueurs) ---------------------------------
+
 def test_vote_vide_arrive_comme_none():
-    port = QueueHumanPort()
-    ws.ports["h"] = port
-    ws.pending["h"] = "vote"
-
+    session = waiting("vote", targets=["h", "imp"])
     with make_client().websocket_connect("/ws/h") as conn:
-        conn.receive_text()  # accusé "connected"
-        conn.send_text(json.dumps({"action": "submit_vote", "payload": {"target_id": ""}}))
-        reply = json.loads(conn.receive_text())
-
-    assert reply["type"] == "announcement"
-    assert port.answers.get_nowait() is None
+        connect(conn)
+        reply = act(conn, "submit_vote", target_id="")
+    assert reply == {"type": "announcement", "text": "Votre vote pour Personne a bien été pris en compte."}
+    assert session.port.answers.get_nowait() is None
 
 
-def test_vote_avec_cible_arrive_telle_quelle():
-    port = QueueHumanPort()
-    ws.ports["h"] = port
-    ws.pending["h"] = "vote"
-
+def test_vote_avec_cible_arrive_tel_quel():
+    session = waiting("vote", targets=["h", "imp"])
     with make_client().websocket_connect("/ws/h") as conn:
-        conn.receive_text()  # accusé "connected"
-        conn.send_text(json.dumps({"action": "submit_vote", "payload": {"target_id": "imp"}}))
-        conn.receive_text()
+        connect(conn)
+        reply = act(conn, "submit_vote", target_id="imp")
+    assert reply["text"] == "Votre vote pour Imp a bien été pris en compte."
+    assert session.port.answers.get_nowait() == "imp"
 
-    assert port.answers.get_nowait() == "imp"
+
+def test_cible_non_proposee_refusee():
+    session = waiting("vote", targets=["h", "imp"])
+    with make_client().websocket_connect("/ws/h") as conn:
+        connect(conn)
+        reply = act(conn, "submit_vote", target_id="Imp")  # un nom n'est pas un identifiant
+    assert reply["type"] == "error"
+    assert session.port.answers.empty()
 
 
 def test_vote_hors_phase_est_refuse():
-    port = QueueHumanPort()
-    ws.ports["h"] = port
-    ws.pending["h"] = "night_choice"
-
+    session = waiting("night_choice", targets=["imp"], count=1)
     with make_client().websocket_connect("/ws/h") as conn:
-        conn.receive_text()  # accusé "connected"
-        conn.send_text(json.dumps({"action": "submit_vote", "payload": {"target_id": "imp"}}))
-        reply = json.loads(conn.receive_text())
-
+        connect(conn)
+        reply = act(conn, "submit_vote", target_id="imp")
     assert reply["type"] == "error"
-    assert port.answers.empty()
+    assert session.port.answers.empty()
 
 
 def test_action_de_nuit_arrive_en_tuple():
-    port = QueueHumanPort()
-    ws.ports["h"] = port
-    ws.pending["h"] = "night_choice"
-
+    session = waiting("night_choice", targets=["imp", "p1"], count=1)
     with make_client().websocket_connect("/ws/h") as conn:
-        conn.receive_text()  # accusé "connected"
-        conn.send_text(json.dumps({"action": "submit_night_action", "payload": {"targets": ["imp"]}}))
-        conn.receive_text()
-
-    assert port.answers.get_nowait() == ("imp",)
+        connect(conn)
+        reply = act(conn, "submit_night_action", targets=["imp"])
+    assert reply["type"] == "night_action_ack"
+    assert session.port.answers.get_nowait() == ("imp",)
 
 
 def test_champ_inconnu_est_refuse():
-    port = QueueHumanPort()
-    ws.ports["h"] = port
-    ws.pending["h"] = "vote"
-
+    session = waiting("vote", targets=["imp"])
     with make_client().websocket_connect("/ws/h") as conn:
-        conn.receive_text()  # accusé "connected"
-        conn.send_text(json.dumps({"action": "submit_vote", "payload": {"targt_id": "imp"}}))
-        reply = json.loads(conn.receive_text())
-
+        connect(conn)
+        reply = act(conn, "submit_vote", targt_id="imp")
     assert reply["type"] == "error"
-    assert port.answers.empty()
+    assert session.port.answers.empty()
+
+
+def test_action_sans_partie_refusee():
+    with make_client().websocket_connect("/ws/h") as conn:
+        connect(conn)
+        reply = act(conn, "submit_vote", target_id="imp")
+    assert reply == {"type": "error", "data": "Aucune partie en cours."}
 
 
 def test_whisper_ouvre_le_salon_et_repond_au_moteur():
-    port = QueueHumanPort()
-    ws.ports["h"] = port
-    ws.pending["h"] = "private_partners"
-
+    session = waiting("private_partners", choices=["imp", "p1", "moine"])
     with make_client().websocket_connect("/ws/h") as conn:
-        conn.receive_text()  # accusé "connected"
-        conn.send_text(json.dumps({"action": "request_whisper", "payload": {"targets": ["imp"]}}))
-        first = json.loads(conn.receive_text())
-        second = json.loads(conn.receive_text())
+        connect(conn)
+        announce = act(conn, "request_whisper", targets=["imp"])
+        opened = json.loads(conn.receive_text())
 
-    assert first["sender"] == "Grimoire"
-    assert second["type"] == "private_channel_opened"
-    assert second["channel_id"] == "whisper_h_imp"
-    assert ws.whispers["h"] == "whisper_h_imp"
-    assert port.answers.get_nowait() == ["imp"]
+    assert announce == {"type": "chat", "channel_id": "public", "sender": "Grimoire",
+                        "content": "💬 Alex est entré en discussion privée avec Imp."}
+    assert opened == {"type": "private_channel_opened", "channel_id": "whisper_h_imp", "members": ["h", "imp"],
+                      "text": "Salon privé ouvert avec Imp", "focus": True}
+    assert session.whisper == "whisper_h_imp"
+    assert session.port.answers.get_nowait() == ["imp"]
 
-# --- Point 2 : reprise après rechargement -----------------------------------
+
+# --- Reprise après rechargement ------------------------------------------------------
 
 def test_reconnexion_rouvre_le_salon_et_renvoie_l_historique_du_chat():
-    port = QueueHumanPort()
-    ws.ports["h"] = port
+    session = waiting("private_partners", choices=["imp", "p1"])
     client = make_client()
 
     # Première connexion : le joueur ouvre un salon puis y écrit
-    ws.pending["h"] = "private_partners"
     with client.websocket_connect("/ws/h") as conn:
-        conn.receive_text()  # accusé "connected"
-        conn.send_text(json.dumps({"action": "request_whisper", "payload": {"targets": ["imp"]}}))
-        conn.receive_text()  # annonce publique du Grimoire
+        connect(conn)
+        act(conn, "request_whisper", targets=["imp"])
         conn.receive_text()  # salon ouvert
-        ws.pending["h"] = "private_message"
-        conn.send_text(json.dumps({"action": "send_chat", "payload": {"channel_id": "whisper_h_imp", "content": "Psst"}}))
-        conn.receive_text()  # écho du message privé
+        session.pending = {"kind": "private_message", "state": session.state}
+        act(conn, "send_chat", channel_id="whisper_h_imp", content="Psst")
 
-    # Rechargement : le salon et les messages reviennent, sans placer le joueur dans le salon
+    # Rechargement : rôle, état, salon et messages reviennent, sans placer le joueur dans le salon
     with client.websocket_connect("/ws/h") as conn:
-        messages = [json.loads(conn.receive_text()) for _ in range(4)]
+        messages = connect(conn)
 
-    assert messages[0] == {"type": "connected"}
-    assert messages[1] == {"type": "private_channel_opened", "channel_id": "whisper_h_imp",
+    assert [m["type"] for m in messages] == [
+        "connected", "role_assigned", "game_state", "private_channel_opened", "chat", "chat"]
+    assert messages[3] == {"type": "private_channel_opened", "channel_id": "whisper_h_imp",
                            "members": ["h", "imp"], "text": "", "focus": False}
-    assert messages[2]["channel_id"] == "public" and messages[2]["sender"] == "Grimoire"
-    assert messages[3] == {"type": "chat", "channel_id": "whisper_h_imp", "sender": "h", "content": "Psst"}
+    assert messages[4]["sender"] == "Grimoire"
+    assert messages[5] == {"type": "chat", "channel_id": "whisper_h_imp", "sender": "h", "content": "Psst"}
 
 
 def test_les_allies_reveles_sont_renvoyes_avec_le_role():
-    from backend.models import GameState, Player
-    from backend.models.enums import Equipe, Phase
-    from backend.models.role import Role
+    session = waiting()
+    # La révélation de la première nuit est retenue…
+    relay(session, {"kind": "night_info", "turn": 1, "info": "Ton allié est marIA.",
+                    "allies": [{"id": "p1", "role": "Empoisonneur"}]})
 
-    imp = Role(name_FR="Diablotin", name_EN="imp", team=Equipe.DEMON, phase=Phase.NUIT)
-    poisoner = Role(name_FR="Empoisonneur", name_EN="poisoner", team=Equipe.SBIRE, phase=Phase.NUIT)
-    port = QueueHumanPort()
-    port.state = GameState(turn=2, phase=Phase.NUIT, players=(
-        Player(id="h", name="Alex", role=imp), Player(id="p1", name="marIA", role=poisoner),
-    ))
-    ws.ports["h"] = port
-    sent = []
-
-    async def fake_send(player_id, message):
-        sent.append(message)
-
-    async def scenario():
-        # La révélation de la première nuit est retenue…
-        await ws._send_request("h", port, "night_info",
-                               {"turn": 1, "info": "Ton allié est marIA.", "allies": [{"id": "p1", "role": "Empoisonneur"}]})
-        # …et renvoyée avec le rôle à la reconnexion
-        ws.roles_sent.discard("h")
-        await ws._send_state("h", port)
-
-    original = ws.manager.send_to_player
-    ws.manager.send_to_player = fake_send
-    try:
-        asyncio.run(scenario())
-    finally:
-        ws.manager.send_to_player = original
-
-    role = next(m for m in sent if m["type"] == "role_assigned")
+    # …et renvoyée avec le rôle à la reconnexion
+    with make_client().websocket_connect("/ws/h") as conn:
+        role = next(m for m in connect(conn) if m["type"] == "role_assigned")
     assert role["allies"] == [{"id": "p1", "role": "Empoisonneur"}]
 
 
-# --- Point 3 : étapes facultatives ------------------------------------------
+# --- Étapes facultatives -------------------------------------------------------------
 
-def _sync(conn):
-    """Attend que le serveur ait traité les messages précédents (il répond à un JSON invalide)."""
-    conn.send_text("pas du json")
-    assert json.loads(conn.receive_text())["type"] == "error"
-
-
-def test_passer_son_message_public():
-    port = QueueHumanPort()
-    ws.ports["h"] = port
-    ws.pending["h"] = "public_message"
-
+@pytest.mark.parametrize("kind, nothing", [("public_message", None), ("private_message", None)])
+def test_passer_un_message(kind, nothing):
+    session = waiting(kind)
     with make_client().websocket_connect("/ws/h") as conn:
-        conn.receive_text()  # accusé "connected"
-        conn.send_text(json.dumps({"action": "skip_turn", "payload": {"kind": "public_message"}}))
-        _sync(conn)
-
-    assert port.answers.get_nowait() is None
-    assert "h" not in ws.pending
-
-
-def test_terminer_la_discussion_privee_avant_trois_messages():
-    port = QueueHumanPort()
-    ws.ports["h"] = port
-    ws.pending["h"] = "private_message"
-
-    with make_client().websocket_connect("/ws/h") as conn:
-        conn.receive_text()  # accusé "connected"
-        conn.send_text(json.dumps({"action": "skip_turn", "payload": {"kind": "private_message"}}))
-        _sync(conn)
-
-    assert port.answers.get_nowait() is None
+        connect(conn)
+        conn.send_text(json.dumps({"action": "skip_turn", "payload": {"kind": kind}}))
+        connect(conn)  # synchronisation : l'action précédente est traitée
+    assert session.port.answers.get_nowait() is nothing
+    assert session.pending is None
 
 
 def test_passer_au_vote_sans_salon_prive():
-    port = QueueHumanPort()
-    ws.ports["h"] = port
-    ws.pending["h"] = "private_partners"
-
+    session = waiting("private_partners", choices=["imp"])
     with make_client().websocket_connect("/ws/h") as conn:
-        conn.receive_text()  # accusé "connected"
-        conn.send_text(json.dumps({"action": "skip_turn", "payload": {"kind": "private_partners"}}))
-        reply = json.loads(conn.receive_text())
-
+        connect(conn)
+        reply = act(conn, "skip_turn", kind="private_partners")
     assert reply["type"] == "announcement"
-    assert port.answers.get_nowait() == []  # « personne » pour le moteur
+    assert session.port.answers.get_nowait() == []  # « personne » pour le moteur
 
 
 def test_passer_une_etape_qui_n_est_pas_attendue_est_refuse():
-    port = QueueHumanPort()
-    ws.ports["h"] = port
-    ws.pending["h"] = "vote"
-
+    session = waiting("vote", targets=["imp"])
     with make_client().websocket_connect("/ws/h") as conn:
-        conn.receive_text()  # accusé "connected"
-        conn.send_text(json.dumps({"action": "skip_turn", "payload": {"kind": "public_message"}}))
-        reply = json.loads(conn.receive_text())
-
+        connect(conn)
+        reply = act(conn, "skip_turn", kind="public_message")
     assert reply["type"] == "error"
-    assert port.answers.empty()
-    assert ws.pending["h"] == "vote"
+    assert session.port.answers.empty()
+    assert session.waits_for("vote")
 
 
 def test_le_vote_ne_peut_pas_etre_passe_par_skip_turn():
+    waiting("vote", targets=["imp"])
     with make_client().websocket_connect("/ws/h") as conn:
-        conn.receive_text()  # accusé "connected"
-        conn.send_text(json.dumps({"action": "skip_turn", "payload": {"kind": "vote"}}))
-        assert json.loads(conn.receive_text())["data"].startswith("Action non valide")
+        connect(conn)
+        assert act(conn, "skip_turn", kind="vote")["data"].startswith("Action non valide")
 
 
 def test_saisie_attendue_annoncee_au_front():
-    sent = []
+    session = waiting()
+    session.whisper, session.whisper_left = "whisper_h_imp", 2
+    sent = relay(session, {"kind": "public_message"}, {"kind": "private_message"})
 
-    async def fake_send(player_id, message):
-        sent.append(message)
-
-    async def scenario():
-        port = QueueHumanPort()
-        ws.whispers["h"] = "whisper_h_imp"
-        ws.whisper_left["h"] = 2
-        await ws._send_request("h", port, "public_message", {"kind": "public_message"})
-        await ws._send_request("h", port, "private_message", {"kind": "private_message"})
-
-    original = ws.manager.send_to_player
-    ws.manager.send_to_player = fake_send
-    try:
-        asyncio.run(scenario())
-    finally:
-        ws.manager.send_to_player = original
-
-    assert sent[0]["type"] == "input_request" and sent[0]["kind"] == "public_message"
-    assert sent[0]["channel_id"] == "public"
+    assert sent[0] == {"type": "input_request", "kind": "public_message", "channel_id": "public",
+                       "text": "C'est à vous de parler sur la place publique.", "left": None}
     assert sent[1] == {"type": "input_request", "kind": "private_message", "channel_id": "whisper_h_imp",
                        "left": 2, "text": "Il vous reste 2 message(s) privé(s) avec vos interlocuteurs."}
 
 
-# --- Historiques des onglets Nuits et Votes -----------------------------------
+# --- Historiques des onglets Nuits et Votes -------------------------------------------
 
 def test_historiques_nuits_et_votes_gardes_et_renvoyes_a_la_reconnexion():
-    from types import SimpleNamespace
-    port = QueueHumanPort()
-    port.state = SimpleNamespace(turn=2, player=lambda pid: SimpleNamespace(name={"p1": "marIA"}[pid]))
-    ws.ports["h"] = port
+    session = waiting()
+    sent = relay(session,
+                 {"kind": "night_info", "turn": 2, "info": "L'un des deux est le Démon.", "allies": None},
+                 {"kind": "night_deaths", "deaths": ["p1"]},
+                 {"kind": "vote_result", "turn": 2, "executed": "p1",
+                  "votes": [{"voter": "h", "target": "p1", "ghost": False},
+                            {"voter": "p1", "target": None, "ghost": False}]})
 
-    async def fake_send(player_id, message):
-        pass
-
-    async def scenario():
-        await ws._send_request("h", port, "night_info", {"turn": 2, "info": "L'un des deux est le Démon.", "allies": None})
-        await ws._send_request("h", port, "night_deaths", {"deaths": ["p1"]})
-        await ws.send_vote_result("h", 2, "marIA", [{"voter": "h", "target": "marIA"}, {"voter": "marIA", "target": None}])
-
-    original = ws.manager.send_to_player
-    ws.manager.send_to_player = fake_send
-    try:
-        asyncio.run(scenario())
-    finally:
-        ws.manager.send_to_player = original
-
-    assert ws.night_log["h"] == [
-        {"turn": 2, "type": "role_info", "info": "L'un des deux est le Démon."},
-        {"turn": 2, "type": "result", "info": "marIA est mort·e cette nuit."},
+    # Le front reçoit l'identifiant du mort : c'est lui qui écrit le texte
+    assert {"type": "night_result", "turn": 2, "dead_player": "p1"} in sent
+    assert session.night_log == [
+        NightHistoryEntry(turn=2, type="role_info", info="L'un des deux est le Démon."),
+        NightHistoryEntry(turn=2, type="result", dead_player="p1"),
     ]
-    assert ws.vote_log["h"] == [
-        {"turn": 2, "voter": "h", "target": "marIA", "executed": "marIA"},
-        {"turn": 2, "voter": "marIA", "target": None, "executed": "marIA"},
+    assert session.vote_log == [
+        VoteHistoryEntry(turn=2, voter="h", target="p1", executed="p1"),
+        VoteHistoryEntry(turn=2, voter="p1", target=None, executed="p1"),
     ]
 
     # Reconnexion : un seul message avec les deux historiques
-    port.state = None  # l'état de la partie n'est pas l'objet de ce test
     with make_client().websocket_connect("/ws/h") as conn:
-        conn.receive_text()  # accusé "connected"
-        history = json.loads(conn.receive_text())
-    assert history == {"type": "history", "nights": ws.night_log["h"], "votes": ws.vote_log["h"]}
+        history = next(m for m in connect(conn) if m["type"] == "history")
+    assert history["nights"] == [
+        {"turn": 2, "type": "role_info", "info": "L'un des deux est le Démon.", "dead_player": None},
+        {"turn": 2, "type": "result", "info": None, "dead_player": "p1"},
+    ]
+    assert history["votes"][0] == {"turn": 2, "voter": "h", "target": "p1", "executed": "p1"}
 
 
-def test_nuit_sans_mort_dans_l_historique():
-    assert ws.night_death_text(None) == "Personne n'est mort cette nuit."
-    assert ws.night_death_text("marIA") == "marIA est mort·e cette nuit."
+def test_nuit_sans_mort():
+    session = waiting()
+    sent = relay(session, {"kind": "night_deaths", "deaths": []})
+    assert sent == [{"type": "night_result", "turn": 2, "dead_player": None}]
 
 
 def test_resultat_du_tour_et_fin_de_partie_relayes_depuis_la_file():
     """game_runner pose vote_result et game_over dans la file : ils sont relayés comme les autres."""
-    sent = []
-
-    async def fake_send(player_id, message):
-        sent.append(message)
-
-    async def scenario():
-        port = QueueHumanPort()
-        await ws._send_request("h", port, "vote_result", {"turn": 3, "executed": None, "votes": []})
-        await ws._send_request("h", port, "game_over", {"winner": "Villageois", "details": "Fin."})
-
-    original = ws.manager.send_to_player
-    ws.manager.send_to_player = fake_send
-    try:
-        asyncio.run(scenario())
-    finally:
-        ws.manager.send_to_player = original
+    session = waiting()
+    sent = relay(session, {"kind": "vote_result", "turn": 3, "executed": None, "votes": []},
+                 {"kind": "game_over", "winner": "good", "details": "Fin."})
 
     assert sent == [
         {"type": "vote_result", "turn": 3, "executed": None, "votes": []},
-        {"type": "game_over", "winner": "Villageois", "details": "Fin."},
+        {"type": "game_over", "winner": "good", "details": "Fin."},
     ]
-    assert ws.vote_log["h"] == []  # aucun bulletin à retenir ce tour-là
+    assert session.vote_log == []  # aucun bulletin à retenir ce tour-là
 
 
-# --- Aucun choix de salon privé à temps : un agent propose un entretien ------------
+# --- Aucun choix de salon privé à temps : un agent propose un entretien ------------------
 
 def test_delai_de_discussion_ecoule_repond_none_au_moteur():
-    port = QueueHumanPort()
-    ws.ports["h"] = port
-    ws.pending["h"] = "private_partners"
-
+    session = waiting("private_partners", choices=["imp"])
     with make_client().websocket_connect("/ws/h") as conn:
-        conn.receive_text()  # accusé "connected"
+        connect(conn)
         conn.send_text(json.dumps({"action": "discussion_timeout", "payload": {}}))
-        conn.send_text(json.dumps({"action": "discussion_timeout", "payload": {}}))  # plus rien n'est attendu
-        reply = json.loads(conn.receive_text())
-
+        reply = act(conn, "discussion_timeout")  # plus rien n'est attendu
     assert reply["type"] == "error"
-    assert port.answers.get_nowait() is None
-    assert port.answers.empty()
+    assert session.port.answers.get_nowait() is None
+    assert session.port.answers.empty()
 
 
-def test_proposition_d_un_agent_envoyee_au_front(monkeypatch):
-    sent = []
-
-    async def fake_send(player_id, message):
-        sent.append(message)
-
-    monkeypatch.setattr(ws.manager, "send_to_player", fake_send)
-
-    async def scenario():
-        port = QueueHumanPort()
-        task = asyncio.create_task(ws._forward_requests("h", port))
-        await port.requests.put({"kind": "agent_invitation", "agent": "imp"})
-        await asyncio.sleep(0.01)
-        task.cancel()
-
-    asyncio.run(scenario())
-    assert ws.pending["h"] == "agent_invitation"
-    assert sent == [{"type": "agent_whisper_request", "agent_id": "imp", "agent_name": "imp"}]
-
-
-def _invited_by(agent_id: str) -> QueueHumanPort:
-    port = QueueHumanPort()
-    ws.ports["h"] = port
-    ws.pending["h"] = "agent_invitation"
-    ws.current_request["h"] = ("agent_invitation", {"kind": "agent_invitation", "agent": agent_id})
-    return port
+def test_proposition_d_un_agent_envoyee_au_front():
+    session = waiting()
+    sent = relay(session, {"kind": "agent_invitation", "agent": "imp"})
+    assert sent == [{"type": "agent_whisper_request", "agent_id": "imp"}]
 
 
 def test_accepter_l_entretien_ouvre_le_salon():
-    port = _invited_by("imp")
-
+    session = waiting("agent_invitation", agent="imp")
     with make_client().websocket_connect("/ws/h") as conn:
-        conn.receive_text()  # accusé "connected"
-        conn.receive_text()  # proposition renvoyée à la connexion
-        conn.send_text(json.dumps({"action": "respond_whisper_invitation",
-                                   "payload": {"target_agent_id": "imp", "accepted": True}}))
-        announce = json.loads(conn.receive_text())
+        assert connect(conn)[-1] == {"type": "agent_whisper_request", "agent_id": "imp"}  # renvoyée
+        announce = act(conn, "respond_whisper_invitation", target_agent_id="imp", accepted=True)
         opened = json.loads(conn.receive_text())
 
     assert announce["sender"] == "Grimoire"
-    assert opened["type"] == "private_channel_opened"
-    assert opened["channel_id"] == "whisper_h_imp"
-    assert ws.whispers["h"] == "whisper_h_imp"
-    assert port.answers.get_nowait() is True
+    assert opened["type"] == "private_channel_opened" and opened["channel_id"] == "whisper_h_imp"
+    assert session.whisper == "whisper_h_imp"
+    assert session.port.answers.get_nowait() is True
 
 
 def test_refuser_l_entretien_passe_au_vote():
-    port = _invited_by("imp")
-
+    session = waiting("agent_invitation", agent="imp")
     with make_client().websocket_connect("/ws/h") as conn:
-        conn.receive_text()  # accusé "connected"
-        conn.receive_text()  # proposition renvoyée à la connexion
-        conn.send_text(json.dumps({"action": "respond_whisper_invitation",
-                                   "payload": {"target_agent_id": "imp", "accepted": False}}))
-        reply = json.loads(conn.receive_text())
-
+        connect(conn)
+        reply = act(conn, "respond_whisper_invitation", target_agent_id="imp", accepted=False)
     assert reply["type"] == "announcement"
-    assert "h" not in ws.whispers
-    assert port.answers.get_nowait() is False
+    assert session.whisper is None
+    assert session.port.answers.get_nowait() is False
 
 
 def test_reponse_a_un_autre_agent_ou_sans_proposition_refusee():
-    port = _invited_by("imp")
-
+    session = waiting("agent_invitation", agent="imp")
     with make_client().websocket_connect("/ws/h") as conn:
-        conn.receive_text()  # accusé "connected"
-        conn.receive_text()  # proposition renvoyée à la connexion
-        conn.send_text(json.dumps({"action": "respond_whisper_invitation",
-                                   "payload": {"target_agent_id": "moine", "accepted": True}}))
-        wrong_agent = json.loads(conn.receive_text())
-        ws.pending["h"] = "vote"
-        conn.send_text(json.dumps({"action": "respond_whisper_invitation",
-                                   "payload": {"target_agent_id": "imp", "accepted": True}}))
-        no_invitation = json.loads(conn.receive_text())
-
+        connect(conn)
+        wrong_agent = act(conn, "respond_whisper_invitation", target_agent_id="moine", accepted=True)
+        session.pending = {"kind": "vote", "state": session.state, "targets": ["imp"]}
+        no_invitation = act(conn, "respond_whisper_invitation", target_agent_id="imp", accepted=True)
     assert wrong_agent["type"] == "error"
     assert no_invitation["type"] == "error"
-    assert port.answers.empty()
+    assert session.port.answers.empty()
 
 
-def test_entretien_entre_deux_agents_annonce_sur_la_place_publique(monkeypatch):
-    broadcast = []
+def test_entretien_entre_deux_agents_annonce_sur_la_place_publique():
+    session = waiting()
+    sent = relay(session, {"kind": "agent_meeting", "agents": ["imp", "moine"]})
 
-    async def fake_broadcast(message):
-        broadcast.append(message)
-
-    monkeypatch.setattr(ws.manager, "broadcast", fake_broadcast)
-
-    async def scenario():
-        port = QueueHumanPort()
-        task = asyncio.create_task(ws._forward_requests("h", port))
-        await port.requests.put({"kind": "agent_meeting", "agents": ["imp", "moine"]})
-        await asyncio.sleep(0.01)
-        task.cancel()
-
-    asyncio.run(scenario())
     message = {"type": "chat", "channel_id": "public", "sender": "Grimoire",
-               "content": "💬 imp et moine se sont entretenus en privé."}
-    assert broadcast == [message]
-    assert ws.chat_log["h"] == [message]  # renvoyé après une reconnexion
-    assert "h" not in ws.pending  # simple annonce : aucune réponse attendue
+               "content": "💬 Imp et Moine se sont entretenus en privé."}
+    assert sent == [message]
+    assert [m.model_dump() for m in session.chat_log] == [message]  # renvoyé après une reconnexion

@@ -1,7 +1,7 @@
 """État de la partie : en-tête, table ronde, liste des convives, soupçons."""
 from playwright.sync_api import expect
 
-from conftest import AGENTS, PLAYER
+from conftest import AGENTS, ID, PLAYER
 
 
 def test_header_shows_turn_phase_and_alive_count(game, server):
@@ -51,7 +51,7 @@ def test_evil_player_sees_suspicions_locked_until_allies_are_revealed(game, serv
     expect(game.locator(".suspicion-select:disabled")).to_have_count(len(AGENTS))
 
     server.send(type="night_info", turn=1, info="Votre allié est Mère Grimsby.",
-                allies=[{"id": "Mère Grimsby", "role": "poisoner"}])
+                allies=[{"id": ID["Mère Grimsby"], "role": "poisoner"}])
     game.click("[data-action='close-night-info']")
 
     expect(game.locator(".ally-tag")).to_have_text("Votre allié · Empoisonneur")
@@ -64,7 +64,7 @@ def test_evil_player_sees_suspicions_locked_until_allies_are_revealed(game, serv
 def test_evil_player_keeps_allies_after_reconnection(game, server):
     # À la reconnexion, le serveur renvoie le rôle avec les alliés déjà révélés
     server.send(type="role_assigned", role_name="Diablotin", description="…",
-                allies=[{"id": "Mère Grimsby", "role": "poisoner"}])
+                allies=[{"id": ID["Mère Grimsby"], "role": "poisoner"}])
     game.click("[data-action='close-role-reveal']")
 
     expect(game.locator(".ally-tag")).to_have_text("Votre allié · Empoisonneur")

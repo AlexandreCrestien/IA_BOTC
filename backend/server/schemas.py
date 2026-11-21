@@ -103,3 +103,160 @@ ClientActionPacket = Annotated[
     ],
     Field(discriminator="action"),
 ]
+
+
+# OUTPUTS : messages envoyés au front (static/js/connection.js, handleServerMessage)
+# Les joueurs sont toujours désignés par leur identifiant ; le front affiche leur nom
+# grâce à la liste des joueurs de game_state.
+
+class OutMessage(BaseModel):
+    """Base des messages envoyés au front : un champ inconnu est une erreur de programmation."""
+    model_config = ConfigDict(extra="forbid")
+
+
+class FrontPlayer(OutMessage):
+    id: str
+    name: str
+    alive: bool
+    has_vote: bool = Field(..., description="Mort : vote fantôme encore disponible ou non")
+
+
+class FrontGameState(OutMessage):
+    day: int
+    phase: Literal["nuit", "discussion", "vote"]
+    aliveCount: int
+    players: List[FrontPlayer]
+
+
+class Ally(OutMessage):
+    id: str
+    role: str = Field(..., description="Nom français du rôle")
+
+
+class Ballot(OutMessage):
+    voter: str
+    target: Optional[str] = Field(..., description="None : vote pour personne")
+    ghost: bool = Field(..., description="Le votant était déjà mort : vote fantôme")
+
+
+class NightHistoryEntry(OutMessage):
+    turn: int
+    type: Literal["role_info", "result"]
+    info: Optional[str] = Field(default=None, description="role_info : texte de l'information")
+    dead_player: Optional[str] = Field(default=None, description="result : mort de la nuit (None : personne)")
+
+
+class VoteHistoryEntry(OutMessage):
+    turn: int
+    voter: str
+    target: Optional[str]
+    executed: Optional[str]
+
+
+class Connected(OutMessage):
+    type: Literal["connected"] = "connected"
+
+
+class RoleAssigned(OutMessage):
+    type: Literal["role_assigned"] = "role_assigned"
+    role_name: str
+    description: str
+    allies: Optional[List[Ally]] = Field(default=None, description="Reconnexion d'un joueur du mal après la révélation")
+
+
+class GameStateMessage(OutMessage):
+    type: Literal["game_state"] = "game_state"
+    state: FrontGameState
+
+
+class ActionRequest(OutMessage):
+    type: Literal["action_request"] = "action_request"
+    kind: Literal["nuit", "vote", "discussion"]
+    candidates: List[str]
+    max_targets: Optional[int] = None
+    min_targets: Optional[int] = None
+    role: Optional[str] = Field(default=None, description="Nuit : nom anglais du rôle (textes du front)")
+
+
+class InputRequest(OutMessage):
+    type: Literal["input_request"] = "input_request"
+    kind: Literal["public_message", "private_message"]
+    channel_id: Optional[str]
+    text: str
+    left: Optional[int] = Field(default=None, description="Messages privés restants")
+
+
+class AgentWhisperRequest(OutMessage):
+    type: Literal["agent_whisper_request"] = "agent_whisper_request"
+    agent_id: str
+
+
+class ChatMessage(OutMessage):
+    type: Literal["chat"] = "chat"
+    channel_id: str
+    sender: str = Field(..., description="Identifiant du joueur, ou « Grimoire » pour les annonces")
+    content: str
+
+
+class PrivateChannelOpened(OutMessage):
+    type: Literal["private_channel_opened"] = "private_channel_opened"
+    channel_id: str
+    members: List[str]
+    text: str
+    focus: bool = Field(default=True, description="False : salon rouvert à la reconnexion, sans s'y placer")
+
+
+class History(OutMessage):
+    type: Literal["history"] = "history"
+    nights: List[NightHistoryEntry]
+    votes: List[VoteHistoryEntry]
+
+
+class NightInfo(OutMessage):
+    type: Literal["night_info"] = "night_info"
+    turn: int
+    info: str
+    allies: Optional[List[Ally]] = Field(default=None, description="Première nuit, camp du mal uniquement")
+
+
+class NightResult(OutMessage):
+    type: Literal["night_result"] = "night_result"
+    turn: int
+    dead_player: Optional[str]
+
+
+class NightActionAck(OutMessage):
+    type: Literal["night_action_ack"] = "night_action_ack"
+    text: str
+
+
+class VoteResult(OutMessage):
+    type: Literal["vote_result"] = "vote_result"
+    turn: int
+    executed: Optional[str]
+    votes: List[Ballot]
+
+
+class Announcement(OutMessage):
+    type: Literal["announcement"] = "announcement"
+    text: str
+
+
+class Error(OutMessage):
+    type: Literal["error"] = "error"
+    data: str
+
+
+class GameOver(OutMessage):
+    type: Literal["game_over"] = "game_over"
+    winner: Literal["good", "evil"]
+    details: str
+
+
+class GameAbandoned(OutMessage):
+    type: Literal["game_abandoned"] = "game_abandoned"
+
+
+class GameInterrupted(OutMessage):
+    type: Literal["game_interrupted"] = "game_interrupted"
+    text: str

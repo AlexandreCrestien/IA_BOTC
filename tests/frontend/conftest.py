@@ -21,9 +21,13 @@ from playwright.sync_api import Page, expect
 
 STATIC_DIR = Path(__file__).resolve().parents[2] / "static"
 
+# Comme avec le vrai serveur : le joueur humain a son pseudo pour identifiant, les agents p1…p5.
+# Le serveur désigne toujours les joueurs par identifiant ; le front affiche leur nom.
 PLAYER = "Lady Vesper"
 AGENTS = ["Lord Ashcombe", "Mère Grimsby", "Dr. Thorne", "Révérend Hale", "Miss Pemberton"]
 ALL_PLAYERS = AGENTS[:3] + [PLAYER] + AGENTS[3:]
+ID = {PLAYER: PLAYER, **{name: f"p{i}" for i, name in enumerate(AGENTS, start=1)}}
+ALL_IDS = [ID[name] for name in ALL_PLAYERS]
 
 # Remplace le CDN Tailwind : config vide + utilitaires indispensables au comportement
 TAILWIND_STUB = """
@@ -125,7 +129,7 @@ def server(page):
 
 
 def players(dead=()):
-    return [{"id": n, "name": n, "alive": n not in dead, "has_vote": True} for n in ALL_PLAYERS]
+    return [{"id": ID[n], "name": n, "alive": n not in dead, "has_vote": True} for n in ALL_PLAYERS]
 
 
 @pytest.fixture

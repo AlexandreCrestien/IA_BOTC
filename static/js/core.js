@@ -110,10 +110,16 @@ function sendAction(action, payload = {}) {
     return true;
 }
 
-// Ajoute une entrée dans l'historique de l'onglet "Nuits" (type : "role_info" | "result")
-function addNightHistory(turn, type, info) {
-    gameState.night_info_history.push({ turn: turn ?? gameState.day, type, info });
+// Ajoute une entrée dans l'historique de l'onglet "Nuits", au format envoyé par le serveur :
+// { turn, type: "role_info", info } ou { turn, type: "result", dead_player: id | null }
+function addNightHistory(entry) {
+    gameState.night_info_history.push({ ...entry, turn: entry.turn ?? gameState.day });
     renderNightInfoHistory();
+}
+
+// Texte des morts de la nuit (onglet Nuits) : écrit seulement ici, le serveur envoie l'identifiant
+function nightDeathText(deadPlayerId) {
+    return deadPlayerId ? `${getPlayerName(deadPlayerId)} est mort·e cette nuit.` : "Personne n'est mort cette nuit.";
 }
 
 // Ajoute les bulletins d'un vote dans l'historique de l'onglet "Votes"

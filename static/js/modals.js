@@ -29,11 +29,10 @@ function closeRoleRevealModal() {
 // ================= DEMANDE D'ENTRETIEN D'UN AGENT =================
 // Le joueur n'a choisi aucun salon privé à temps : un agent lui propose un entretien.
 // Accepter ouvre le salon (l'agent parle en premier) ; refuser passe au vote.
-function showAgentWhisperModal(agentId, agentName, message) {
+function showAgentWhisperModal(agentId) {
     currentWhisperAgent = agentId;
-    const name = agentName || getPlayerName(agentId);
     document.getElementById('agent-whisper-text').textContent =
-        message || `${name} souhaite s'entretenir discrètement avec vous dans l'ombre.`;
+        `${getPlayerName(agentId)} souhaite s'entretenir discrètement avec vous dans l'ombre.`;
     openModal('modal-agent-whisper');
 }
 
@@ -80,8 +79,7 @@ function showNightResultModal(turnNumber, deadPlayerId) {
     }
     deathNoticeEl.classList.toggle('hidden', !isMe);
 
-    addNightHistory(turnNumber, "result",
-        deadPlayerId ? `${getPlayerName(deadPlayerId)} est mort·e cette nuit.` : "Personne n'est mort cette nuit.");
+    addNightHistory({ turn: turnNumber, type: "result", dead_player: deadPlayerId || null });
     openModal('modal-night-result');
 }
 
@@ -104,17 +102,19 @@ function closeNightInfoModal() {
 }
 
 // ================= FIN DE PARTIE =================
+// winner : camp vainqueur envoyé par le serveur
+const WINNER_TITLES = { good: "Victoire des Villageois", evil: "Victoire des Démons" };
+
 function triggerGameOver(winner, details) {
     gameIsOver = true;
-    document.getElementById('gameover-title').textContent = `Victoire des ${winner}`;
+    document.getElementById('gameover-title').textContent = WINNER_TITLES[winner] || "Fin de la partie";
     document.getElementById('gameover-desc').textContent = details;
 
     // Victoire ou défaite du joueur, si son rôle est connu
     const outcomeEl = document.getElementById('gameover-outcome');
     const card = document.getElementById('gameover-card');
     if (resolveRoleKey(gameState.roleInfo?.name)) {
-        const evilWon = /d[ée]mon|mal|sbire/i.test(String(winner));
-        const playerWon = evilWon === isEvilRole();
+        const playerWon = (winner === "evil") === isEvilRole();
         outcomeEl.textContent = playerWon ? "Votre camp l'emporte !" : "Votre camp a perdu…";
         outcomeEl.dataset.outcome = playerWon ? 'win' : 'loss';
         outcomeEl.classList.remove('hidden');

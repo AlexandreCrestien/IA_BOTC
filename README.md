@@ -103,7 +103,7 @@ Le serveur démarre sur `http://127.0.0.1:8000` :
 | `ws://127.0.0.1:8000/ws/{player_id}` | WebSocket du joueur : reçoit et valide ses actions |
 | `GET /admin/debug/all-states` | Route de débogage, protégée par le header `x-admin-token` |
 
-Actions acceptées sur le WebSocket (JSON) : `send_chat`, `create_channel`, `night_action`, `vote`.
+Actions du front et messages du serveur sur le WebSocket : voir [`docs/protocole.md`](docs/protocole.md).
 
 ## Interface web
 
@@ -160,3 +160,4 @@ Les tests du frontend (`tests/frontend/`) pilotent un vrai navigateur avec Playw
 
 - [`docs/architecture_ia.md`](docs/architecture_ia.md) : fonctionnement de `llm_client`, `memory_manager`, `agent_factory` et `conversations`
 - [`docs/choix_des_modeles.md`](docs/choix_des_modeles.md) : choix des modèles LLM et leurs résultats aux tests
+- [`docs/protocole.md`](docs/protocole.md) : messages échangés entre le front et le serveur (WebSocket)

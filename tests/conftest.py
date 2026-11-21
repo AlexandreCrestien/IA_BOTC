@@ -1,17 +1,12 @@
 """Outils communs aux tests du backend."""
 import pytest
 
-from backend.server import websockets as ws
+from backend.server.session import set_current_session
 
 
 @pytest.fixture
 def clean_server():
-    """Le serveur ne garde rien d'un test à l'autre : données par joueur et rôles envoyés."""
-    def clear():
-        for store in ws.PLAYER_STORES:
-            store.clear()
-        ws.roles_sent.clear()
-
-    clear()
+    """Aucune partie en cours au début et à la fin du test."""
+    set_current_session(None)
     yield
-    clear()
+    set_current_session(None)
