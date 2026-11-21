@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Dict, Any
+from typing import Any, Dict, Optional
 from fastapi import WebSocket
 
 logger = logging.getLogger(__name__)
@@ -18,8 +18,13 @@ class ConnectionManager:
         self.active_connections[player_id] = websocket
         logger.info(f"Joueur connecté : {player_id}. Total connexions : {len(self.active_connections)}")
 
-    def disconnect(self, player_id: str) -> None:
-        """Retire un joueur de la liste des connexions actives lors de sa déconnexion."""
+    def disconnect(self, player_id: str, websocket: Optional[WebSocket] = None) -> None:
+        """Retire un joueur de la liste des connexions actives lors de sa déconnexion.
+
+        Avec `websocket`, ne retire que cette connexion-là : si le joueur s'est reconnecté entre-temps
+        (rechargement, second onglet), la fermeture de l'ancienne ne coupe pas la nouvelle."""
+        if websocket is not None and self.active_connections.get(player_id) is not websocket:
+            return
         if player_id in self.active_connections:
             del self.active_connections[player_id]
             logger.info(f"Joueur déconnecté : {player_id}. Total connexions : {len(self.active_connections)}")
@@ -41,7 +46,6 @@ class ConnectionManager:
             logger.warning(f"Tentative d'envoi à un joueur non connecté ou introuvable : {player_id}")
 
 
-    # Pas nécessaire pour l'instant car jeu solo, mais en place pour l'évolutivité
     async def broadcast(self, message: dict[str, Any]) -> None:
         """
         Diffuse un message JSON à tous les joueurs connectés en même temps.

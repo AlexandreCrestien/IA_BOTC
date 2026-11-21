@@ -1,14 +1,14 @@
-from backend.models import GameState
-from backend.rules.butler import choose_master
+from backend.models import GameState, RoleKey
+from backend.rules.valet import choose_master
 from backend.rules.night_effects import kill, protect
 from backend.rules.poison import poison
 
-# Ordre de résolution = ordre de jeu : l'Empoisonneur d'abord, pour qu'un Moine ou un Majordome empoisonné n'ait pas d'effet.
+# Ordre de résolution = ordre de jeu : l'Apothicaire d'abord, pour qu'un Veilleur ou un Valet empoisonné n'ait pas d'effet.
 RESOLUTION_ORDER = (
-    ("poisoner", poison),
-    ("monk", protect),
-    ("imp", kill),
-    ("butler", choose_master),
+    (RoleKey.APOTHECARY, poison),
+    (RoleKey.WATCHMAN, protect),
+    (RoleKey.REAPER, kill),
+    (RoleKey.VALET, choose_master),
 )
 
 

@@ -1,6 +1,6 @@
 /* ==========================================================
    modals.js — modales : rôle, entretien, exécution, nuit, fin de partie,
-   connexion perdue, Grimoire
+   connexion perdue, Codex
    ========================================================== */
 'use strict';
 
@@ -27,60 +27,29 @@ function closeRoleRevealModal() {
 }
 
 // ================= DEMANDE D'ENTRETIEN D'UN AGENT =================
-function setWhisperActions(html) {
-    document.getElementById('agent-whisper-actions').innerHTML = html;
-}
-
-function showAgentWhisperModal(agentId, agentName, message) {
+// Le joueur n'a choisi aucun salon privé à temps : un agent lui propose un entretien.
+// Accepter ouvre le salon (l'agent parle en premier) ; refuser passe au vote.
+function showAgentWhisperModal(agentId) {
     currentWhisperAgent = agentId;
-    const name = agentName || getPlayerName(agentId);
     document.getElementById('agent-whisper-text').textContent =
-        message || `${name} souhaite s'entretenir discrètement avec vous dans l'ombre.`;
-    setWhisperActions(`
-        <button type="button" data-action="accept-whisper" class="btn-seal flex-1">Accepter</button>
-        <button type="button" data-action="refuse-whisper" class="btn-ghost flex-1">Ignorer</button>
-    `);
+        `${getPlayerName(agentId)} souhaite s'entretenir discrètement avec vous dans l'ombre.`;
     openModal('modal-agent-whisper');
 }
 
-function acceptAgentWhisper() {
-    closeModal('modal-agent-whisper');
+function answerAgentWhisper(accepted) {
     const agentId = currentWhisperAgent;
-    currentWhisperAgent = null;
     if (!agentId) return;
-
-    if (sendAction("respond_whisper_invitation", { target_agent_id: agentId, accepted: true })) {
-        // Le salon s'ouvrira à la réception de "private_channel_opened" (même identifiant que le serveur).
-        appendSystemMessage(`Vous avez accepté l'entretien avec ${getPlayerName(agentId)}. Ouverture du salon…`);
-    } else {
+    if (!sendAction("respond_whisper_invitation", { target_agent_id: agentId, accepted })) {
+        // La modale reste ouverte : la proposition sera renvoyée à la reconnexion
         appendSystemMessage("Connexion perdue : votre réponse n'a pas été envoyée.");
+        return;
     }
-}
-
-// Refus : on prévient le serveur, puis on propose de lancer une discussion ou le vote
-function refuseAgentWhisper() {
-    const name = currentWhisperAgent ? getPlayerName(currentWhisperAgent) : "l'agent";
-    document.getElementById('agent-whisper-text').textContent =
-        `Vous avez refusé l'entretien avec ${name}. Que souhaitez-vous faire ?`;
-    setWhisperActions(`
-        <button type="button" data-action="whisper-discuss" class="btn-ghost flex-1">Lancer une discussion</button>
-        <button type="button" data-action="whisper-vote" class="btn-seal btn-blood flex-1">Lancer le vote</button>
-    `);
-
-    if (currentWhisperAgent) {
-        sendAction("respond_whisper_invitation", { target_agent_id: currentWhisperAgent, accepted: false });
-    }
-}
-
-function closeAgentWhisperModalOnly() {
     closeModal('modal-agent-whisper');
     currentWhisperAgent = null;
-}
-
-function triggerVotePhaseFromModal() {
-    closeModal('modal-agent-whisper');
-    sendAction("trigger_vote_phase");
-    currentWhisperAgent = null;
+    // Accepté : le salon s'ouvrira à la réception de "private_channel_opened"
+    appendSystemMessage(accepted
+        ? `Vous avez accepté l'entretien avec ${getPlayerName(agentId)}. Ouverture du salon…`
+        : `Vous avez refusé l'entretien avec ${getPlayerName(agentId)}.`);
 }
 
 // ================= EXÉCUTION DU JOUEUR =================
@@ -110,8 +79,7 @@ function showNightResultModal(turnNumber, deadPlayerId) {
     }
     deathNoticeEl.classList.toggle('hidden', !isMe);
 
-    addNightHistory(turnNumber, "result",
-        deadPlayerId ? `${getPlayerName(deadPlayerId)} est mort·e cette nuit.` : "Personne n'est mort cette nuit.");
+    addNightHistory({ turn: turnNumber, type: "result", dead_player: deadPlayerId || null });
     openModal('modal-night-result');
 }
 
@@ -134,17 +102,19 @@ function closeNightInfoModal() {
 }
 
 // ================= FIN DE PARTIE =================
+// winner : camp vainqueur envoyé par le serveur
+const WINNER_TITLES = { good: "Victoire des Villageois", evil: "Victoire des Démons" };
+
 function triggerGameOver(winner, details) {
     gameIsOver = true;
-    document.getElementById('gameover-title').textContent = `Victoire des ${winner}`;
+    document.getElementById('gameover-title').textContent = WINNER_TITLES[winner] || "Fin de la partie";
     document.getElementById('gameover-desc').textContent = details;
 
     // Victoire ou défaite du joueur, si son rôle est connu
     const outcomeEl = document.getElementById('gameover-outcome');
     const card = document.getElementById('gameover-card');
     if (resolveRoleKey(gameState.roleInfo?.name)) {
-        const evilWon = /d[ée]mon|mal|sbire/i.test(String(winner));
-        const playerWon = evilWon === isEvilRole();
+        const playerWon = (winner === "evil") === isEvilRole();
         outcomeEl.textContent = playerWon ? "Votre camp l'emporte !" : "Votre camp a perdu…";
         outcomeEl.dataset.outcome = playerWon ? 'win' : 'loss';
         outcomeEl.classList.remove('hidden');
@@ -152,6 +122,36 @@ function triggerGameOver(winner, details) {
     }
 
     openModal('modal-gameover');
+}
+
+// La partie a planté côté serveur : même fenêtre que la fin de partie, avec un autre message
+function showGameInterrupted(text) {
+    gameIsOver = true;
+    document.getElementById('gameover-title').textContent = "Partie interrompue";
+    document.getElementById('gameover-desc').textContent = text || "Une erreur a interrompu la partie.";
+    document.getElementById('gameover-outcome').classList.add('hidden');
+    document.getElementById('gameover-card').dataset.tone = 'blood';
+    openModal('modal-gameover');
+}
+
+// ================= ABANDON =================
+// Délai de secours : si le serveur ne confirme pas l'abandon, on revient quand même à l'accueil
+const ABANDON_FALLBACK_MS = 3000;
+
+function confirmAbandon() {
+    closeModal('modal-abandon');
+    // Partie déjà finie ou connexion perdue : rien à prévenir côté serveur
+    if (gameIsOver || !sendAction("abandon_game")) {
+        leaveGame();
+        return;
+    }
+    setTimeout(leaveGame, ABANDON_FALLBACK_MS);
+}
+
+// Retour à l'accueil (page rechargée : le front repart d'un état vierge)
+function leaveGame() {
+    gameIsOver = true; // pas de fenêtre « Connexion perdue » pendant le rechargement
+    location.reload();
 }
 
 // ================= CONNEXION PERDUE =================
@@ -165,19 +165,20 @@ function closeDisconnectedModal() {
     closeModal('modal-disconnected');
 }
 
-// ================= GRIMOIRE =================
-function openGrimoireModal() {
-    openModal('modal-grimoire');
+// ================= CODEX =================
+function openCodexModal() {
+    openModal('modal-codex');
 }
 
-function closeGrimoireModal() {
-    closeModal('modal-grimoire');
+function closeCodexModal() {
+    closeModal('modal-codex');
 }
 
-function switchGrimoireTab(tabName) {
-    const showRoles = tabName === 'roles';
-    document.getElementById('grimoire-tab-roles').classList.toggle('hidden', !showRoles);
-    document.getElementById('grimoire-tab-rules').classList.toggle('hidden', showRoles);
-    document.getElementById('grimoire-tab-btn-roles').classList.toggle('is-active', showRoles);
-    document.getElementById('grimoire-tab-btn-rules').classList.toggle('is-active', !showRoles);
+const CODEX_TABS = ['roles', 'rules', 'data'];
+
+function switchCodexTab(tabName) {
+    CODEX_TABS.forEach(tab => {
+        document.getElementById(`codex-tab-${tab}`).classList.toggle('hidden', tab !== tabName);
+        document.getElementById(`codex-tab-btn-${tab}`).classList.toggle('is-active', tab === tabName);
+    });
 }

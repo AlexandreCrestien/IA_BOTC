@@ -1,15 +1,16 @@
 """État de la partie : en-tête, table ronde, liste des convives, soupçons."""
 from playwright.sync_api import expect
 
-from conftest import AGENTS, PLAYER
+from conftest import AGENTS, ID, PLAYER
 
 
 def test_header_shows_turn_phase_and_alive_count(game, server):
     expect(game.locator("#game-day")).to_have_text("2")
     expect(game.locator("#alive-count")).to_have_text("5")
 
-    server.send(type="phase_update", phase="vote", announcement="Le vote est ouvert.")
+    server.send(type="game_state", state={"phase": "vote"})
     expect(game.locator("#game-phase")).to_have_text("Vote")
+    server.send(type="announcement", text="Le vote est ouvert.")
     expect(game.locator("#game-announcement")).to_have_text("Le vote est ouvert.")
     expect(game.locator("#center-stage")).to_have_attribute("data-phase", "vote")
 
@@ -30,31 +31,41 @@ def test_players_list_excludes_the_player_and_shows_status(game):
 
 
 def test_own_role_is_removed_from_suspicions(game, server):
-    server.send(type="role_assigned", role_name="Voyante", description="Sondez deux joueurs.")
+    server.send(type="role_assigned", role_name="Médium", description="Sondez deux joueurs.")
     game.click("[data-action='close-role-reveal']")
 
     options = game.locator(".suspicion-select").first.locator("option")
-    expect(options.filter(has_text="Voyante")).to_have_count(0)
-    expect(options.filter(has_text="Moine")).to_have_count(1)
+    expect(options.filter(has_text="Médium")).to_have_count(0)
+    expect(options.filter(has_text="Veilleur")).to_have_count(1)
 
 
 def test_suspicion_survives_a_server_update(game, server):
-    game.locator(".suspicion-select").first.select_option("moine")
+    game.locator(".suspicion-select").first.select_option("watchman")
     server.send(type="game_state", state={"aliveCount": 5})
-    expect(game.locator(".suspicion-select").first).to_have_value("moine")
+    expect(game.locator(".suspicion-select").first).to_have_value("watchman")
 
 
 def test_evil_player_sees_suspicions_locked_until_allies_are_revealed(game, server):
-    server.send(type="role_assigned", role_name="Diablotin", description="Choisissez une victime.")
+    server.send(type="role_assigned", role_name="Faucheur", description="Choisissez une victime.")
     game.click("[data-action='close-role-reveal']")
     expect(game.locator(".suspicion-select:disabled")).to_have_count(len(AGENTS))
 
     server.send(type="night_info", turn=1, info="Votre allié est Mère Grimsby.",
-                allies=[{"id": "Mère Grimsby", "role": "poisoner"}])
+                allies=[{"id": ID["Mère Grimsby"], "role": "apothecary"}])
     game.click("[data-action='close-night-info']")
 
-    expect(game.locator(".ally-tag")).to_have_text("Votre allié · Empoisonneur")
+    expect(game.locator(".ally-tag")).to_have_text("Votre allié · Apothicaire")
     expect(game.locator(".player-card").first).to_contain_text("Mère Grimsby")  # allié en tête
     good_only = game.locator(".suspicion-select").first.locator("option")
-    expect(good_only.filter(has_text="Diablotin")).to_have_count(0)
+    expect(good_only.filter(has_text="Faucheur")).to_have_count(0)
+    expect(game.locator(".suspicion-select:disabled")).to_have_count(0)
+
+
+def test_evil_player_keeps_allies_after_reconnection(game, server):
+    # À la reconnexion, le serveur renvoie le rôle avec les alliés déjà révélés
+    server.send(type="role_assigned", role_name="Faucheur", description="…",
+                allies=[{"id": ID["Mère Grimsby"], "role": "apothecary"}])
+    game.click("[data-action='close-role-reveal']")
+
+    expect(game.locator(".ally-tag")).to_have_text("Votre allié · Apothicaire")
     expect(game.locator(".suspicion-select:disabled")).to_have_count(0)

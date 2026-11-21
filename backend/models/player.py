@@ -3,7 +3,7 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from backend.models.effect import Effect
-from backend.models.enums import Phase, TypeEffet
+from backend.models.enums import Phase, EffectType
 from backend.models.role import Role
 
 
@@ -22,7 +22,7 @@ class Player(BaseModel):
     # Un joueur mort garde une seule voix pour le reste de la partie.
     ghost_vote: bool = False
     effects: tuple[Effect, ...] = ()
-    # Liens vers d'autres joueurs (ex. "maitre", "fausse_piste"). Les clés autorisées sont dans la fiche du rôle.
+    # Liens vers d'autres joueurs (ex. "master" du Valet, "false_lead" du Médium). Les clés autorisées sont dans la fiche du rôle.
     links: dict[str, str] = Field(default_factory=dict)
 
     @property
@@ -34,7 +34,7 @@ class Player(BaseModel):
     def can_vote(self) -> bool:
         return self.alive or self.ghost_vote
 
-    def has_effect(self, effect_type: TypeEffet) -> bool:
+    def has_effect(self, effect_type: EffectType) -> bool:
         return any(e.type == effect_type for e in self.effects)
 
     def add_effect(self, effect: Effect) -> "Player":
@@ -51,7 +51,7 @@ class Player(BaseModel):
 
     def use_ghost_vote(self) -> "Player":
         if self.alive or not self.ghost_vote:
-            raise ValueError(f"{self.name} n'a pas de vote fantôme à utiliser")
+            raise ValueError(f"{self.name} n'a pas de voix d'outre-tombe à utiliser")
         return self.model_copy(update={"ghost_vote": False})
     
     def reset_power(self) -> "Player":

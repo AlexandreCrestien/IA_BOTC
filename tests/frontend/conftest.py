@@ -21,9 +21,13 @@ from playwright.sync_api import Page, expect
 
 STATIC_DIR = Path(__file__).resolve().parents[2] / "static"
 
-PLAYER = "Lady Vesper"
+# Comme avec le vrai serveur : le joueur humain a son pseudo pour identifiant, les agents p1…p5.
+# Le serveur désigne toujours les joueurs par identifiant ; le front affiche leur nom.
+PLAYER = "Vesper"
 AGENTS = ["Lord Ashcombe", "Mère Grimsby", "Dr. Thorne", "Révérend Hale", "Miss Pemberton"]
 ALL_PLAYERS = AGENTS[:3] + [PLAYER] + AGENTS[3:]
+ID = {PLAYER: PLAYER, **{name: f"p{i}" for i, name in enumerate(AGENTS, start=1)}}
+ALL_IDS = [ID[name] for name in ALL_PLAYERS]
 
 # Remplace le CDN Tailwind : config vide + utilitaires indispensables au comportement
 TAILWIND_STUB = """
@@ -85,9 +89,20 @@ class FakeServer:
         self.received = []
         page.route_web_socket("**/ws/**", self._on_connect)
 
+    refusal = None  # motif de refus de la prochaine connexion (voir refuse())
+
     def _on_connect(self, ws_route):
         self.route = ws_route
+        if self.refusal is not None:
+            # Comme le vrai serveur : connexion acceptée puis fermée avec le code 4001 et le motif
+            ws_route.close(code=4001, reason=self.refusal)
+            return
         ws_route.on_message(lambda message: self.received.append(json.loads(message)))
+        ws_route.send(json.dumps({"type": "connected"}))  # accusé envoyé par le vrai serveur
+
+    def refuse(self, reason):
+        """La prochaine connexion sera refusée avec ce motif."""
+        self.refusal = reason
 
     def send(self, **message):
         self.route.send(json.dumps(message))
@@ -114,7 +129,7 @@ def server(page):
 
 
 def players(dead=()):
-    return [{"id": n, "name": n, "alive": n not in dead, "has_vote": True} for n in ALL_PLAYERS]
+    return [{"id": ID[n], "name": n, "alive": n not in dead, "has_vote": True} for n in ALL_PLAYERS]
 
 
 @pytest.fixture

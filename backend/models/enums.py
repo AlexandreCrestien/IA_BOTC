@@ -1,38 +1,44 @@
-from enum import Enum
+from enum import Enum, StrEnum
+
+
+class RoleKey(StrEnum):
+    """Identifiant d'un rôle : clé du catalogue et nom du fichier skills/roles/<clé>.md.
+    StrEnum : vaut sa chaîne ("reaper"…), mais une faute de frappe est une erreur immédiate."""
+    REAPER = "reaper"          # Faucheur
+    APOTHECARY = "apothecary"  # Apothicaire
+    WATCHMAN = "watchman"      # Veilleur
+    MEDIUM = "medium"          # Médium
+    INQUISITOR = "inquisitor"  # Inquisiteur
+    VALET = "valet"            # Valet
 
 
 class Phase(str, Enum):
-    NUIT = "nuit"
+    NIGHT = "nuit"
     DISCUSSION = "discussion"
     VOTE = "vote"
 
 
-class Equipe(str, Enum):
-    VILLAGEOIS = "villageois"
-    OUTSIDER = "outsider"
-    SBIRE = "sbire"
-    DEMON = "demon"
+class Team(str, Enum):
+    TOWNSFOLK = "townsfolk"    # Villageois
+    OUTCAST = "outcast"        # Paria
+    ACCOMPLICE = "accomplice"  # Complice
+    DEMON = "demon"            # Démon
 
 
-class Alignement(str, Enum):
-    BON = "villageois"
-    MAUVAIS = "demon"
+class Alignment(str, Enum):
+    GOOD = "good"
+    EVIL = "evil"
 
 
-class TypeEffet(str, Enum):
-    PROTEGE = "protege"
-    EMPOISONNE = "empoisonne"
-    SONDE = "sonde"
-    TUE = "tue"
+class EffectType(str, Enum):
+    PROTECTED = "protected"
+    POISONED = "poisoned"
 
 class EventType(str, Enum):
-    announcement = "announcement"
-    death = "death"
-    public_message = "public_message"
-    private_meeting = "private_meeting"
-    private_summary = "private_summary"
-    nomination = "nomination"
-    vote = "vote"
-    night_action = "night_action"
-    night_info = "night_info"
-    role_info = "role_info"
+    DEATH = "death"
+    PUBLIC_MESSAGE = "public_message"
+    PRIVATE_MEETING = "private_meeting"
+    PRIVATE_SUMMARY = "private_summary"
+    VOTE = "vote"
+    NIGHT_ACTION = "night_action"
+    ROLE_INFO = "role_info"
