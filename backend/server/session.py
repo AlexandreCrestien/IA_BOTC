@@ -10,8 +10,8 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from backend.human_port import QueueHumanPort
-from backend.memory_manager import MemoryManager
+from backend.engine.human_port import QueueHumanPort
+from backend.ai.memory_manager import MemoryManager
 from backend.models import GameState
 
 # Demandes du moteur auxquelles le joueur doit répondre

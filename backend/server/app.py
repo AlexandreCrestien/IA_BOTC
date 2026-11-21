@@ -3,9 +3,8 @@ import logging
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
 
-from backend.server.websockets import router as ws_router
+from backend.server.websocket_endpoint import router as ws_router
 from backend.server.admin import router as admin_router
 # Chargé dès le démarrage (moteur de jeu, LiteLLM : quelques secondes) plutôt qu'à la première
 # connexion d'un joueur, qui attendrait sinon devant l'écran d'accueil.
@@ -23,15 +22,6 @@ app = FastAPI(
     title="Blood on the AI Clocktower - Backend API",
     description="API en temps réel (websockets) pour lier le moteur de jeu Python et le frontend.",
     version="1.0.0"
-)
-
-# Configuration CORS (nécessaire si le frontend tourne sur un autre port)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
 )
 
 app.include_router(ws_router)

@@ -43,7 +43,7 @@ GRIMOIRE = "Grimoire"  # expéditeur des annonces du chat (pseudo réservé)
 
 # Valeurs attendues par le front (game.js : PHASES, actions.js : kind)
 PHASE_FRONT = {
-    Phase.NUIT: "nuit",
+    Phase.NIGHT: "nuit",
     Phase.DISCUSSION: "discussion",
     Phase.VOTE: "vote",
 }

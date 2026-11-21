@@ -10,7 +10,7 @@ class GameState(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     turn: int = Field(default=1, ge=1)
-    phase: Phase = Phase.NUIT
+    phase: Phase = Phase.NIGHT
     players: tuple[Player, ...] = ()
 
     @model_validator(mode="after")
@@ -38,11 +38,11 @@ class GameState(BaseModel):
     def next_phase(self) -> "GameState":
         """Nuit -> discussion -> vote dans le même tour ; vote -> nuit au tour suivant.
         Au passage à la nuit : retire les effets arrivés à leur fin et remet les pouvoirs à zéro."""
-        following = {Phase.NUIT: Phase.DISCUSSION, Phase.DISCUSSION: Phase.VOTE, Phase.VOTE: Phase.NUIT}
+        following = {Phase.NIGHT: Phase.DISCUSSION, Phase.DISCUSSION: Phase.VOTE, Phase.VOTE: Phase.NIGHT}
         new_phase = following[self.phase]
-        new_turn = self.turn + 1 if new_phase == Phase.NUIT else self.turn
+        new_turn = self.turn + 1 if new_phase == Phase.NIGHT else self.turn
         players = tuple(p.remove_expired_effects(new_turn, new_phase) for p in self.players)
-        if new_phase == Phase.NUIT:
+        if new_phase == Phase.NIGHT:
             players = tuple(p.reset_power() for p in players)
         return self.model_copy(update={"turn": new_turn, "phase": new_phase, "players": players})
 

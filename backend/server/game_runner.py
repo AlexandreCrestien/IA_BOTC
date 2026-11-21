@@ -5,12 +5,12 @@ import logging
 import random
 from typing import Optional
 
-from backend.game_config import AI_NAMES, PERSONALITY_NAMES
-from backend.game_engine import setup_game
-from backend.models import Alignement
+from backend.engine.config import AI_NAMES, PERSONALITY_NAMES
+from backend.engine.setup import setup_game
+from backend.models import Alignment
 from backend.server.protocol import GRIMOIRE, forward_requests, send_game_interrupted
 from backend.server.session import GameSession, current_session, set_current_session
-from backend.turns import play_turn
+from backend.engine.turn import play_turn
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ GAME_CONFIG = {
 }
 
 # Camp vainqueur, tel qu'envoyé au front (qui écrit le titre et compare au camp du joueur)
-WINNER_TEAMS = {Alignement.BON: "good", Alignement.MAUVAIS: "evil"}
+WINNER_TEAMS = {Alignment.GOOD: "good", Alignment.EVIL: "evil"}
 
 # Motifs de refus envoyés au front (affichés sur l'écran d'accueil)
 REFUSED_PSEUDO = "Ce pseudo est réservé ou invalide : choisissez-en un autre."

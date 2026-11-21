@@ -1,7 +1,7 @@
 import random
 from typing import NamedTuple
 
-from backend.models import Equipe, GameState, RoleKey, TypeEffet
+from backend.models import Team, GameState, RoleKey, EffectType
 
 
 class FirstNightInfo(NamedTuple):
@@ -15,8 +15,8 @@ class FirstNightInfo(NamedTuple):
 
 
 def first_night_info(state: GameState, rng: random.Random) -> list[FirstNightInfo]:
-    demons = [p for p in state.players if p.role.team == Equipe.DEMON]
-    minions = [p for p in state.players if p.role.team == Equipe.SBIRE]
+    demons = [p for p in state.players if p.role.team == Team.DEMON]
+    minions = [p for p in state.players if p.role.team == Team.MINION]
     if len(demons) != 1 or len(minions) != 1:
         raise ValueError("il faut exactement un démon et un sbire")
     demon, minion = demons[0], minions[0]
@@ -26,7 +26,7 @@ def first_night_info(state: GameState, rng: random.Random) -> list[FirstNightInf
         FirstNightInfo(demon.id, "minion", (minion.id,)),
     ]
     for detective in (p for p in state.players if p.role.name_EN == RoleKey.DETECTIVE):
-        if detective.has_effect(TypeEffet.EMPOISONNE):
+        if detective.has_effect(EffectType.POISONED):
             # Information fausse : deux autres joueurs tirés au hasard, sans garantie de sbire.
             others = [p.id for p in state.players if p.id != detective.id]
             pair = rng.sample(others, 2)

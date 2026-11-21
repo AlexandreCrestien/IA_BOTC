@@ -1,7 +1,7 @@
 """Partie avec toi comme joueur humain, dans le terminal.
 Lancement : python scripts/play_with_human.py
 Les IA font de vrais appels (coût et lenteur). Tu tapes tes choix quand on te les demande.
-Après chaque tour, l'historique de chaque joueur est sauvegardé dans historiques/."""
+Après chaque tour, l'historique de chaque joueur est sauvegardé dans histories/."""
 import asyncio
 import logging
 import os
@@ -15,11 +15,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import litellm  # noqa: E402
 
-from backend.game_config import AI_NAMES, PERSONALITY_NAMES  # noqa: E402
-from backend.game_engine import setup_game  # noqa: E402
-from backend.turns import play_turn  # noqa: E402
+from backend.engine.config import AI_NAMES, PERSONALITY_NAMES  # noqa: E402
+from backend.engine.setup import setup_game  # noqa: E402
+from backend.engine.turn import play_turn  # noqa: E402
 from backend.rules import legal_actions  # noqa: E402
-from historique import RecordingAgent, save_histories  # noqa: E402
+from recording import RecordingAgent, save_histories  # noqa: E402
 
 litellm.suppress_debug_info = True
 
@@ -29,7 +29,7 @@ PERSONALITIES = PERSONALITY_NAMES
 MAX_TURNS = 5
 # Les logs de télémétrie LiteLLM sont coupés : seules nos erreurs et nos réponses comptent.
 LITELLM_LOGGERS = ("LiteLLM", "LiteLLM Router", "LiteLLM Proxy")
-HISTORY_ROOT = Path(__file__).resolve().parent.parent / "historiques"
+HISTORY_ROOT = Path(__file__).resolve().parent.parent / "histories"
 
 
 def _ask_numbers(prompt, options):
@@ -48,7 +48,7 @@ def _pick_numbers(raw, options):
 
 
 class TerminalHuman:
-    """Implémentation de HumanPort dans le terminal (mêmes méthodes que backend/human_port.py)."""
+    """Implémentation de HumanPort dans le terminal (mêmes méthodes que backend/engine/human_port.py)."""
 
     def __init__(self, memory):
         self.memory = memory

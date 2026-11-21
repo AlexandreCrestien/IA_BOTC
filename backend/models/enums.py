@@ -13,32 +13,32 @@ class RoleKey(StrEnum):
 
 
 class Phase(str, Enum):
-    NUIT = "nuit"
+    NIGHT = "nuit"
     DISCUSSION = "discussion"
     VOTE = "vote"
 
 
-class Equipe(str, Enum):
-    VILLAGEOIS = "villageois"
+class Team(str, Enum):
+    TOWNSFOLK = "villageois"
     OUTSIDER = "outsider"
-    SBIRE = "sbire"
+    MINION = "sbire"
     DEMON = "demon"
 
 
-class Alignement(str, Enum):
-    BON = "villageois"
-    MAUVAIS = "demon"
+class Alignment(str, Enum):
+    GOOD = "villageois"
+    EVIL = "demon"
 
 
-class TypeEffet(str, Enum):
-    PROTEGE = "protege"
-    EMPOISONNE = "empoisonne"
+class EffectType(str, Enum):
+    PROTECTED = "protege"
+    POISONED = "empoisonne"
 
 class EventType(str, Enum):
-    death = "death"
-    public_message = "public_message"
-    private_meeting = "private_meeting"
-    private_summary = "private_summary"
-    vote = "vote"
-    night_action = "night_action"
-    role_info = "role_info"
+    DEATH = "death"
+    PUBLIC_MESSAGE = "public_message"
+    PRIVATE_MEETING = "private_meeting"
+    PRIVATE_SUMMARY = "private_summary"
+    VOTE = "vote"
+    NIGHT_ACTION = "night_action"
+    ROLE_INFO = "role_info"

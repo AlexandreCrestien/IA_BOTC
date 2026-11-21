@@ -1,0 +1,15 @@
+# Configuration des outils du projet (les dépendances sont dans requirements.txt).
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Les tests du frontend (Playwright) passent après les autres : voir tests/frontend/conftest.py
+
+[tool.ruff]
+line-length = 120
+extend-exclude = ["venv"]
+
+[tool.ruff.lint]
+# Seulement les vraies erreurs, sans imposer de style ni reformater :
+# F = pyflakes (noms et imports inutilisés, variables non définies…),
+# E9 = erreurs de syntaxe, E402 = import qui n'est pas en haut du fichier.
+select = ["F", "E9", "E402"]

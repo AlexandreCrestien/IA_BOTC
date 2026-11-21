@@ -8,7 +8,8 @@
 'use strict';
 
 // ================= CONFIGURATION =================
-const SERVER_WS_URL = "ws://127.0.0.1:8000/ws";
+// Même serveur que la page (le front est servi par FastAPI) : marche quels que soient l'adresse et le port.
+const SERVER_WS_URL = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`;
 
 // ================= ÉTAT GLOBAL =================
 let ws = null;

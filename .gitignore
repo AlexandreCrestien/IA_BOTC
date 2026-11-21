@@ -1,50 +1,41 @@
-# Generated .gitignore file for: Python, VSCode, Linux, Pip, JSON
-# Created with FOSSA's DevOps Tools
-
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
+*.so
 .pytest_cache/
+.ruff_cache/
 .coverage
+
+# Environnements virtuels
 venv/
 .venv
 env/
-.env
-*.so
 
-# VSCode
+# Secrets : seul .env.example est suivi
+.env
+.env.local
+.env.*.local
+
+# Sorties générées par le jeu et les scripts
+histories/
+# Ancien nom du dossier des historiques (à supprimer du disque s'il ne sert plus)
+historiques/
+scripts/logs/
+*.log
+
+# Éditeurs (on garde la config VS Code partagée)
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
-
-# Linux
-# Add Linux-specific ignores here
-
-# Pip
-# Add Pip-specific ignores here
-
-# JSON
-# Add JSON-specific ignores here
-
-# Common
-.DS_Store
-Thumbs.db
-*.log
-*.bak
-*.tmp
+.idea/
+*.sublime-*
 *.swp
 *~
 
-# IDE and editor generated files
-.idea/
-*.sublime-*
-
-# Local environment files
-.env
-.env.local
-.env.*.local
-
-historiques/
+# Systèmes
+.DS_Store
+Thumbs.db
+*.bak
+*.tmp

@@ -13,7 +13,7 @@ def legal_actions(state: GameState, player_id: str) -> LegalAction:
     """Cibles possibles pour l'action de nuit d'un joueur. Vide si le joueur ne peut pas agir maintenant.
     Un joueur mort n'a plus de pouvoir."""
     player = state.player(player_id)
-    if state.phase != Phase.NUIT or not player.alive or not player.can_act:
+    if state.phase != Phase.NIGHT or not player.alive or not player.can_act:
         return LegalAction(targets=(), count=0)
 
     role = player.role

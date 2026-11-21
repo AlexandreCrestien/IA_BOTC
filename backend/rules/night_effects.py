@@ -1,4 +1,4 @@
-from backend.models import Effect, GameState, Phase, RoleKey, TypeEffet
+from backend.models import Effect, GameState, Phase, RoleKey, EffectType
 from backend.rules.actions import legal_actions
 from backend.rules.powers import is_poisoned
 
@@ -9,10 +9,10 @@ def protect(state: GameState, monk_id: str, target_id: str) -> GameState:
     if is_poisoned(state.player(monk_id)):
         return state
     effect = Effect(
-        type=TypeEffet.PROTEGE,
+        type=EffectType.PROTECTED,
         source=RoleKey.MONK,
         turn_start=state.turn,
-        phase_start=Phase.NUIT,
+        phase_start=Phase.NIGHT,
         turn_end=state.turn,
         phase_end=Phase.DISCUSSION,
     )
@@ -26,7 +26,7 @@ def kill(state: GameState, imp_id: str, target_id: str) -> GameState:
     if is_poisoned(state.player(imp_id)):
         return state
     target = state.player(target_id)
-    if not target.alive or target.has_effect(TypeEffet.PROTEGE):
+    if not target.alive or target.has_effect(EffectType.PROTECTED):
         return state
     return state.replace_player(target.die())
 

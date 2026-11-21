@@ -2,8 +2,15 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from backend.models.clock import instant
-from backend.models.enums import Phase, TypeEffet
+from backend.models.enums import Phase, EffectType
+
+# Ordre chronologique à l'intérieur d'un tour : la nuit précède le jour.
+PHASE_ORDER = {Phase.NIGHT: 0, Phase.DISCUSSION: 1, Phase.VOTE: 2}
+
+
+def instant(turn: int, phase: Phase) -> int:
+    """Transforme un couple (tour, phase) en entier croissant, pour comparer deux moments."""
+    return turn * 3 + PHASE_ORDER[phase]
 
 
 class Effect(BaseModel):
@@ -13,7 +20,7 @@ class Effect(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    type: TypeEffet
+    type: EffectType
     source: str  # rôle ou événement qui a créé l'effet
     turn_start: int
     phase_start: Phase

@@ -1,7 +1,7 @@
 import random
 from typing import NamedTuple, Optional
 
-from backend.models import Alignement, Role, RoleKey
+from backend.models import Alignment, Role, RoleKey
 from backend.rules.catalogue import SIX_PLAYER_ROLES, get_role
 
 
@@ -22,7 +22,7 @@ def choose_false_lead(roles: dict[str, Role], rng: random.Random) -> str:
     candidates = sorted(
         player_id
         for player_id, role in roles.items()
-        if role.alignment == Alignement.BON and role.name_EN != RoleKey.PSYCHIC
+        if role.alignment == Alignment.GOOD and role.name_EN != RoleKey.PSYCHIC
     )
     if not candidates:
         raise ValueError("aucun joueur du bien éligible pour la fausse piste")

@@ -5,7 +5,7 @@ from backend.rules.actions import legal_actions
 from backend.rules.links import set_link
 from backend.rules.powers import is_poisoned
 
-MASTER_KEY = "maitre"
+MASTER_KEY = "master"
 
 
 def choose_master(state: GameState, butler_id: str, master_id: str) -> GameState:

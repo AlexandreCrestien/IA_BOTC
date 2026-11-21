@@ -89,7 +89,7 @@ def test_writing_the_public_message_hides_the_prompt(game, server):
     assert server.actions("skip_turn") == []
 
 
-def test_private_message_prompt_moves_to_the_salon_and_can_end_it(game, server):
+def test_private_message_prompt_moves_to_the_channel_and_can_end_it(game, server):
     server.send(type="private_channel_opened", channel_id=PRIVATE,
                 members=[PLAYER, ID["Mère Grimsby"]], text="Salon privé ouvert avec Mère Grimsby")
     game.click("#tab-public")  # le joueur est retourné sur la place publique
@@ -110,7 +110,7 @@ def test_new_step_hides_the_prompt(game, server):
 
 # --- Reprise après rechargement -----------------------------------------------
 
-def test_restored_salon_and_history_after_reconnection(game, server):
+def test_restored_channel_and_history_after_reconnection(game, server):
     # Ce que le serveur renvoie à la reconnexion : salon rouvert sans s'y placer, puis l'historique
     server.send(type="private_channel_opened", channel_id=PRIVATE,
                 members=[PLAYER, ID["Mère Grimsby"]], text="", focus=False)
