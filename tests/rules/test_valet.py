@@ -88,3 +88,14 @@ def test_poisoned_valet_votes_even_if_master_does_not_vote():
     state = vote_game(valet)
     votes = {"b": "c", "f": "c"}
     assert vote_result(state, votes) == "c"
+
+def test_bound_valets_only_lists_valets_who_depend_on_their_master():
+    from backend.rules import bound_valets
+    free = make_player("f", "valet")  # pas encore de maître
+    assert bound_valets(vote_game(free)) == {}
+    bound = make_player("f", "valet", links={"master": "a"})
+    assert bound_valets(vote_game(bound)) == {"f": "a"}
+    poison = Effect(type=EffectType.POISONED, source="apothecary", turn_start=1, phase_start=Phase.NIGHT,
+                    turn_end=2, phase_end=Phase.VOTE)
+    poisoned = make_player("f", "valet", effects=(poison,), links={"master": "a"})
+    assert bound_valets(vote_game(poisoned)) == {}  # empoisonné : jamais bloqué

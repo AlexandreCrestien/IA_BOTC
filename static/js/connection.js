@@ -5,6 +5,9 @@
 
 // Code de fermeture envoyé par le serveur quand il refuse la connexion (motif dans event.reason)
 const CLOSE_REFUSED = 4001;
+// Pseudo autorisé : lettres (accents compris), chiffres, - _ ' ’ ; 20 caractères au plus.
+// Même règle côté serveur (backend/server/game_runner.py, PSEUDO_PATTERN).
+const PSEUDO_PATTERN = /^[\p{L}\p{N}_'’-]{1,20}$/u;
 
 // ================= CONNEXION =================
 function joinGame() {
@@ -12,9 +15,15 @@ function joinGame() {
     if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) return;
 
     const input = document.getElementById('welcome-player-id');
-    playerId = input.value.trim();
+    // NFC : un « é » saisi en deux caractères (e + accent) devient un seul, comme le serveur l'attend
+    playerId = input.value.trim().normalize('NFC');
     if (!playerId) {
         showWelcomeError("Veuillez entrer un pseudo.");
+        input.focus();
+        return;
+    }
+    if (!PSEUDO_PATTERN.test(playerId)) {
+        showWelcomeError("Votre pseudo ne peut contenir que des lettres, des chiffres, des tirets, « _ » et des apostrophes (20 caractères au plus).");
         input.focus();
         return;
     }
@@ -22,7 +31,7 @@ function joinGame() {
     showWelcomeError(null);
     setJoinButtonLoading(true);
 
-    ws = new WebSocket(`${SERVER_WS_URL}/${playerId}`);
+    ws = new WebSocket(`${SERVER_WS_URL}/${encodeURIComponent(playerId)}`);
     let opened = false;
     let entered = false; // écran de jeu affiché
 

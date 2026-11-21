@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from backend.engine.steps import Ballot
 from backend.models import Alignment
 from backend.server import game_runner as gr
 from backend.server.session import GameSession, current_session
@@ -51,8 +52,9 @@ def _run(monkeypatch, turns, setup_state=None):
 def test_run_game_plays_until_victory(monkeypatch):
     states = [_state(2), _state(3)]
     session, final, calls = _run(monkeypatch, [
-        SimpleNamespace(state=states[0], game_winner=None, votes={"h": "p1"}, executed="p1", vote_failures=frozenset()),
-        SimpleNamespace(state=states[1], game_winner=Alignment.GOOD, votes={"h": None}, executed=None, vote_failures=frozenset()),
+        SimpleNamespace(state=states[0], game_winner=None, votes={"h": "p1"}, executed="p1", vote_failures=frozenset(),
+                        ballots=(Ballot("h", "p1", ghost=False),)),
+        SimpleNamespace(state=states[1], game_winner=Alignment.GOOD, votes={"h": None}, executed=None, vote_failures=frozenset(), ballots=()),
     ])
 
     assert final is states[1]
@@ -67,20 +69,25 @@ def test_run_game_plays_until_victory(monkeypatch):
 
 def test_evil_victory_sent_as_team(monkeypatch):
     session, _, _ = _run(monkeypatch, [
-        SimpleNamespace(state=_state(1), game_winner=Alignment.EVIL, votes={}, executed=None, vote_failures=frozenset())])
+        SimpleNamespace(state=_state(1), game_winner=Alignment.EVIL, votes={}, executed=None, vote_failures=frozenset(), ballots=())])
     assert _queued(session)[-1]["winner"] == "evil"
 
 
-def test_ballots_flag_ghost_votes(monkeypatch):
-    """Voix d'outre-tombe : votant déjà mort au moment du vote. Le joueur exécuté ce tour-ci votait vivant."""
-    after_day = _state(2, dead=("p1", "p2"))  # p1 morte lors d'une nuit précédente, p2 exécuté ce tour-ci
+def test_ballots_keep_the_engine_flags_and_mark_unavailable_ais(monkeypatch):
+    """La mention outre-tombe vient du moteur (vote_ballots) ; le serveur ajoute seulement les IA
+    qui n'ont pas répondu."""
+    engine_ballots = (
+        Ballot("h", "p2", ghost=False),
+        Ballot("p1", "p2", ghost=True),    # morte : voix d'outre-tombe utilisée
+        Ballot("p2", None, ghost=False),   # son IA n'a pas répondu : abstention
+    )
     session, _, _ = _run(monkeypatch, [SimpleNamespace(
-        state=after_day, game_winner=Alignment.GOOD, votes={"h": "p2", "p1": "p2", "p2": None}, executed="p2",
-        vote_failures=frozenset({"p2"}))])  # l'IA de p2 n'a pas répondu : abstention forcée
+        state=_state(2), game_winner=Alignment.GOOD, votes={}, executed="p2",
+        vote_failures=frozenset({"p2"}), ballots=engine_ballots)])
 
-    ballots = _queued(session)[0]["votes"]
-    assert {v["voter"]: v["ghost"] for v in ballots} == {"h": False, "p1": True, "p2": False}
-    assert {v["voter"]: v["unavailable"] for v in ballots} == {"h": False, "p1": False, "p2": True}
+    ballots = {v["voter"]: v for v in _queued(session)[0]["votes"]}
+    assert {pid: (v["ghost"], v["unavailable"]) for pid, v in ballots.items()} == {
+        "h": (False, False), "p1": (True, False), "p2": (False, True)}
 
 
 def test_game_over_comes_after_the_last_night_deaths(monkeypatch):
@@ -88,7 +95,7 @@ def test_game_over_comes_after_the_last_night_deaths(monkeypatch):
     le résultat du tour et la fin de partie, car tout passe par la même file."""
     async def night_win(port):
         await port.show_night_deaths(_state(1), ("p1",))  # le moteur annonce le mort
-        return SimpleNamespace(state=_state(1), game_winner=Alignment.EVIL, votes={}, executed=None, vote_failures=frozenset())
+        return SimpleNamespace(state=_state(1), game_winner=Alignment.EVIL, votes={}, executed=None, vote_failures=frozenset(), ballots=())
 
     session, _, _ = _run(monkeypatch, [night_win])
     assert [item["kind"] for item in _queued(session)] == ["night_deaths", "vote_result", "game_over"]
@@ -162,7 +169,8 @@ def test_other_pseudo_refused_during_a_game(fake_game):
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("pseudo", ["", "  ", "marIA", "MARIA", "p1", "game_master", "codex"])
+@pytest.mark.parametrize("pseudo", ["", "  ", "marIA", "MARIA", "p1", "game_master", "codex",
+                                    "Jean?x", "Ana#1", "Jean/Paul", "Jean Paul", "<b>x</b>", "a" * 21])
 def test_invalid_pseudo_refused(fake_game, pseudo):
     assert gr.ensure_started(pseudo) == gr.REFUSED_PSEUDO
     assert fake_game["started"] == []
@@ -225,3 +233,8 @@ def test_crash_warns_the_player_and_allows_a_new_game(fake_game):
         assert fake_game["started"] == ["Alex", "Alex"]
         current_session().stop()
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("pseudo", ["Zoé", "Jean-Paul", "O'Neil", "O’Neil", "mad_max42", "a" * 20])
+def test_valid_pseudo_accepted(pseudo):
+    assert gr.can_join(pseudo) is None

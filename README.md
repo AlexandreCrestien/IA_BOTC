@@ -34,7 +34,7 @@ Provocateur, Parano, Bouffon, Stratège et Observateur (fichiers dans `skills/pe
 - Si un joueur (IA) fait un choix de nuit invalide ou n'en fait pas, un choix légal est tiré au hasard. Personne ne peut voter contre soi-même ; un vote pour soi, pour un joueur mort ou inconnu compte comme une abstention.
 - Les morts restent dans la partie : ils parlent toujours et gardent un dernier vote, leur voix d'outre-tombe.
 - Tout le monde, IA comprises, apprend les morts de la nuit, les votes de chacun et les exécutions. Les informations de rôle (Médium, Inquisiteur, alliés du mal) restent personnelles.
-- **Victoire :** le bien gagne si le Faucheur meurt ; le mal gagne s'il ne reste aucun joueur du bien vivant.
+- **Victoire :** le bien gagne si le Faucheur meurt ; le mal gagne s'il ne reste plus aucun joueur du bien en vie, ou s'il n'en reste qu'un seul après le vote (le Faucheur le tuerait la nuit suivante, la partie s'arrête là).
 
 ## Stack technique
 

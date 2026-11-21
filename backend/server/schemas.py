@@ -136,7 +136,7 @@ class Ally(OutMessage):
 class Ballot(OutMessage):
     voter: str
     target: Optional[str] = Field(..., description="None : vote pour personne")
-    ghost: bool = Field(..., description="Le votant était déjà mort : voix d'outre-tombe")
+    ghost: bool = Field(..., description="Votant déjà mort qui a voté : voix d'outre-tombe utilisée")
     unavailable: bool = Field(default=False, description="L'IA du votant n'a pas répondu : abstention forcée")
 
 

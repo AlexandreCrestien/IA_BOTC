@@ -87,7 +87,7 @@ Toute information de la partie est un **événement**, et chaque événement ind
 | Champ | Type | Sens |
 |---|---|---|
 | `turn` | `int` | Numéro du tour (nuit N, puis jour N) |
-| `phase` | `Phase` | `NUIT`, `DISCUSSION` ou `VOTE` |
+| `phase` | `Phase` | `NIGHT`, `DISCUSSION` ou `VOTE` |
 | `type` | `EventType` | `death`, `public_message`, `private_meeting`, `private_summary`, `vote`, `night_action`, `role_info` |
 | `author_id` | `str \| None` | Id d'un joueur ; `None` = le Maître du Jeu |
 | `content` | `str` | Le texte de l'événement |
@@ -246,6 +246,7 @@ DISCUSSION  memory.set_moment(tour, DISCUSSION)
             (humain : message public, puis salon privé avec 1 ou 2 agents (vivants ou morts), 3 messages au plus)
 VOTE        memory.set_moment(tour, VOTE)
             collect_ai_votes                agent.vote(noms) → id ou None
+            (Valet lié à un maître)         vote après les autres, seulement si son maître a voté
             (humain : human.vote)
             play_day                        vote pour un mort ou un inconnu → abstention
             victoire ? → fin, sinon nuit suivante

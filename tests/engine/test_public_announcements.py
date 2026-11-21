@@ -1,5 +1,5 @@
 """Morts de la nuit, votes et exécutions : annoncés publiquement dans la mémoire de tous les joueurs."""
-from backend.engine.steps import record_night_deaths, record_vote
+from backend.engine.steps import Ballot, record_night_deaths, record_vote, vote_ballots
 from backend.ai.memory_manager import MemoryManager
 from backend.models import EventType, GameState, Phase, Player
 from backend.rules import get_role
@@ -57,3 +57,31 @@ def test_ghost_abstention_is_not_marked():
     memory = make_memory()
     record_vote(make_state(dead=["d"]), {"d": None}, None, memory)
     assert public_lines(memory)[0] == (EventType.VOTE, "Votes : Dan → personne.")
+
+
+# --- Bulletins : seuls les votes qui comptent utilisent la voix d'outre-tombe ------------
+
+
+def make_state_with_valet(dead=()):
+    """Partie avec un Valet (v) dont le maître est Ada (a)."""
+    players = tuple(Player(id=pid, name=NAMES[pid], role=get_role(ROLES[pid]), alive=pid not in dead)
+                    for pid in NAMES)
+    valet = Player(id="v", name="Val", role=get_role("valet"), alive="v" not in dead, links={"master": "a"})
+    return GameState(turn=2, phase=Phase.VOTE, players=players + (valet,))
+
+
+def test_ballots_follow_the_valet_rule_without_revealing_anything():
+    """Par sécurité : si un vote de Valet bloqué arrivait quand même, il apparaîtrait comme une simple
+    abstention (aucune mention qui révélerait son rôle) et n'utiliserait pas de voix d'outre-tombe."""
+    state = make_state_with_valet(dead=["v"])
+    [ballot] = [b for b in vote_ballots(state, {"a": None, "v": "c"}) if b.voter == "v"]
+    assert ballot == Ballot("v", None, ghost=False)
+    memory = make_memory()
+    record_vote(state, {"a": None, "b": "c", "v": "c"}, None, memory)
+    assert public_lines(memory)[0] == (EventType.VOTE, "Votes : Ada → personne, Bob → Cléo, Val → personne.")
+
+
+def test_dead_player_abstaining_does_not_use_his_ghost_vote():
+    """Bug corrigé : un mort qui s'abstenait était marqué « outre-tombe » à l'écran."""
+    ballots = vote_ballots(make_state(dead=["d"]), {"d": None, "a": "b"})
+    assert ballots[0] == Ballot("d", None, ghost=False)

@@ -29,11 +29,12 @@ from backend.engine.steps import (
     record_night_choices,
     record_night_deaths,
     record_vote,
+    vote_ballots,
     reveal_medium_answer,
 )
 from backend.ai.memory_manager import MemoryManager
 from backend.models import Team, EventType, GameState, Phase
-from backend.rules import night_steps, winner
+from backend.rules import bound_valets, night_steps, winner
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,7 @@ class HumanPort(Protocol):
     async def show_agent_meeting(self, state: GameState, agent_ids: tuple[str, str]) -> None: ...
     async def vote(self, state: GameState, player_id: str) -> Optional[str]: ...
     async def show_agent_unavailable(self, state: GameState, agent_id: str, step: str) -> None: ...
+    async def show_valet_blocked(self, state: GameState, master_id: str) -> None: ...
 
 
 def _human_must_choose(state: GameState, player_id: str) -> bool:
@@ -179,6 +181,30 @@ async def _private_channel(
         await whisper  # les deux agents votent en se souvenant de leur conversation
 
 
+async def _collect_votes(state: GameState, agents: dict, human_id: str,
+                         human: HumanPort) -> tuple[dict[str, Optional[str]], list[str]]:
+    """Votes du jour : IA en parallèle, puis l'humain. Les Valets liés à un maître votent ensuite,
+    seulement si leur maître a voté (sinon ils s'abstiennent, sans appel LLM ni demande à l'humain).
+    Renvoie ({votant: cible ou None}, IA dont le vote a échoué)."""
+    bound = bound_valets(state)
+    failures: list[str] = []
+    answers = await collect_ai_votes(state, {pid: a for pid, a in agents.items() if pid not in bound},
+                                           failures=failures)
+    if state.player(human_id).can_vote and human_id not in bound:
+        answers[human_id] = await human.vote(state, human_id)
+    for valet_id, master_id in bound.items():
+        if answers.get(master_id) is None:
+            answers[valet_id] = None  # son maître n'a pas voté : le Valet ne peut pas voter
+            if valet_id == human_id:
+                await human.show_valet_blocked(state, master_id)
+        elif valet_id == human_id:
+            answers[valet_id] = await human.vote(state, human_id)
+        elif valet_id in agents:
+            answers.update(await collect_ai_votes(state, {valet_id: agents[valet_id]}, failures=failures))
+    await _report_failures(state, human, failures, "vote")
+    return answers, failures
+
+
 async def play_turn(
     state: GameState,
     rng: random.Random,
@@ -243,17 +269,12 @@ async def play_turn(
     # VOTE : IA en parallèle, puis l'humain (un mort vote par voix d'outre-tombe)
     day_state = discussion.next_phase()
     memory.set_moment(day_state.turn, day_state.phase)
-    vote_failures: list[str] = []
-    ai_votes = await collect_ai_votes(day_state, agents, failures=vote_failures)
-    await _report_failures(day_state, human, vote_failures, "vote")
-    human_vote: dict[str, Optional[str]] = {}
-    if day_state.player(human_id).can_vote:
-        human_vote[human_id] = await human.vote(day_state, human_id)
-    vote_answers = {**ai_votes, **human_vote}
+    vote_answers, vote_failures = await _collect_votes(day_state, agents, human_id, human)
     after_day, votes, executed = play_day(day_state, lambda s, pid: vote_answers.get(pid))
     record_vote(day_state, votes, executed, memory)
+    ballots = vote_ballots(day_state, votes)
     game_winner = winner(after_day)
     if game_winner is None:
         after_day = after_day.next_phase()
     return TurnResult(after_day, night_choices, votes, executed, night_deaths, game_winner,
-                      frozenset(vote_failures))
+                      frozenset(vote_failures), ballots)

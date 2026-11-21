@@ -22,6 +22,18 @@ def master_of(state: GameState, valet_id: str) -> Optional[str]:
     return state.player(valet_id).links.get(MASTER_KEY)
 
 
+def bound_valets(state: GameState) -> dict[str, str]:
+    """Valets qui ne peuvent voter que si leur maître vote : {valet: maître}.
+    Le moteur les fait voter après les autres, et seulement si leur maître a voté (pas d'appel inutile).
+    N'y figurent pas : un Valet qui ne peut pas voter, sans maître, ou empoisonné (jamais bloqué)."""
+    return {
+        player.id: master_of(state, player.id)
+        for player in state.players
+        if player.role.name_EN == RoleKey.VALET and player.can_vote
+        and master_of(state, player.id) is not None and not is_poisoned(player)
+    }
+
+
 def filter_valet_votes(state: GameState, votes: dict[str, Optional[str]]) -> dict[str, Optional[str]]:
     """Un Valet ne peut voter que si son maître vote. Sinon son vote devient une abstention.
     Un Valet empoisonné n'est jamais bloqué : son vote passe toujours."""

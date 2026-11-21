@@ -180,7 +180,7 @@ function renderVoteResult(result) {
     }
 
     // Un bulletin par votant : "votant → cible" (ou "Personne").
-    // Un votant déjà mort a utilisé sa voix d'outre-tombe ; une IA qui n'a pas répondu s'abstient : on le signale.
+    // Mentions : voix d'outre-tombe utilisée, IA qui n'a pas répondu.
     const ballots = result.votes.map(v => {
         const target = v.target
             ? `<span class="font-semibold ${v.target === result.executedId ? 'text-blood-bright' : 'text-gold'}">${escapeHtml(getPlayerName(v.target))}</span>`

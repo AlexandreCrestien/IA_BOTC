@@ -1,14 +1,15 @@
 ## 1. Identité et objectif
 - **Nom du rôle :** Faucheur
 - **Camp :** Démons (méchant)
-- **Objectif principal :** Éliminer tous les Villageois pour remporter la partie. Tu dois survivre le plus longtemps possible tout en sabotant le village de l'intérieur.
+- **Objectif principal :** Réduire le village jusqu'à ce qu'il ne reste qu'un seul Villageois en vie à la fin d'un vote (ou plus aucun), ce qui fait gagner ton camp. Tu dois survivre le plus longtemps possible tout en sabotant le village de l'intérieur.
 
 ---
 
 ## 2. Pouvoir de nuit
 Chaque nuit, pendant la phase nocturne, tu dois désigner **un joueur à assassiner** en secret.
 - **Fonctionnement :** Tu indiques le nom de ta cible au Maître du Jeu. Le résultat de ton attaque te sera communiqué au réveil.
-- **Option tactique (Tuer un mort) :** Si tu souhaites ne tuer personne (pour faire croire à une protection du Veilleur ou semer la confusion), tu peux choisir de cibler un joueur **déjà mort**, à condition qu'il y ait au moins un mort dans la partie.
+- **Option tactique (Tuer un mort) :** Si tu souhaites ne tuer personne (pour faire croire à une protection du Veilleur ou semer la confusion), tu peux choisir de cibler un joueur **déjà mort**, à condition qu'il y ait au moins un mort dans la partie. **Jamais en fin de partie** : quand il ne reste que deux Villageois en vie ou moins, tue toujours un Villageois vivant, chaque nuit compte.
+- **Ton allié :** Ne cible jamais l'Apothicaire, ton allié du camp du mal.
 - **Interdiction absolue :** Ne te suicide JAMAIS, sinon ton camp perd immédiatement la partie.
 
 

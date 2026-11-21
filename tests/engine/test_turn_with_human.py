@@ -90,6 +90,9 @@ class FakeHuman:
     async def show_agent_meeting(self, state, agent_ids):
         self.meetings_seen.append(agent_ids)
 
+    async def show_valet_blocked(self, state, master_id):
+        self.valet_blocked_by = master_id
+
     async def show_agent_unavailable(self, state, agent_id, step):
         self.unavailable_seen.append((agent_id, step))
 
@@ -311,5 +314,7 @@ def test_unavailable_agents_are_reported_at_each_step():
     # Une seule annonce par agent pendant la discussion publique
     public = [pid for pid, step in human.unavailable_seen if step == "public"]
     assert len(public) == len(set(public)) == len(agents)
-    # Tous les agents qui ont voté sont en échec : marqués pour le bulletin, l'humain non
-    assert result.vote_failures == frozenset(pid for pid in result.votes if pid != HUMAN_ID)
+    # Tous les agents interrogés sont en échec : marqués pour le bulletin, l'humain non. Le Valet n'est pas
+    # interrogé : son maître, en échec, s'est abstenu
+    asked = {pid for pid in result.votes if pid != HUMAN_ID and state.player(pid).role.name_EN != "valet"}
+    assert result.vote_failures == frozenset(asked)

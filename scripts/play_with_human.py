@@ -116,6 +116,9 @@ class TerminalHuman:
         first, second = (state.player(pid).name for pid in agent_ids)
         print(f"[Codex] {first} et {second} se sont entretenus en privé.")
 
+    async def show_valet_blocked(self, state, master_id):
+        print(f"[Valet] Ton maître, {state.player(master_id).name}, n'a pas voté : tu ne peux pas voter aujourd'hui.")
+
     async def show_agent_unavailable(self, state, agent_id, step):
         if step != "night":  # la nuit, l'annoncer révélerait que l'agent a un pouvoir
             print(f"[Codex] {state.player(agent_id).name} n'a pas répondu (IA indisponible).")

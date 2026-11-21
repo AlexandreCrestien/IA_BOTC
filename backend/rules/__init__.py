@@ -1,5 +1,5 @@
 from backend.rules.actions import LegalAction, legal_actions
-from backend.rules.valet import choose_master, filter_valet_votes, master_of
+from backend.rules.valet import bound_valets, choose_master, filter_valet_votes, master_of
 from backend.rules.catalogue import ROLES, SIX_PLAYER_ROLES, get_role
 from backend.rules.distribution import Assignment, assign_players, choose_false_lead, distribute_roles
 from backend.rules.fallback import random_legal_choice
@@ -14,6 +14,7 @@ from backend.rules.victory import winner
 from backend.rules.vote import resolve_vote, vote_result, vote_targets
 
 __all__ = [
+    "bound_valets",
     "Assignment",
     "FirstNightInfo",
     "LegalAction",

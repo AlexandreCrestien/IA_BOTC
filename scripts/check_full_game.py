@@ -565,6 +565,9 @@ class Game:
             r.note("passer le message public non testé : partie trop courte")
         if self.discussions < 2:
             r.note("« Passer au vote » non testé : partie trop courte")
+        else:
+            r.check(self.private_skipped >= 1, "« Passer au vote » testé au moins une fois",
+                    f"{self.discussions} discussions, aucun passage au vote")
         if self.discussions < 3:
             r.note("fin anticipée d'un salon privé non testée : partie trop courte")
             r.note("proposition d'entretien d'un agent non testée : partie trop courte")

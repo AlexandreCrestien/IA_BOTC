@@ -6,6 +6,7 @@ from typing import Callable, NamedTuple, Optional
 from backend.ai.memory_manager import MemoryManager, game_master
 from backend.models import Alignment, EventType, GameState, RoleKey
 from backend.rules import (
+    filter_valet_votes,
     legal_actions,
     night_steps,
     random_legal_choice,
@@ -22,6 +23,13 @@ ChoiceFn = Callable[[GameState, str], tuple[str, ...]]
 VoteFn = Callable[[GameState, str], Optional[str]]
 
 
+class Ballot(NamedTuple):
+    """Bulletin d'un votant, tel que tout le monde le voit."""
+    voter: str
+    target: Optional[str]  # vote qui compte (None : personne)
+    ghost: bool            # votant déjà mort qui a voté : il utilise sa voix d'outre-tombe
+
+
 class TurnResult(NamedTuple):
     state: GameState
     night_choices: dict[str, tuple[str, ...]]
@@ -31,6 +39,8 @@ class TurnResult(NamedTuple):
     game_winner: Optional[Alignment]
     # Agents dont l'IA n'a pas répondu au vote : leur abstention est signalée sur le bulletin
     vote_failures: frozenset[str] = frozenset()
+    # Bulletins du vote (vote_ballots) : seule source de la mention outre-tombe
+    ballots: tuple[Ballot, ...] = ()
 
 
 def _is_valid_choice(state: GameState, player_id: str, choice: tuple[str, ...]) -> bool:
@@ -143,18 +153,28 @@ def record_night_deaths(state: GameState, deaths: tuple[str, ...], memory: Memor
         memory.add_public(EventType.DEATH, game_master, f"{state.player(player_id).name} est mort·e cette nuit.")
 
 
+def vote_ballots(state: GameState, votes: dict[str, Optional[str]]) -> tuple[Ballot, ...]:
+    """Bulletins du vote, à partir des votes qui comptent (règle du Valet appliquée par sécurité :
+    le moteur ne demande au Valet de voter que si son maître a voté, il n'y a donc rien à annuler).
+    state = état au moment du vote, avant l'exécution. Une abstention n'utilise pas la voix d'outre-tombe."""
+    counted = filter_valet_votes(state, votes)
+    return tuple(
+        Ballot(voter_id, target_id, ghost=target_id is not None and not state.player(voter_id).alive)
+        for voter_id, target_id in counted.items()
+    )
+
+
 def record_vote(state: GameState, votes: dict[str, Optional[str]], executed: Optional[str],
                 memory: MemoryManager) -> None:
     """Annonce publique du vote : le bulletin de chaque votant, puis l'exécution.
-    state = état au moment du vote (avant l'exécution) : un votant déjà mort a utilisé sa voix d'outre-tombe."""
+    state = état au moment du vote (avant l'exécution)."""
     if votes:
-        ballots = []
-        for voter_id, target_id in votes.items():
-            voter = state.player(voter_id)
-            target = state.player(target_id).name if target_id else "personne"
-            ghost = " (voix d'outre-tombe)" if target_id and not voter.alive else ""
-            ballots.append(f"{voter.name} → {target}{ghost}")
-        memory.add_public(EventType.VOTE, game_master, f"Votes : {', '.join(ballots)}.")
+        lines = []
+        for ballot in vote_ballots(state, votes):
+            target = state.player(ballot.target).name if ballot.target else "personne"
+            mention = " (voix d'outre-tombe)" if ballot.ghost else ""
+            lines.append(f"{state.player(ballot.voter).name} → {target}{mention}")
+        memory.add_public(EventType.VOTE, game_master, f"Votes : {', '.join(lines)}.")
     else:
         memory.add_public(EventType.VOTE, game_master, "Personne n'a pu voter.")
     if executed is None:

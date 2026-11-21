@@ -35,6 +35,7 @@ class AutoHumanPort:
         return None
 
     async def show_agent_unavailable(self, state, agent_id, step) -> None: ...
+    async def show_valet_blocked(self, state, master_id) -> None: ...
 
 
 class QueueHumanPort:
@@ -100,6 +101,10 @@ class QueueHumanPort:
     async def show_agent_unavailable(self, state: GameState, agent_id: str, step: str) -> None:
         """L'IA d'un agent n'a pas répondu (step : night, public, private, vote). Le serveur décide quoi montrer."""
         await self._tell("agent_unavailable", state, agent=agent_id, step=step)
+
+    async def show_valet_blocked(self, state: GameState, master_id: str) -> None:
+        """Le joueur est le Valet et son maître n'a pas voté : il ne vote pas ce tour-ci."""
+        await self._tell("valet_blocked", state, master=master_id)
 
     async def show_game_over(self, state: GameState, winner: str, details: str) -> None:
         """Fin de partie : winner = "good" | "evil". Posé par game_runner."""

@@ -17,7 +17,7 @@ Connexion : `ws://<serveur>/ws/<pseudo>`. Un seul joueur humain et une seule par
 
 ## Connexion
 
-1. Pseudo refusé (vide, réservé, nom d'un agent) ou partie en cours d'un autre joueur : la connexion est acceptée puis fermée avec le code **4001**, le motif dans `reason`.
+1. Pseudo refusé (hors format : 1 à 20 caractères parmi lettres, chiffres, `-`, `_` et apostrophes ; réservé ; nom d'un agent) ou partie en cours d'un autre joueur : la connexion est acceptée puis fermée avec le code **4001**, le motif dans `reason`.
 2. Sinon : `connected`, puis lancement d'une nouvelle partie ou reprise de la partie en cours.
 3. Reprise (rechargement, coupure) : `role_assigned` (avec `allies` si déjà révélés), `game_state`, les salons privés (`private_channel_opened` avec `focus: false`), tout le chat, `history`, puis la demande en attente du moteur, renvoyée telle quelle.
 
@@ -53,7 +53,7 @@ Une action hors de son moment, ou avec un choix non proposé, reçoit un message
 | `night_info` | `turn`, `info`, `allies` | Information de nuit ; `allies` [`id`, `role`] pour le camp du mal, la première nuit |
 | `night_result` | `turn`, `dead_player` (id ou `null`) | Réveil du village |
 | `night_action_ack` | `text` | Choix de nuit bien reçu |
-| `vote_result` | `turn`, `executed` (id ou `null`), `votes` [`voter`, `target`, `ghost`, `unavailable`] | Résultat du vote ; `ghost` : voix d'outre-tombe ; `unavailable` : l'IA du votant n'a pas répondu (abstention forcée) |
+| `vote_result` | `turn`, `executed` (id ou `null`), `votes` [`voter`, `target`, `ghost`, `unavailable`] | Résultat du vote ; `ghost` : voix d'outre-tombe utilisée ; `unavailable` : l'IA du votant n'a pas répondu (abstention forcée) |
 | `history` | `nights` [`turn`, `type` (`role_info` / `result`), `info`, `dead_player`], `votes` [`turn`, `voter`, `target`, `executed`, `unavailable`] | Onglets Nuits et Votes, à la reconnexion |
 | `announcement` | `text` | Annonce courte (bandeau central) |
 | `error` | `data` | Action refusée ou invalide |

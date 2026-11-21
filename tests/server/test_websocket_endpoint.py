@@ -388,3 +388,10 @@ def test_banner_once_when_failures_pile_up():
     sent = relay(session, failure, failure, failure, failure)
     assert sent == [{"type": "announcement",
                      "text": "Les IA rencontrent des difficultés : la partie continue avec des réponses de secours."}]
+
+
+def test_human_valet_privately_told_he_cannot_vote():
+    session = waiting()
+    sent = relay(session, {"kind": "valet_blocked", "master": "p1"})
+    assert sent == [{"type": "announcement",
+                     "text": "Votre maître, marIA, n'a pas voté : en tant que Valet, vous ne pouvez pas voter aujourd'hui."}]

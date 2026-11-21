@@ -3,6 +3,7 @@ Une seule partie à la fois : la session courante (backend/server/session.py).""
 import asyncio
 import logging
 import random
+import re
 from typing import Optional
 
 from backend.engine.config import AI_NAMES, PERSONALITY_NAMES
@@ -24,21 +25,20 @@ GAME_CONFIG = {
 WINNER_TEAMS = {Alignment.GOOD: "good", Alignment.EVIL: "evil"}
 
 # Motifs de refus envoyés au front (affichés sur l'écran d'accueil)
-REFUSED_PSEUDO = "Ce pseudo est réservé ou invalide : choisissez-en un autre."
+REFUSED_PSEUDO = ("Pseudo invalide : 1 à 20 caractères parmi lettres, chiffres, tirets, « _ » et apostrophes, "
+                  "et différent du nom d'un personnage.")
+# Pseudo autorisé : lettres (accents compris), chiffres, - _ ' ’ ; 20 caractères au plus.
+# Même règle côté front (static/js/connection.js, PSEUDO_PATTERN).
+PSEUDO_PATTERN = re.compile(r"[\w'’-]{1,20}")
 REFUSED_BUSY = "Une partie est déjà en cours avec un autre joueur."
 
 
-def ballots(state, votes: dict[str, Optional[str]], executed: Optional[str],
-            unavailable: frozenset[str] = frozenset()) -> list[dict]:
-    """Bulletins du tour pour le front. state = état en fin de tour.
-    Voix d'outre-tombe : votant déjà mort au moment du vote. On meurt la nuit (avant le vote) ou par
-    exécution (après) : mort en fin de tour sans avoir été exécuté = déjà mort au moment du vote.
-    unavailable : agents dont l'IA n'a pas répondu (abstention signalée sur le bulletin)."""
-    dead = {p.id for p in state.players if not p.alive}
+def front_ballots(result) -> list[dict]:
+    """Bulletins du tour pour le front, depuis ceux du moteur (mention outre-tombe),
+    plus les agents dont l'IA n'a pas répondu (abstention signalée)."""
     return [
-        {"voter": voter, "target": target, "ghost": voter in dead and voter != executed,
-         "unavailable": voter in unavailable}
-        for voter, target in votes.items()
+        {"voter": b.voter, "target": b.target, "ghost": b.ghost, "unavailable": b.voter in result.vote_failures}
+        for b in result.ballots
     ]
 
 
@@ -54,7 +54,7 @@ async def run_game(session: GameSession, names: dict[str, str], personality_name
         state = result.state
         # Même file que les messages du moteur : le front reçoit tout dans l'ordre
         # (sinon la fin de partie pourrait arriver avant les morts de la dernière nuit).
-        await port.show_turn_result(state, turn, ballots(state, result.votes, result.executed, result.vote_failures), result.executed)
+        await port.show_turn_result(state, turn, front_ballots(result), result.executed)
 
         if result.game_winner is not None:
             logger.info("Partie terminée, vainqueur : %s", result.game_winner)
@@ -90,10 +90,10 @@ def _game_running() -> bool:
 
 
 def _pseudo_is_valid(pseudo: str) -> bool:
-    """Refuse un pseudo vide, réservé, ou déjà pris par un agent (sans tenir compte de la casse)."""
+    """Refuse un pseudo hors format (PSEUDO_PATTERN), réservé, ou déjà pris par un agent (sans tenir compte de la casse)."""
     taken = {k.casefold() for k in AI_NAMES} | {v.casefold() for v in AI_NAMES.values()}
     taken |= {"game_master", CODEX.casefold()}
-    return pseudo.strip() != "" and pseudo.casefold() not in taken
+    return PSEUDO_PATTERN.fullmatch(pseudo) is not None and pseudo.casefold() not in taken
 
 
 def can_join(player_id: str) -> Optional[str]:

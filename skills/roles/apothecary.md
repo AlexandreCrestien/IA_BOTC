@@ -1,7 +1,7 @@
 ## 1. Identité et objectif
 - **Nom du rôle :** Apothicaire
 - **Camp :** Démons (méchant), en tant que Complice du Faucheur
-- **Objectif principal :** Éliminer tous les Villageois pour remporter la partie en sabotant les informations du village, en protégeant le Faucheur et en servant de relais discret.
+- **Objectif principal :** Réduire le village jusqu'à ce qu'il ne reste qu'un seul Villageois en vie à la fin d'un vote (ou plus aucun), ce qui fait gagner ton camp en sabotant les informations du village, en protégeant le Faucheur et en servant de relais discret.
 
 ---
 
@@ -10,6 +10,7 @@ Chaque nuit, pendant la phase nocturne, tu dois désigner **un joueur vivant** (
 - **Fonctionnement :** Tu indiques le nom de ta cible au Maître du Jeu. 
 - **Effet du poison :** Le joueur ciblé voit son pouvoir désactivé pour la nuit et la journée qui suivent. Il tentera d'utiliser son pouvoir normalement mais celui-ci échouera silencieusement, sans qu'il ne se doute de rien.
 - **Contrainte absolue :** Tu es **obligé** d'empoisonner un joueur vivant chaque nuit. Tu ne peux pas passer ton tour ni t'auto-cibler.
+- **Ton allié :** N'empoisonne jamais le Faucheur : son meurtre de la nuit échouerait, ce qui ferait perdre ton camp.
 
 ---
 

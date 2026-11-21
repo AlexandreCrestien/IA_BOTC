@@ -194,6 +194,12 @@ async def send_request(session: GameSession, request: dict) -> None:
         await send_chat(session, PUBLIC_CHANNEL, CODEX,
                         f"💬 {first} et {second} se sont entretenus en privé.", broadcast=True)
 
+    elif kind == "valet_blocked":
+        # Le joueur est le Valet et son maître n'a pas voté : information privée (il connaît son rôle)
+        master = state.player(request["master"]).name
+        await send(human, Announcement(
+            text=f"Votre maître, {master}, n'a pas voté : en tant que Valet, vous ne pouvez pas voter aujourd'hui."))
+
     elif kind == "agent_unavailable":
         await report_agent_unavailable(session, state, request["agent"], request["step"])
 
