@@ -88,7 +88,7 @@ Toute information de la partie est un **événement**, et chaque événement ind
 |---|---|---|
 | `turn` | `int` | Numéro du tour (nuit N, puis jour N) |
 | `phase` | `Phase` | `NUIT`, `DISCUSSION` ou `VOTE` |
-| `type` | `EventType` | `announcement`, `death`, `public_message`, `private_meeting`, `private_summary`, `nomination`, `vote`, `night_action`, `night_info`, `role_info` |
+| `type` | `EventType` | `death`, `public_message`, `private_meeting`, `private_summary`, `vote`, `night_action`, `role_info` |
 | `author_id` | `str \| None` | Id d'un joueur ; `None` = le Maître du Jeu |
 | `content` | `str` | Le texte de l'événement |
 | `visible_to` | `frozenset[str] \| None` | `None` = tout le monde ; sinon, les ids qui peuvent le voir |
@@ -214,7 +214,7 @@ Une personnalité absente du tableau parle en dernier, sans obligation.
 |---|---|
 | `choose_agent_for_human(agents, human_id, memory)` | Quand l'humain n'a choisi personne : choisit l'agent qui vient lui parler. Priorité à ceux qui n'ont jamais discuté avec lui (`private_partners`), puis la personnalité la plus bavarde. Les agents morts restent candidats ; le rôle n'est jamais pris en compte (ce serait un indice). |
 | `await start_private_conversation(human_id, partners, memory, agent_speaks_first=False)` | Ouvre la conversation avec 1 ou 2 agents. Annonce en public « Conversation privée entre … », sans le contenu. Avec `agent_speaks_first=True`, l'agent ouvre la conversation. |
-| `await private_message(human_id, text, partners, memory)` | L'humain envoie un message ; chaque agent répond à son tour. Appelé à chaque message de l'humain. |
+| `await private_replies(human_id, partners, memory, opening=False)` | Réponses des agents du salon privé, en parallèle à partir du même contexte, enregistrées ensuite dans l'ordre. Appelé à chaque message de l'humain (et avec `opening=True` quand l'agent ouvre la conversation). |
 
 - Les messages privés (de l'humain et des agents) sont enregistrés en `private_summary`, visibles seulement des participants.
 - Chaque réponse est enregistrée tout de suite : dans une conversation à trois, le second agent voit la réponse du premier.

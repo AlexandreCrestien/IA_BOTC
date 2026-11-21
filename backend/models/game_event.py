@@ -21,8 +21,3 @@ class GameEvent(BaseModel):
     # Texte rédigé par le moteur. Il ne doit contenir que ce que les lecteurs ont le droit de savoir.
     content: str = Field(min_length=1)
     visible_to: Optional[frozenset[str]] = None
-
-    def is_visible_to(self, player_id: str) -> bool:
-        if self.visible_to is None:
-            return True
-        return player_id in self.visible_to

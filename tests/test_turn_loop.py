@@ -20,7 +20,7 @@ def full_game() -> GameState:
         make_player("e", "detective"),
         make_player("f", "butler"),
     )
-    return GameState(turn=2, phase=Phase.NUIT, players=players, channels=(), log=())
+    return GameState(turn=2, phase=Phase.NUIT, players=players)
 
 
 def test_turn_without_death_moves_to_next_night():

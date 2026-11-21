@@ -3,8 +3,6 @@ import asyncio
 import random
 from collections import Counter
 
-import pytest
-
 import backend.agent_whispers as aw
 from backend.memory_manager import MemoryManager
 from backend.models import EventType, GameState, Phase, Player

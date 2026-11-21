@@ -47,6 +47,12 @@ def _info_text(state: GameState, info) -> str:
     return f"Première nuit : parmi {subjects}, l'un d'eux est l'Empoisonneur."
 
 
+def check_unique_names(names: dict[str, str]) -> None:
+    """Les noms servent à traduire les réponses des IA : ils doivent être uniques (sans tenir compte de la casse)."""
+    if len({name.casefold() for name in names.values()}) != len(names):
+        raise ValueError("noms de joueurs en double")
+
+
 def setup_game(
     names: dict[str, str],
     human_id: str,
@@ -56,13 +62,14 @@ def setup_game(
 ):
     """Met en place une partie : rôles, personnalités, fausse piste de la Voyante,
     agents IA et infos de première nuit. Renvoie (état, agents, mémoire)."""
+    check_unique_names(names)
     assignments = assign_players(names, human_id, personality_names, rng)
 
     players = tuple(
         Player(id=player_id, name=name, role=Role(**role_data))
         for player_id, (name, role_data, _) in assignments.items()
     )
-    state = GameState(turn=1, phase=Phase.NUIT, players=players, channels=())
+    state = GameState(turn=1, phase=Phase.NUIT, players=players)
 
     roles = {player.id: player.role for player in players}
     false_lead = choose_false_lead(roles, rng)
@@ -144,7 +151,8 @@ def play_day(
     return resolve_vote(state, votes), votes, executed
 
 
-def _deaths(before: GameState, after: GameState) -> tuple[str, ...]:
+def deaths_between(before: GameState, after: GameState) -> tuple[str, ...]:
+    """Joueurs vivants dans `before` et morts dans `after` (ex. les morts de la nuit)."""
     return tuple(
         player.id
         for player in before.players
@@ -164,7 +172,7 @@ def play_turn(
         raise ValueError("un tour commence par la nuit")
 
     after_night, night_choices = play_night(state, rng, night_choose)
-    night_deaths = _deaths(state, after_night)
+    night_deaths = deaths_between(state, after_night)
     if winner(after_night) is not None:
         return TurnResult(after_night, night_choices, {}, None, night_deaths, winner(after_night))
 

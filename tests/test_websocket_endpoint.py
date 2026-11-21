@@ -16,22 +16,8 @@ def make_client() -> TestClient:
     return TestClient(app)
 
 
-def setup_function():
-    ws.ports.clear()
-    ws.pending.clear()
-    ws.current_request.clear()
-    ws.whispers.clear()
-    ws.whisper_left.clear()
-    ws.chat_log.clear()
-    ws.opened_channels.clear()
-    ws.known_allies.clear()
-    ws.night_log.clear()
-    ws.vote_log.clear()
-    ws.roles_sent.clear()
-
-
 @pytest.fixture(autouse=True)
-def no_real_game(monkeypatch):
+def no_real_game(monkeypatch, clean_server):
     """Se connecter ne doit pas lancer une vraie partie : le port est fourni par chaque test."""
     monkeypatch.setattr(game_runner, "ensure_started", lambda player_id: None)
 

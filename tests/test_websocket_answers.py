@@ -1,19 +1,12 @@
 import asyncio
 
+import pytest
+
 from backend.human_port import QueueHumanPort
 from backend.server import websockets as ws
 
 
-def setup_function():
-    ws.ports.clear()
-    ws.pending.clear()
-    ws.current_request.clear()
-    ws.whispers.clear()
-    ws.chat_log.clear()
-    ws.opened_channels.clear()
-    ws.known_allies.clear()
-    ws.night_log.clear()
-    ws.vote_log.clear()
+pytestmark = pytest.mark.usefixtures("clean_server")
 
 
 def test_reponse_acceptee_pour_la_demande_attendue():

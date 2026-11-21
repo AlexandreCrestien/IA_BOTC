@@ -11,7 +11,7 @@ ROLES = {"a": "imp", "b": "poisoner", "c": "monk", "d": "psychic"}
 def make_state(dead=()):
     players = tuple(Player(id=pid, name=NAMES[pid], role=get_role(ROLES[pid]), alive=pid not in dead)
                     for pid in NAMES)
-    return GameState(turn=2, phase=Phase.VOTE, players=players, channels=())
+    return GameState(turn=2, phase=Phase.VOTE, players=players)
 
 
 def make_memory(phase=Phase.VOTE):

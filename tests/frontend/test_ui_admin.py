@@ -66,12 +66,11 @@ def test_rejected_token_returns_to_login(page, static_url):
     assert page.evaluate("localStorage.getItem('botc_admin_token')") is None
 
 
-def test_empty_api_response_shows_notice(page, static_url):
-    # La route renvoie aujourd'hui null (TODO côté serveur)
+def test_unexpected_api_response_shows_notice(page, static_url):
     mock_api(page, body=None)
     login(page, static_url)
 
-    expect(page.locator("#no-data-notice")).to_contain_text("ne renvoie pas encore de données")
+    expect(page.locator("#no-data-notice")).to_have_text("Réponse inattendue du serveur.")
     expect(page.locator("#stat-turn-phase")).to_have_text("—")
 
 

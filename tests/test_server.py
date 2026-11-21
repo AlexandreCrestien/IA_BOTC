@@ -40,16 +40,10 @@ def clean_manager():
 
 
 @pytest.fixture(autouse=True)
-def no_real_game(monkeypatch):
+def no_real_game(monkeypatch, clean_server):
     """Se connecter au WebSocket ne doit pas lancer une vraie partie (et donc de vrais appels LLM).
     Les états par joueur du serveur sont remis à zéro à chaque test."""
     monkeypatch.setattr(game_runner, "ensure_started", lambda player_id: None)
-    for store in (ws_module.ports, ws_module.pending, ws_module.current_request,
-                  ws_module.whispers, ws_module.whisper_left,
-                  ws_module.chat_log, ws_module.opened_channels, ws_module.known_allies,
-                  ws_module.night_log, ws_module.vote_log):
-        store.clear()
-    ws_module.roles_sent.clear()
 
 
 def waiting_for(player_id: str, kind: str) -> QueueHumanPort:

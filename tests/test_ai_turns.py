@@ -4,11 +4,11 @@ import random
 import pytest
 
 from backend.ai_turns import (
-    check_unique_names,
     collect_ai_night_choices,
     collect_ai_votes,
     play_turn_with_ai,
 )
+from backend.game_engine import check_unique_names
 from backend.memory_manager import MemoryManager
 from backend.models import EventType, GameState, Phase, Player
 from backend.rules import get_role
@@ -19,7 +19,7 @@ ROLES = {"a": "imp", "b": "poisoner", "c": "monk", "d": "psychic", "e": "detecti
 
 def night_game() -> GameState:
     players = tuple(Player(id=pid, name=NAMES[pid], role=get_role(ROLES[pid])) for pid in NAMES)
-    return GameState(turn=2, phase=Phase.NUIT, players=players, channels=())
+    return GameState(turn=2, phase=Phase.NUIT, players=players)
 
 
 class FakeAgent:

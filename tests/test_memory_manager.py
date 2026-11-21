@@ -13,7 +13,7 @@ def contents(events):
 
 
 def test_public_event_is_seen_by_everyone(memory):
-    memory.add_public(EventType.announcement, game_master, "Le jour commence")
+    memory.add_public(EventType.public_message, game_master, "Le jour commence")
     for player in ["ana", "bruno", "carla"]:
         assert contents(memory.events_for(player)) == ["Le jour commence"]
 
@@ -26,7 +26,7 @@ def test_private_event_is_seen_only_by_participants(memory):
 
 
 def test_personal_event_is_seen_only_by_its_player(memory):
-    memory.add_personal(EventType.night_info, game_master, "Ta vision : Oui", "ana")
+    memory.add_personal(EventType.role_info, game_master, "Ta vision : Oui", "ana")
     assert contents(memory.events_for("ana")) == ["Ta vision : Oui"]
     assert memory.events_for("bruno") == []
     assert memory.events_for("carla") == []
@@ -44,7 +44,7 @@ def test_game_master_is_never_added_to_readers(memory):
 
 def test_unknown_reader_raises(memory):
     with pytest.raises(ValueError, match="bruna"):
-        memory.add_personal(EventType.night_info, game_master, "x", "bruna")
+        memory.add_personal(EventType.role_info, game_master, "x", "bruna")
 
 
 def test_empty_readers_raise(memory):
@@ -74,13 +74,13 @@ def test_game_master_id_is_reserved():
 
 def test_events_keep_chronological_order_and_phase(memory):
     memory.set_moment(1, Phase.NUIT)
-    memory.add_public(EventType.announcement, game_master, "Nuit 1")
+    memory.add_public(EventType.public_message, game_master, "Nuit 1")
     memory.set_moment(1, Phase.DISCUSSION)
-    memory.add_public(EventType.announcement, game_master, "Discussion 1")
+    memory.add_public(EventType.public_message, game_master, "Discussion 1")
     memory.set_moment(1, Phase.VOTE)
-    memory.add_public(EventType.announcement, game_master, "Vote 1")
+    memory.add_public(EventType.public_message, game_master, "Vote 1")
     memory.set_moment(2, Phase.NUIT)
-    memory.add_public(EventType.announcement, game_master, "Nuit 2")
+    memory.add_public(EventType.public_message, game_master, "Nuit 2")
 
     events = memory.events_for("ana")
     assert [(e.turn, e.phase) for e in events] == [
@@ -91,7 +91,7 @@ def test_events_keep_chronological_order_and_phase(memory):
     ]
 
 def test_returned_list_does_not_change_memory(memory):
-    memory.add_public(EventType.announcement, game_master, "Le jour commence")
+    memory.add_public(EventType.public_message, game_master, "Le jour commence")
     memory.events_for("ana").clear()
     assert len(memory.events_for("ana")) == 1
 
@@ -99,7 +99,7 @@ def test_returned_list_does_not_change_memory(memory):
 def test_two_games_do_not_share_events():
     game_1 = MemoryManager(["ana", "bruno"])
     game_2 = MemoryManager(["ana", "bruno"])
-    game_1.add_public(EventType.announcement, game_master, "Partie 1")
+    game_1.add_public(EventType.public_message, game_master, "Partie 1")
     assert game_2.events_for("ana") == []
 
 
@@ -140,7 +140,7 @@ def test_names_replace_ids_in_context():
     memory = MemoryManager(["p1", "p2", "p3"], names={"p1": "Ana", "p2": "Bruno", "p3": "Carla"})
     memory.add_private(EventType.private_summary, "p2", "On soupçonne Carla.", {"p1", "p2"})
     memory.add_public(EventType.public_message, "p3", "Bonjour !")
-    memory.add_public(EventType.announcement, game_master, "Le jour se lève.")
+    memory.add_public(EventType.public_message, game_master, "Le jour se lève.")
 
     assert memory.context_for("p1").splitlines() == [
         "[Nuit 1] (privé avec Bruno) Bruno : On soupçonne Carla.",

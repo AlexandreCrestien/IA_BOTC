@@ -1,4 +1,4 @@
-from backend.models import Equipe, Phase, Role, TypeEffet
+from backend.models import Equipe, Phase, Role
 
 # Catalogue des rôles de la partie. La clé correspond au fichier skills/roles/<clé>.md.
 # Pour ajouter un rôle, on ajoute une entrée ici, avec son test.
@@ -8,7 +8,6 @@ ROLES: dict[str, Role] = {
         name_EN="imp",
         team=Equipe.DEMON,
         phase=Phase.NUIT,
-        effects=(TypeEffet.TUE,),
         description="Chaque nuit, choisit un habitant à tuer.",
     ),
     "poisoner": Role(
@@ -16,7 +15,6 @@ ROLES: dict[str, Role] = {
         name_EN="poisoner",
         team=Equipe.SBIRE,
         phase=Phase.NUIT,
-        effects=(TypeEffet.EMPOISONNE,),
         description="Chaque nuit, empoisonne un habitant. Le poison dure jusqu'à la fin de la journée suivante.",
     ),
     "monk": Role(
@@ -24,7 +22,6 @@ ROLES: dict[str, Role] = {
         name_EN="monk",
         team=Equipe.VILLAGEOIS,
         phase=Phase.NUIT,
-        effects=(TypeEffet.PROTEGE,),
         description="Chaque nuit, protège un habitant de l'attaque du diablotin.",
     ),
     "psychic": Role(
@@ -32,7 +29,6 @@ ROLES: dict[str, Role] = {
         name_EN="psychic",
         team=Equipe.VILLAGEOIS,
         phase=Phase.NUIT,
-        effects=(TypeEffet.SONDE,),
         allowed_links=("fausse_piste",),
         description="Chaque nuit, sonde deux joueurs et apprend si l'un d'eux est démon. Une fausse piste est choisie au début de la partie.",
     ),
@@ -41,7 +37,6 @@ ROLES: dict[str, Role] = {
         name_EN="detective",
         team=Equipe.VILLAGEOIS,
         phase=None,
-        effects=(TypeEffet.SONDE,),
         description="Au début de la partie, voit un sbire parmi deux joueurs, dont l'un est choisi au hasard.",
     ),
     "butler": Role(
@@ -49,7 +44,6 @@ ROLES: dict[str, Role] = {
         name_EN="butler",
         team=Equipe.OUTSIDER,
         phase=Phase.NUIT,
-        effects=(),
         allowed_links=("maitre",),
         description="Chaque nuit, choisit un maître. Ne peut voter que si son maître vote aussi.",
     ),

@@ -16,14 +16,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import litellm  # noqa: E402
 
 from backend.ai_turns import play_turn_with_ai  # noqa: E402
+from backend.game_config import AI_NAMES, PERSONALITY_NAMES  # noqa: E402
 from backend.game_engine import setup_game  # noqa: E402
 from backend.models import EventType  # noqa: E402
 
 litellm.suppress_debug_info = True
 
-NAMES = {"h": "alex", "p1": "marIA", "p2": "tobIAs", "p3": "mAIsie", "p4": "adrIAn", "p5": "dIAne"}
+NAMES = {"h": "alex", **AI_NAMES}
 HUMAN_ID = "h"  # pas d'agent : reçoit un choix aléatoire pour l'instant
-PERSONALITIES = ["agitator", "clown", "observer", "paranoid", "strategist"]
+PERSONALITIES = PERSONALITY_NAMES
 MAX_TURNS = 5
 
 # Les logs de LiteLLM (routeur, fallbacks, cooldowns) noient la partie : on ne garde que les avertissements.

@@ -67,7 +67,6 @@ REQUIRED = {
     "game_over": ("winner", "details"),
     "error": ("data",),
     "announcement": ("text",),
-    "phase_update": ("phase",),
     "input_request": ("kind", "channel_id", "text"),
     "history": ("nights", "votes"),
     "game_abandoned": (),
@@ -385,9 +384,6 @@ class Game:
                               f"phase reçue : {self.phase}")
         elif str(channel).startswith("whisper_"):
             self.ai_private_replies += 1
-
-    def on_phase_update(self, msg: dict) -> None:
-        pass
 
     def on_agent_whisper_request(self, msg: dict) -> None:
         """Proposition d'entretien d'un agent : acceptée la première fois, refusée ensuite."""

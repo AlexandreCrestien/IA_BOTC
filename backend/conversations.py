@@ -1,4 +1,5 @@
 
+import asyncio
 import logging
 
 from backend.agent_factory import Agent
@@ -89,23 +90,33 @@ def _check_partners(human_id: str, partners: list[Agent]) -> None:
         raise ValueError("L'humain ne peut pas être son propre interlocuteur")
 
 
-async def _replies(human_id: str, partners: list[Agent], memory: MemoryManager,
-                   opening: bool = False) -> list[tuple[str, str]]:
-    """Chaque agent de la conversation répond à son tour. Chaque réponse est enregistrée tout de suite,
-    pour que le second agent voie la réponse du premier. opening=True : les agents ouvrent la conversation."""
+async def private_replies(human_id: str, partners: list[Agent], memory: MemoryManager,
+                          opening: bool = False) -> list[tuple[str, str]]:
+    """Réponses des agents du salon privé de l'humain. Les agents répondent en même temps,
+    à partir du même contexte ; les réponses sont enregistrées ensuite, dans l'ordre des partenaires.
+    opening=True : les agents ouvrent la conversation (l'humain n'a encore rien dit).
+    Un agent en échec ne répond pas, les autres répondent quand même."""
     participants = {human_id} | {agent.player_id for agent in partners}
-    said: list[tuple[str, str]] = []
-    for agent in partners:
+
+    async def ask(agent: Agent) -> str | None:
+        # speak_private attend des identifiants et récupère les noms lui-même
         others = sorted(participants - {agent.player_id})
         try:
-            text = await (agent.speak_private(others, opening=True) if opening else agent.speak_private(others))
+            if opening:
+                return await agent.speak_private(others, opening=True)
+            return await agent.speak_private(others)
         except Exception:
-            # Filet de sécurité : l'agent ne répond pas, la conversation continue.
             logger.exception("%s n'a pas pu répondre en privé", agent.player_id)
+            return None
+
+    texts = await asyncio.gather(*(ask(agent) for agent in partners))
+    replies = []
+    for agent, text in zip(partners, texts):
+        if text is None:
             continue
         memory.add_private(EventType.private_summary, agent.player_id, text, participants)
-        said.append((agent.player_id, text))
-    return said
+        replies.append((agent.player_id, text))
+    return replies
 
 
 async def start_private_conversation(human_id: str, partners: list[Agent], memory: MemoryManager,
@@ -119,18 +130,5 @@ async def start_private_conversation(human_id: str, partners: list[Agent], memor
     _check_partners(human_id, partners)
     memory.add_meeting([human_id] + [agent.player_id for agent in partners])
     if agent_speaks_first:
-        return await _replies(human_id, partners, memory, opening=True)
+        return await private_replies(human_id, partners, memory, opening=True)
     return []
-
-
-async def private_message(human_id: str, text: str, partners: list[Agent],
-                          memory: MemoryManager) -> list[tuple[str, str]]:
-    """L'humain envoie un message dans sa conversation privée ; chaque agent lui répond.
-
-    Appelé par le serveur à chaque message de l'humain.
-    Renvoie les réponses des agents (id_joueur, texte), pour l'affichage.
-    """
-    _check_partners(human_id, partners)
-    participants = {human_id} | {agent.player_id for agent in partners}
-    memory.add_private(EventType.private_summary, human_id, text, participants)
-    return await _replies(human_id, partners, memory)

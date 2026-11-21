@@ -120,11 +120,10 @@ function showNotice(text) {
 }
 
 // ================= RENDU DU TABLEAU DE BORD =================
-// Les noms de champs acceptés couvrent les variantes prévues côté serveur.
+// Champs envoyés par la route /admin/debug/all-states (backend/server/admin.py)
 function renderDashboard(data) {
     if (!data || typeof data !== 'object') {
-        // La route existe mais ne renvoie encore rien (TODO côté serveur)
-        showNotice("Le serveur ne renvoie pas encore de données : la route /admin/debug/all-states n'est pas encore branchée sur le moteur de jeu.");
+        showNotice("Réponse inattendue du serveur.");
         data = {};
     } else {
         // Aucune partie lancée depuis le démarrage du serveur : message du serveur
@@ -133,15 +132,13 @@ function renderDashboard(data) {
     currentAdminData = data;
 
     // Champ absent → "—" (inconnu), plutôt que 0 qui laisserait croire à une partie vide
-    const agents = data.agents || data.players;
-    const channels = data.channels || data.private_channels;
-    document.getElementById('stat-agents-count').textContent = Array.isArray(agents) ? agents.length : '—';
+    document.getElementById('stat-agents-count').textContent = Array.isArray(data.agents) ? data.agents.length : '—';
     document.getElementById('stat-turn-phase').textContent =
         data.turn != null ? `Tour ${data.turn}${data.phase ? ` · ${data.phase}` : ''}${data.status === 'terminée' ? ' (terminée)' : ''}` : '—';
-    document.getElementById('stat-channels-count').textContent = Array.isArray(channels) ? channels.length : '—';
+    document.getElementById('stat-channels-count').textContent = Array.isArray(data.channels) ? data.channels.length : '—';
 
     renderPlayers(data.players || []);
-    renderPublicHistory(data.public_history || data.public_chat_history || data.history || []);
+    renderPublicHistory(data.public_history || []);
     renderAgents();
     renderNightActions(data.night_actions || []);
     renderNightHistory(data.night_history || []);
@@ -255,8 +252,7 @@ function renderPublicHistory(history) {
 }
 
 function getAgentHistories() {
-    const d = currentAdminData || {};
-    return d.agent_histories || d.llm_memories || d.agents_private_logs || {};
+    return currentAdminData?.agent_histories || {};
 }
 
 // Liste des agents + mémoire de l'agent sélectionné

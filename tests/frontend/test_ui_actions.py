@@ -56,7 +56,7 @@ def test_vote_excludes_player_and_dead_then_shows_loader_and_results(game, serve
 
 def test_next_action_waits_while_a_result_is_displayed(game, server):
     server.send(type="vote_result", turn=2, executed=None, votes=[])
-    server.send(type="phase_update", phase="nuit")
+    server.send(type="game_state", state={"phase": "nuit"})
     server.send(type="action_request", kind="nuit", candidates=ALL_PLAYERS, max_targets=1, role="monk")
 
     expect(game.locator("#dynamic-action-panel")).to_contain_text("Résultats du vote")
@@ -65,7 +65,7 @@ def test_next_action_waits_while_a_result_is_displayed(game, server):
 
 
 def test_night_action_needs_exact_targets_and_shows_server_answer(game, server):
-    server.send(type="phase_update", phase="nuit")
+    server.send(type="game_state", state={"phase": "nuit"})
     server.send(type="action_request", kind="nuit", candidates=ALL_PLAYERS, max_targets=2, role="psychic")
     expect(game.locator("#dynamic-action-panel")).to_contain_text("Pouvoir : Voyante")
 
@@ -81,7 +81,7 @@ def test_night_action_needs_exact_targets_and_shows_server_answer(game, server):
 
 
 def test_server_error_lets_the_player_choose_again(game, server):
-    server.send(type="phase_update", phase="nuit")
+    server.send(type="game_state", state={"phase": "nuit"})
     server.send(type="action_request", kind="nuit", candidates=ALL_PLAYERS, max_targets=1, role="imp")
     option(game, "Lord Ashcombe").click()
     game.click("#action-submit")

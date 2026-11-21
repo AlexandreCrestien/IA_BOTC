@@ -6,7 +6,7 @@ import backend.agent_factory as agent_factory
 from backend.agent_factory import PASS, Agent
 from backend.conversations import (
     choose_agent_for_human,
-    private_message,
+    private_replies,
     public_conversation,
     start_private_conversation,
 )
@@ -112,6 +112,13 @@ def test_failing_agent_is_skipped(memory, fake_llm):
 HUMAN = "eva"
 
 
+def human_says(text, agents, memory):
+    """L'humain écrit dans son salon privé, puis les agents répondent (comme human_turns)."""
+    participants = {HUMAN} | {agent.player_id for agent in agents}
+    memory.add_private(EventType.private_summary, HUMAN, text, participants)
+    return asyncio.run(private_replies(HUMAN, agents, memory))
+
+
 def test_choose_most_talkative_first(memory):
     agents = make_agents(memory, ["observer", "clown", "agitator", "strategist"])
     assert choose_agent_for_human(agents, HUMAN, memory).player_id == "carla"  # agitator
@@ -155,13 +162,13 @@ def test_agent_who_speaks_first_opens_the_conversation(memory, monkeypatch):
     asyncio.run(start_private_conversation(HUMAN, agent, memory, agent_speaks_first=True))
     assert "Ouvre la conversation" in instructions[-1]
 
-    asyncio.run(private_message(HUMAN, "Je t'écoute.", agent, memory))
+    human_says("Je t'écoute.", agent, memory)
     assert "Réponds-leur" in instructions[-1]
 
 
 def test_private_message_gets_replies_from_each_agent(memory, fake_llm):
     agents = make_agents(memory, ["agitator", "clown"])
-    said = asyncio.run(private_message(HUMAN, "Qui suspectez-vous ?", agents, memory))
+    said = human_says("Qui suspectez-vous ?", agents, memory)
     assert said == [("ana", "message de ana"), ("bruno", "message de bruno")]
     assert [e.content for e in memory.events_for("bruno")] == [
         "Qui suspectez-vous ?", "message de ana", "message de bruno"]
@@ -170,7 +177,7 @@ def test_private_message_gets_replies_from_each_agent(memory, fake_llm):
 def test_private_content_stays_secret(memory, fake_llm):
     agents = make_agents(memory, ["agitator"])
     asyncio.run(start_private_conversation(HUMAN, agents, memory))
-    asyncio.run(private_message(HUMAN, "SECRET", agents, memory))
+    human_says("SECRET", agents, memory)
     for outsider in ["bruno", "carla", "dan"]:
         assert all("SECRET" not in e.content for e in memory.events_for(outsider))
         assert memory.private_partners(outsider) == set()
@@ -185,14 +192,14 @@ def test_failing_agent_does_not_stop_private_conversation(memory, fake_llm):
 
     fake_llm.reply = reply
     agents = make_agents(memory, ["agitator", "clown"])
-    assert asyncio.run(private_message(HUMAN, "Salut", agents, memory)) == [("bruno", "message de bruno")]
+    assert human_says("Salut", agents, memory) == [("bruno", "message de bruno")]
 
 
 @pytest.mark.parametrize("count", [0, 3])
 def test_private_conversation_needs_one_or_two_agents(memory, count):
     agents = make_agents(memory, ["agitator", "clown", "observer"])[:count]
     with pytest.raises(ValueError, match="1 ou 2"):
-        asyncio.run(private_message(HUMAN, "Salut", agents, memory))
+        asyncio.run(start_private_conversation(HUMAN, agents, memory))
 
 
 # --- Cas limites ---------------------------------------------------------------

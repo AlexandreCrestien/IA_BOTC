@@ -18,7 +18,6 @@ class QueueHumanPort:
         self.state: Optional[GameState] = None
         self.memory = None
         self.agents: dict = {}
-        self.votes_history: list[dict] = []
 
     async def _ask(self, kind: str, **payload):
         await self.requests.put({"kind": kind, **payload})

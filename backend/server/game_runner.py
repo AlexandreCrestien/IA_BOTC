@@ -4,6 +4,7 @@ import logging
 import random
 from typing import Optional
 
+from backend.game_config import AI_NAMES, PERSONALITY_NAMES
 from backend.game_engine import setup_game
 from backend.human_port import QueueHumanPort
 from backend.human_turns import play_turn_with_human
@@ -12,18 +13,9 @@ from backend.server.websockets import register_human, reset_player, send_game_in
 
 logger = logging.getLogger(__name__)
 
-# Noms des 5 agents IA (identifiant -> nom affiché)
-AI_NAMES = {
-    "p1": "marIA",
-    "p2": "tobIAs",
-    "p3": "mAIsie",
-    "p4": "adrIAn",
-    "p5": "dIAne",
-}
-
 # Configuration de la partie. Le joueur humain prend le pseudo qu'il choisit à la connexion.
 GAME_CONFIG = {
-    "personality_names": ["agitator", "clown", "observer", "paranoid", "strategist"],
+    "personality_names": PERSONALITY_NAMES,
     "seed": None,  # tests : fixer une graine pour rejouer la même partie
 }
 
@@ -46,11 +38,6 @@ def _winner_label(winner) -> str:
     return WINNER_LABELS.get(winner, str(winner))
 
 
-def _all_players(state):
-    players = state.players
-    return players.values() if isinstance(players, dict) else players
-
-
 async def run_game(names: dict[str, str], human_id: str, personality_names: list[str], seed=None):
     rng = random.Random(seed)
     state, agents, memory = setup_game(names, human_id, personality_names, rng)
@@ -65,11 +52,10 @@ async def run_game(names: dict[str, str], human_id: str, personality_names: list
         result = await play_turn_with_human(state, rng, agents, memory, human_id, port)
         state = result.state
         port.state = state
-        port.votes_history.append({"turn": turn, "votes": result.votes, "executed": result.executed})
 
         # Le front reçoit des noms, jamais des identifiants internes
-        label = {p.id: p.name for p in _all_players(state)}
-        dead = {p.id for p in _all_players(state) if not p.alive}
+        label = {p.id: p.name for p in state.players}
+        dead = {p.id for p in state.players if not p.alive}
         votes = [
             {
                 "voter": label.get(voter, voter),

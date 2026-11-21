@@ -19,8 +19,11 @@ def _check_vote(state: GameState, voter_id: str, target_id: str) -> None:
 def vote_result(state: GameState, votes: dict[str, Optional[str]]) -> Optional[str]:
     """Renvoie l'id du joueur exécuté, ou None.
     Exécution si la cible obtient le plus de voix. Égalité en tête : personne n'est exécuté."""
-    votes = filter_butler_votes(state, votes)
+    return _executed(state, filter_butler_votes(state, votes))
 
+
+def _executed(state: GameState, votes: dict[str, Optional[str]]) -> Optional[str]:
+    """Décompte de votes déjà filtrés (vote du Majordome retiré s'il ne compte pas)."""
     for voter_id, target_id in votes.items():
         if target_id is not None:
             _check_vote(state, voter_id, target_id)
@@ -40,7 +43,7 @@ def resolve_vote(state: GameState, votes: dict[str, Optional[str]]) -> GameState
     """Applique le vote : consomme le vote fantôme des morts qui ont voté, puis exécute si besoin.
     L'abstention ne consomme pas le vote fantôme."""
     votes = filter_butler_votes(state, votes)
-    executed = vote_result(state, votes)
+    executed = _executed(state, votes)
 
     for voter_id, target_id in votes.items():
         if target_id is None:

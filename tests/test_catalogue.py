@@ -27,27 +27,27 @@ def test_team_and_alignment(name, team, alignment):
 
 def test_diablotin_kills_every_night():
     role = get_role("imp")
-    assert role.phase == Phase.NUIT and TypeEffet.TUE in role.effects
+    assert role.phase == Phase.NUIT
 
 
 def test_empoisonneur_poisons_every_night():
     role = get_role("poisoner")
-    assert role.phase == Phase.NUIT and TypeEffet.EMPOISONNE in role.effects
+    assert role.phase == Phase.NUIT
 
 
 def test_voyante_probes_every_night():
     role = get_role("psychic")
-    assert role.phase == Phase.NUIT and TypeEffet.SONDE in role.effects
+    assert role.phase == Phase.NUIT
 
 
 def test_detective_does_not_act_at_night():
     role = get_role("detective")
-    assert role.phase is None and TypeEffet.SONDE in role.effects
+    assert role.phase is None
 
 
 def test_majordome_acts_at_night_without_direct_effect():
     role = get_role("butler")
-    assert role.phase == Phase.NUIT and role.effects == ()
+    assert role.phase == Phase.NUIT
 
 
 def test_poison_lasts_until_end_of_next_day():

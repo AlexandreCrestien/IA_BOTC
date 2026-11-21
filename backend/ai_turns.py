@@ -6,7 +6,7 @@ from typing import Any, Optional
 from backend.conversations import public_conversation
 from backend.game_engine import (
     TurnResult,
-    _deaths,
+    deaths_between,
     play_day,
     play_night,
     record_night_choices,
@@ -20,16 +20,6 @@ from backend.rules import legal_actions, night_steps, winner
 
 logger = logging.getLogger(__name__)
 
-# Nombre maximum d'appels LLM simultanés (quota Groq : 8000 TPM).
-MAX_CONCURRENT_CALLS = 2
-
-
-def check_unique_names(names: dict[str, str]) -> None:
-    """Les noms servent à traduire les réponses des IA : ils doivent être uniques."""
-    if len(set(names.values())) != len(names):
-        raise ValueError("noms de joueurs en double")
-
-
 def _name_of(state: GameState, player_id: str) -> str:
     return state.player(player_id).name
 
@@ -39,12 +29,6 @@ def _id_of(state: GameState, name: str) -> str:
         if player.name == name:
             return player.id
     raise ValueError(f"nom inconnu : {name}")
-
-
-async def _limited(semaphore: asyncio.Semaphore, awaitable):
-    """Attend une place libre dans le sémaphore avant de lancer l'appel."""
-    async with semaphore:
-        return await awaitable
 
 
 def night_situation(state: GameState) -> str:
@@ -65,14 +49,11 @@ async def _night_choice(agent: Any, state: GameState, player_id: str) -> tuple[s
 
 
 async def collect_ai_night_choices(state: GameState, agents: dict[str, Any]) -> dict[str, tuple[str, ...]]:
-    """Choix de nuit des agents IA, demandés au plus MAX_CONCURRENT_CALLS à la fois.
+    """Choix de nuit des agents IA, demandés ensemble (llm_client limite le nombre d'appels simultanés).
     Les choix sont secrets et indépendants : leurs effets sont appliqués ensuite par resolve_night."""
     ids = [player_id for player_id, needs_choice in night_steps(state)
            if needs_choice and player_id in agents]
-    semaphore = asyncio.Semaphore(MAX_CONCURRENT_CALLS)
-    results = await asyncio.gather(
-        *(_limited(semaphore, _night_choice(agents[pid], state, pid)) for pid in ids)
-    )
+    results = await asyncio.gather(*(_night_choice(agents[pid], state, pid) for pid in ids))
     return dict(zip(ids, results))
 
 
@@ -87,13 +68,10 @@ async def _vote(agent: Any, state: GameState, player_id: str) -> Optional[str]:
 
 
 async def collect_ai_votes(state: GameState, agents: dict[str, Any]) -> dict[str, Optional[str]]:
-    """Votes des agents IA, demandés au plus MAX_CONCURRENT_CALLS à la fois.
+    """Votes des agents IA, demandés ensemble (llm_client limite le nombre d'appels simultanés).
     Un agent en erreur s'abstient."""
     ids = [player.id for player in state.players if player.can_vote and player.id in agents]
-    semaphore = asyncio.Semaphore(MAX_CONCURRENT_CALLS)
-    results = await asyncio.gather(
-        *(_limited(semaphore, _vote(agents[pid], state, pid)) for pid in ids)
-    )
+    results = await asyncio.gather(*(_vote(agents[pid], state, pid) for pid in ids))
     return dict(zip(ids, results))
 
 
@@ -114,7 +92,7 @@ async def play_turn_with_ai(
     after_night, night_choices = play_night(state, rng, lambda s, pid: ai_night.get(pid, ()))
     record_night_choices(after_night, night_choices, memory)
     reveal_psychic_answer(after_night, night_choices, memory, rng)   
-    night_deaths = _deaths(state, after_night)
+    night_deaths = deaths_between(state, after_night)
     record_night_deaths(after_night, night_deaths, memory)
     if winner(after_night) is not None:
         return TurnResult(after_night, night_choices, {}, None, night_deaths, winner(after_night))

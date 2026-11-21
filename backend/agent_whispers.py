@@ -9,7 +9,6 @@ Les deux agents ne se parlent pas vraiment (trop d'appels LLM) :
 """
 import logging
 import random
-from collections import Counter
 from itertools import combinations
 from typing import Optional
 

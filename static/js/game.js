@@ -3,7 +3,7 @@
    ========================================================== */
 'use strict';
 
-// Annonce par défaut quand le serveur change de phase sans en fournir
+// Annonce affichée à chaque changement de phase (le serveur envoie les autres par "announcement")
 const DEFAULT_PHASE_ANNOUNCEMENTS = {
     nuit: "La nuit tombe... Les pouvoirs sont en cours d'invocation.",
     vote: "Phase de vote : réflexion et choix des joueurs en cours..."
@@ -22,9 +22,7 @@ function updateGameState(newState) {
 
     renderHeader(phase);
 
-    if (newState.announcement) {
-        setAnnouncement(newState.announcement);
-    } else if (newState.phase && DEFAULT_PHASE_ANNOUNCEMENTS[phase]) {
+    if (newState.phase && DEFAULT_PHASE_ANNOUNCEMENTS[phase]) {
         setAnnouncement(DEFAULT_PHASE_ANNOUNCEMENTS[phase]);
     }
 

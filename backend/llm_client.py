@@ -19,7 +19,8 @@ litellm.drop_params = True
 
 JSON_ATTEMPTS = 2
 
-# Limite de débit : un appel à la fois, avec une pause après chacun (plan gratuit Mistral).
+# Limite de débit, pour toute l'application : un appel à la fois, avec une pause après chacun
+# (limites par minute des offres gratuites).
 LLM_CONCURRENCY = 1
 CALL_PAUSE_SECONDS = 2.0
 _llm_slot = asyncio.Semaphore(LLM_CONCURRENCY)

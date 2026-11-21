@@ -85,7 +85,7 @@ Usage : messages courts du salon public, réactions. Priorité à la vitesse.
 
 ### Profil « capable » (`capable` dans `backend/llm_client.py`)
 
-Usage : actions de nuit, nominations, votes, maître du jeu, résumés de mémoire. Priorité à la qualité.
+Usage : actions de nuit, votes, résumés des conversations simulées entre agents. Priorité à la qualité.
 
 | Ordre | Modèle | Fournisseur | Pourquoi à cette place |
 |---|---|---|---|

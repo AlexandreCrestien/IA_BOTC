@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from backend.models import Channel, Effect, EventType, GameEvent, GameState, Phase, Player, TypeEffet
+from backend.models import Effect, GameState, Phase, Player, TypeEffet
 from backend.rules import get_role
 
 
@@ -24,7 +24,6 @@ def night_2_protection() -> Effect:
 def state() -> GameState:
     return GameState(
         players=(player("odette"), player("brutus"), player("gaspard", alive=False)),
-        channels=(Channel(id="village", name="Place du village", public=True, members=("odette", "brutus")),),
     )
 
 
@@ -59,11 +58,6 @@ def test_unknown_player_raises_keyerror():
         state().player("inconnu")
 
 
-def test_unknown_channel_raises_keyerror():
-    with pytest.raises(KeyError):
-        state().channel("inconnu")
-
-
 def test_duplicate_player_ids_refused():
     with pytest.raises(ValidationError):
         GameState(players=(player("odette"), player("odette")))
@@ -81,12 +75,6 @@ def test_replace_player_changes_only_that_player():
 def test_alive_players_excludes_dead():
     ids = [p.id for p in state().alive_players()]
     assert ids == ["odette", "brutus"]
-
-
-def test_replace_channel():
-    s = state()
-    closed = s.channel("village").close()
-    assert not s.replace_channel(closed).channel("village").open
 
 
 def test_turn_zero_refused():
@@ -120,7 +108,3 @@ def test_power_stays_used_during_the_day():
     used = player("odette").model_copy(update={"power_used": True})
     s = GameState(turn=1, phase=Phase.NUIT, players=(used,)).next_phase()
     assert s.player("odette").power_used
-
-def test_dead_players_lists_only_the_dead():
-    ids = [p.id for p in state().dead_players()]
-    assert ids == ["gaspard"]

@@ -112,10 +112,6 @@ function handleServerMessage(data) {
         case "game_state":
             updateGameState(data.state);
             break;
-        case "phase_update":
-            // Changement de phase seul (ex. vote déclenché par un joueur)
-            updateGameState({ phase: data.phase, ...(data.announcement ? { announcement: data.announcement } : {}) });
-            break;
         case "role_assigned":
             assignRole(data.role_name, data.description);
             // Reconnexion d'un joueur du camp du mal : ses alliés déjà révélés

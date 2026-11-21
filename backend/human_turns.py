@@ -13,10 +13,15 @@ from typing import Optional, Protocol
 
 from backend.agent_whispers import choose_whisper_pair, write_whisper_summaries
 from backend.ai_turns import collect_ai_night_choices, collect_ai_votes
-from backend.conversations import choose_agent_for_human, public_conversation, start_private_conversation
+from backend.conversations import (
+    choose_agent_for_human,
+    private_replies,
+    public_conversation,
+    start_private_conversation,
+)
 from backend.game_engine import (
     TurnResult,
-    _deaths,
+    deaths_between,
     play_day,
     play_night,
     record_night_choices,
@@ -78,35 +83,6 @@ def _allies(state: GameState, human_id: str) -> Optional[list[dict]]:
         for p in state.players
         if p.id != human_id and p.role.team in (Equipe.DEMON, Equipe.SBIRE)
     ]
-
-
-async def _parallel_replies(
-    human_id: str,
-    partners: list,
-    memory: MemoryManager,
-) -> list[tuple[str, str]]:
-    """Chaque partenaire répond à la fois, à partir du même contexte.
-    Les réponses sont enregistrées ensuite, dans l'ordre des partenaires."""
-    participants = {human_id} | {agent.player_id for agent in partners}
-
-    async def ask(agent):
-        # speak_private attend des identifiants et récupère les noms lui-même
-        others = sorted(participants - {agent.player_id})
-        try:
-            return agent.player_id, await agent.speak_private(others)
-        except Exception:
-            # Filet de sécurité : cet agent ne répond pas, les autres répondent quand même.
-            logger.exception("%s n'a pas pu répondre en privé", agent.player_id)
-            return agent.player_id, None
-
-    results = await asyncio.gather(*(ask(agent) for agent in partners))
-    replies = []
-    for pid, text in results:
-        if text is None:
-            continue
-        memory.add_private(EventType.private_summary, pid, text, participants)
-        replies.append((pid, text))
-    return replies
 
 
 async def _agent_invitation(
@@ -178,7 +154,7 @@ async def _private_channel(
             if not text:
                 break
             memory.add_private(EventType.private_summary, human_id, text, participants)
-            replies = await _parallel_replies(human_id, partners, memory)
+            replies = await private_replies(human_id, partners, memory)
             await human.show_private_replies(state, replies)
     except BaseException:
         if whisper is not None:
@@ -218,7 +194,7 @@ async def play_turn_with_human(
     record_night_choices(after_night, night_choices, memory)
     reveal_psychic_answer(after_night, night_choices, memory, rng)
 
-    night_deaths = _deaths(state, after_night)
+    night_deaths = deaths_between(state, after_night)
     record_night_deaths(after_night, night_deaths, memory)
     await human.show_night_deaths(after_night, night_deaths)
 

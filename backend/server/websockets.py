@@ -6,7 +6,7 @@ from typing import Any
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import TypeAdapter, ValidationError
 
-from backend.front_state import to_front_state, whisper_channel_id
+from backend.front_state import PUBLIC_CHANNEL, to_front_state, whisper_channel_id
 from backend.server.connection_manager import manager
 from backend.server.schemas import ClientActionPacket
 
@@ -38,7 +38,6 @@ vote_log: dict[str, list[dict]] = {}              # onglet Votes : [{turn, voter
 ANSWERABLE = {"night_choice", "vote", "public_message", "private_partners", "private_message", "agent_invitation"}
 # Étapes facultatives que le joueur peut passer, et la réponse « rien » attendue par le moteur
 SKIPPABLE = {"public_message": None, "private_message": None, "private_partners": []}
-PUBLIC_CHANNEL = "public"
 WHISPER_MESSAGES = 3  # messages privés autorisés par salon
 
 # Code de fermeture WebSocket quand la connexion est refusée (le front affiche le motif sur l'accueil)
@@ -52,13 +51,17 @@ def register_human(player_id: str, port) -> None:
     forward_tasks[player_id] = asyncio.create_task(_forward_requests(player_id, port))
 
 
+# Toutes les données gardées par joueur (hors tâche de relais et rôles envoyés)
+PLAYER_STORES = (ports, pending, current_request, whispers, whisper_left,
+                 chat_log, opened_channels, known_allies, night_log, vote_log)
+
+
 def reset_player(player_id: str) -> None:
     """Efface tout ce que le serveur retient de la partie de ce joueur (fin de partie, abandon)."""
     task = forward_tasks.pop(player_id, None)
     if task is not None:
         task.cancel()
-    for store in (ports, pending, current_request, whispers, whisper_left,
-                  chat_log, opened_channels, known_allies, night_log, vote_log):
+    for store in PLAYER_STORES:
         store.pop(player_id, None)
     roles_sent.discard(player_id)
 
@@ -110,11 +113,6 @@ def _human_role(port, player_id: str):
 
 
 # Noms affichés : le front ne voit jamais les identifiants internes (p1, p2...)
-def _all_players(state):
-    players = state.players
-    return players.values() if isinstance(players, dict) else players
-
-
 def _name(port, player_id: str) -> str:
     """Nom affiché pour un identifiant. Repli : l'identifiant lui-même."""
     if port is None or port.state is None:
@@ -134,7 +132,7 @@ def _id_from_name(port, value):
     if port is None or port.state is None or value is None:
         return value
     wanted = str(value).casefold()
-    for player in _all_players(port.state):
+    for player in port.state.players:
         if player.name.casefold() == wanted:
             return player.id
     return value

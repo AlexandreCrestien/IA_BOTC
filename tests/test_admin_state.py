@@ -5,7 +5,6 @@ import pytest
 
 from backend.game_engine import record_night_choices, setup_game
 from backend.human_port import QueueHumanPort
-from backend.memory_manager import game_master
 from backend.models import EventType
 from backend.server import admin, game_runner
 from backend.server import websockets as ws

@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import litellm  # noqa: E402
 
+from backend.game_config import AI_NAMES, PERSONALITY_NAMES  # noqa: E402
 from backend.game_engine import setup_game  # noqa: E402
 from backend.human_turns import play_turn_with_human  # noqa: E402
 from backend.rules import legal_actions  # noqa: E402
@@ -22,9 +23,9 @@ from historique import RecordingAgent, save_histories  # noqa: E402
 
 litellm.suppress_debug_info = True
 
-NAMES = {"h": "alex", "p1": "marIA", "p2": "tobIAs", "p3": "mAIsie", "p4": "adrIAn", "p5": "dIAne"}
+NAMES = {"h": "alex", **AI_NAMES}
 HUMAN_ID = "h"
-PERSONALITIES = ["agitator", "clown", "observer", "paranoid", "strategist"]
+PERSONALITIES = PERSONALITY_NAMES
 MAX_TURNS = 5
 # Les logs de télémétrie LiteLLM sont coupés : seules nos erreurs et nos réponses comptent.
 LITELLM_LOGGERS = ("LiteLLM", "LiteLLM Router", "LiteLLM Proxy")
@@ -55,7 +56,7 @@ class TerminalHuman:
     async def night_choice(self, state, player_id):
         legal = legal_actions(state, player_id)
         options = list(legal.targets)
-        print(f"\n[Nuit] Ce que tu sais :")
+        print("\n[Nuit] Ce que tu sais :")
         print(self.memory.context_for(player_id))
         print(f"[Nuit] Ton pouvoir ({state.player(player_id).role.name_FR}) : choisis {legal.count} cible(s).")
         for i, pid in enumerate(options, 1):

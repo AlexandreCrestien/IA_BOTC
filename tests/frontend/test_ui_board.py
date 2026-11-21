@@ -8,8 +8,9 @@ def test_header_shows_turn_phase_and_alive_count(game, server):
     expect(game.locator("#game-day")).to_have_text("2")
     expect(game.locator("#alive-count")).to_have_text("5")
 
-    server.send(type="phase_update", phase="vote", announcement="Le vote est ouvert.")
+    server.send(type="game_state", state={"phase": "vote"})
     expect(game.locator("#game-phase")).to_have_text("Vote")
+    server.send(type="announcement", text="Le vote est ouvert.")
     expect(game.locator("#game-announcement")).to_have_text("Le vote est ouvert.")
     expect(game.locator("#center-stage")).to_have_attribute("data-phase", "vote")
 

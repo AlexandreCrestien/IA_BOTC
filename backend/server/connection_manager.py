@@ -46,7 +46,6 @@ class ConnectionManager:
             logger.warning(f"Tentative d'envoi à un joueur non connecté ou introuvable : {player_id}")
 
 
-    # Pas nécessaire pour l'instant car jeu solo, mais en place pour l'évolutivité
     async def broadcast(self, message: dict[str, Any]) -> None:
         """
         Diffuse un message JSON à tous les joueurs connectés en même temps.

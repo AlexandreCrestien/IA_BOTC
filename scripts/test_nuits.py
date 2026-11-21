@@ -13,15 +13,15 @@ import logging
 import random
 
 from backend.ai_turns import collect_ai_night_choices
+from backend.game_config import AI_NAMES, PERSONALITY_NAMES
 from backend.game_engine import play_night, record_night_choices, reveal_psychic_answer, setup_game
 
 logging.getLogger("LiteLLM").setLevel(logging.CRITICAL)
 logging.getLogger("litellm").setLevel(logging.CRITICAL)
 
 HUMAN_ID = "h"
-NAMES = {"h": "alex", "p1": "marIA", "p2": "tobIAs", "p3": "mAIsie", "p4": "adrIAn", "p5": "dIAne"}
-# À copier depuis tests/test_human_turns.py (même valeur que dans les tests)
-PERSONALITIES = ["agitator", "clown", "observer", "paranoid", "strategist"]
+NAMES = {"h": "alex", **AI_NAMES}
+PERSONALITIES = PERSONALITY_NAMES
 NIGHTS = 5
 KILL_AFTER_FIRST_NIGHT = True  # tue une IA après la nuit 1, pour tester les cibles mortes
 SEED = 12

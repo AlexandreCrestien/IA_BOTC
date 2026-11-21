@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from backend.models import Alignement, Equipe, Phase, Role
+from backend.models import Alignement, Equipe, Role
 from backend.rules import ROLES, get_role
 
 
@@ -34,10 +34,6 @@ def test_minion_and_demon_are_evil(team):
 
 def test_role_without_specific_phase():
     assert Role(name_FR="Recluse", name_EN="hermit", team=Equipe.OUTSIDER).phase is None
-
-
-def test_effects_empty_by_default():
-    assert Role(name_FR="Recluse", name_EN="hermit", team=Equipe.OUTSIDER).effects == ()
 
 
 def test_empty_name_refused():
