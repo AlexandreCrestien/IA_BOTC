@@ -14,7 +14,16 @@ from typing import Optional, Protocol
 from backend.agent_whispers import choose_whisper_pair, write_whisper_summaries
 from backend.ai_turns import collect_ai_night_choices, collect_ai_votes
 from backend.conversations import choose_agent_for_human, public_conversation, start_private_conversation
-from backend.game_engine import TurnResult, _deaths, play_day, play_night, record_night_choices, reveal_psychic_answer
+from backend.game_engine import (
+    TurnResult,
+    _deaths,
+    play_day,
+    play_night,
+    record_night_choices,
+    record_night_deaths,
+    record_vote,
+    reveal_psychic_answer,
+)
 from backend.memory_manager import MemoryManager
 from backend.models import Equipe, EventType, GameState, Phase
 from backend.rules import night_steps, winner
@@ -210,6 +219,7 @@ async def play_turn_with_human(
     reveal_psychic_answer(after_night, night_choices, memory, rng)
 
     night_deaths = _deaths(state, after_night)
+    record_night_deaths(after_night, night_deaths, memory)
     await human.show_night_deaths(after_night, night_deaths)
 
     # Infos écrites pendant la nuit (réponse de la Voyante), hors celles déjà montrées
@@ -241,6 +251,7 @@ async def play_turn_with_human(
         human_vote[human_id] = await human.vote(day_state, human_id)
     vote_answers = {**ai_votes, **human_vote}
     after_day, votes, executed = play_day(day_state, lambda s, pid: vote_answers.get(pid))
+    record_vote(day_state, votes, executed, memory)
     game_winner = winner(after_day)
     if game_winner is None:
         after_day = after_day.next_phase()

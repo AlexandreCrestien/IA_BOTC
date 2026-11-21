@@ -105,3 +105,14 @@ def test_public_messages_are_recorded_during_discussion():
 def test_duplicate_names_are_refused():
     with pytest.raises(ValueError):
         check_unique_names({"a": "Ada", "b": "Ada"})
+
+def test_turn_with_ai_tells_everyone_deaths_votes_and_execution():
+    memory = MemoryManager(list(NAMES), names=NAMES)
+    agents = everyone(night=first_options, vote=lambda options: "Cléo")
+    asyncio.run(play_turn_with_ai(night_game(), random.Random(1), agents, memory))
+    seen = [(e.type, e.phase, e.content) for e in memory.events_for("e") if e.visible_to is None]
+    deaths = [s for s in seen if s[0] == EventType.death]
+    assert deaths[0][1] == Phase.NUIT  # au réveil : morts de la nuit (ou personne)
+    assert deaths[-1] == (EventType.death, Phase.VOTE, "Cléo est exécuté·e par le village.")
+    [vote] = [s for s in seen if s[0] == EventType.vote]
+    assert "→ Cléo" in vote[2]

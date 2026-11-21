@@ -276,6 +276,14 @@ VOTE        memory.set_moment(tour, VOTE)
 | Chargement des skills | `prompt_loader` |
 | Lien avec le front, choix de l'humain | `server`, `static/` |
 
+### Morts, votes et exécutions
+
+Tous les joueurs les connaissent, comme à une vraie table : `game_engine.record_night_deaths` (au réveil,
+« X est mort·e cette nuit. » ou « Personne n'est mort cette nuit. ») et `game_engine.record_vote`
+(« Votes : A → B, C → personne, D → B (vote fantôme). » puis l'exécution ou son absence) écrivent des
+événements publics (`EventType.death`, `EventType.vote`). Appelés par `ai_turns` et `human_turns`.
+
+
 ### Agent qui vient parler à l'humain
 
 Dans le navigateur, si le joueur ne choisit aucun interlocuteur (ni « Passer au vote ») pendant 10 secondes
@@ -307,7 +315,6 @@ s'entretiennent en privé. Aucune conversation si l'humain passe son salon priv�
 
 ## 7. Points encore ouverts
 
-- **Morts, votes et exécution absents de la mémoire** : seul l'humain est prévenu des morts de la nuit (`show_night_deaths`). Les agents ne reçoivent ni l'annonce des morts, ni les votes, ni le résultat de l'exécution.
 - **Nom affiché des personnalités** : `assign_players` met le nom anglais aussi comme nom français (`agent.personality` vaut `"agitator"` et non `"Provocateur"`). Les conversations ne sont pas touchées : elles utilisent `personality_key`.
 - **Agent et état du joueur** : `Player` est immuable, donc `agent.player` reste celui de la création (il ne voit pas sa mort). Pour l'état actuel, lire `GameState`.
 

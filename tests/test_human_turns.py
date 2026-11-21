@@ -257,3 +257,19 @@ def test_no_agent_meeting_when_the_invitation_is_refused():
     asyncio.run(play_turn_with_human(state, rng, agents, memory, HUMAN_ID, human))
 
     assert human.meetings_seen == []
+
+
+# --- Morts, votes et exécution dans la mémoire des agents ---------------------------
+
+def test_agents_learn_deaths_votes_and_execution():
+    state, agents, memory, rng = _setup()
+    human = FakeHuman()
+
+    asyncio.run(play_turn_with_human(state, rng, agents, memory, HUMAN_ID, human))
+
+    public = [e.content for e in memory.events_for("p1") if e.visible_to is None]
+    assert public == [
+        "Personne n'est mort cette nuit.",
+        "Votes : Alex → personne, Ada → personne, Bob → personne, Cléo → personne, Dan → personne, Eva → personne.",
+        "Personne n'est exécuté aujourd'hui.",
+    ]

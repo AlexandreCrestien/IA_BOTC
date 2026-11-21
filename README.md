@@ -153,7 +153,6 @@ Les tests du frontend (`tests/frontend/`) pilotent un vrai navigateur avec Playw
 - Parties dans le terminal (`scripts/`)
 
 **À faire :**
-- Enregistrer dans la mémoire des agents les morts de la nuit, les votes et l'exécution (aujourd'hui, seul l'humain est prévenu des morts)
 - Relier le moteur au serveur et à l'interface (actions de l'humain reçues par le WebSocket, envoi de l'état). Les types de messages utilisés par l'interface ne sont pas encore ceux de `backend/server/schemas.py` : à aligner
 - Contenu de la route admin (en attente du moteur de jeu)
 

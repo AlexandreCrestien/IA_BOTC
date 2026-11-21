@@ -226,3 +226,31 @@ def record_night_choices(state: GameState, choices: dict[str, tuple[str, ...]], 
         names = " et ".join(state.player(pid).name for pid in target_ids)
         memory.add_event(EventType.night_action, game_master,
                          f"Nuit {state.turn} : tu as choisi {names}.", frozenset({player_id}))
+
+def record_night_deaths(state: GameState, deaths: tuple[str, ...], memory: MemoryManager) -> None:
+    """Annonce publique des morts de la nuit, au réveil du village : tout le monde sait qui est mort
+    (pas comment). À appeler avec l'état après la nuit, au moment de la nuit qui vient de finir."""
+    if not deaths:
+        memory.add_public(EventType.death, game_master, "Personne n'est mort cette nuit.")
+    for player_id in deaths:
+        memory.add_public(EventType.death, game_master, f"{state.player(player_id).name} est mort·e cette nuit.")
+
+
+def record_vote(state: GameState, votes: dict[str, Optional[str]], executed: Optional[str],
+                memory: MemoryManager) -> None:
+    """Annonce publique du vote : le bulletin de chaque votant, puis l'exécution.
+    state = état au moment du vote (avant l'exécution) : un votant déjà mort a utilisé son vote fantôme."""
+    if votes:
+        ballots = []
+        for voter_id, target_id in votes.items():
+            voter = state.player(voter_id)
+            target = state.player(target_id).name if target_id else "personne"
+            ghost = " (vote fantôme)" if target_id and not voter.alive else ""
+            ballots.append(f"{voter.name} → {target}{ghost}")
+        memory.add_public(EventType.vote, game_master, f"Votes : {', '.join(ballots)}.")
+    else:
+        memory.add_public(EventType.vote, game_master, "Personne n'a pu voter.")
+    if executed is None:
+        memory.add_public(EventType.death, game_master, "Personne n'est exécuté aujourd'hui.")
+    else:
+        memory.add_public(EventType.death, game_master, f"{state.player(executed).name} est exécuté·e par le village.")

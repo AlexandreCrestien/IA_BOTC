@@ -4,7 +4,16 @@ import random
 from typing import Any, Optional
 
 from backend.conversations import public_conversation
-from backend.game_engine import TurnResult, _deaths, play_day, play_night, record_night_choices, reveal_psychic_answer
+from backend.game_engine import (
+    TurnResult,
+    _deaths,
+    play_day,
+    play_night,
+    record_night_choices,
+    record_night_deaths,
+    record_vote,
+    reveal_psychic_answer,
+)
 from backend.memory_manager import MemoryManager
 from backend.models import GameState, Phase
 from backend.rules import legal_actions, night_steps, winner
@@ -106,6 +115,7 @@ async def play_turn_with_ai(
     record_night_choices(after_night, night_choices, memory)
     reveal_psychic_answer(after_night, night_choices, memory, rng)   
     night_deaths = _deaths(state, after_night)
+    record_night_deaths(after_night, night_deaths, memory)
     if winner(after_night) is not None:
         return TurnResult(after_night, night_choices, {}, None, night_deaths, winner(after_night))
 
@@ -120,6 +130,7 @@ async def play_turn_with_ai(
     memory.set_moment(day_state.turn, day_state.phase)
     ai_votes = await collect_ai_votes(day_state, agents)
     after_day, votes, executed = play_day(day_state, lambda s, pid: ai_votes.get(pid))
+    record_vote(day_state, votes, executed, memory)
     game_winner = winner(after_day)
     if game_winner is None:
         after_day = after_day.next_phase()
