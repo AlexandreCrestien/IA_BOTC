@@ -1,22 +1,11 @@
+"""Choix des agents IA pendant un tour (nuit et vote), demandés ensemble.
+Les agents parlent en noms ; ces fonctions traduisent en identifiants pour le moteur (backend/turns.py)."""
 import asyncio
 import logging
-import random
 from typing import Any, Optional
 
-from backend.conversations import public_conversation
-from backend.game_engine import (
-    TurnResult,
-    deaths_between,
-    play_day,
-    play_night,
-    record_night_choices,
-    record_night_deaths,
-    record_vote,
-    reveal_psychic_answer,
-)
-from backend.memory_manager import MemoryManager
-from backend.models import GameState, Phase
-from backend.rules import legal_actions, night_steps, winner
+from backend.models import GameState
+from backend.rules import legal_actions, night_steps, vote_targets
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +47,7 @@ async def collect_ai_night_choices(state: GameState, agents: dict[str, Any]) -> 
 
 
 async def _vote(agent: Any, state: GameState, player_id: str) -> Optional[str]:
-    options = [player.name for player in state.players if player.alive]
+    options = [state.player(target).name for target in vote_targets(state, player_id)]
     try:
         name = await agent.vote(options)
         return None if name is None else _id_of(state, name)
@@ -73,43 +62,3 @@ async def collect_ai_votes(state: GameState, agents: dict[str, Any]) -> dict[str
     ids = [player.id for player in state.players if player.can_vote and player.id in agents]
     results = await asyncio.gather(*(_vote(agents[pid], state, pid) for pid in ids))
     return dict(zip(ids, results))
-
-
-async def play_turn_with_ai(
-    state: GameState,
-    rng: random.Random,
-    agents: dict[str, Any],
-    memory: MemoryManager,
-) -> TurnResult:
-    """Tour complet avec les agents IA : nuit, victoire, discussion publique, vote, victoire.
-    La mémoire suit la phase courante, pour que chaque message soit daté correctement.
-    Les joueurs sans agent (l'humain) reçoivent un choix aléatoire ou une abstention."""
-    if state.phase != Phase.NUIT:
-        raise ValueError("un tour commence par la nuit")
-
-    memory.set_moment(state.turn, state.phase)
-    ai_night = await collect_ai_night_choices(state, agents)
-    after_night, night_choices = play_night(state, rng, lambda s, pid: ai_night.get(pid, ()))
-    record_night_choices(after_night, night_choices, memory)
-    reveal_psychic_answer(after_night, night_choices, memory, rng)   
-    night_deaths = deaths_between(state, after_night)
-    record_night_deaths(after_night, night_deaths, memory)
-    if winner(after_night) is not None:
-        return TurnResult(after_night, night_choices, {}, None, night_deaths, winner(after_night))
-
-    # DISCUSSION : les agents vivants parlent publiquement avant le vote
-    discussion = after_night.next_phase()
-    memory.set_moment(discussion.turn, discussion.phase)
-    speakers = [agents[p.id] for p in discussion.players if p.id in agents]
-    await public_conversation(speakers, memory)
-
-    # VOTE
-    day_state = discussion.next_phase()
-    memory.set_moment(day_state.turn, day_state.phase)
-    ai_votes = await collect_ai_votes(day_state, agents)
-    after_day, votes, executed = play_day(day_state, lambda s, pid: ai_votes.get(pid))
-    record_vote(day_state, votes, executed, memory)
-    game_winner = winner(after_day)
-    if game_winner is None:
-        after_day = after_day.next_phase()
-    return TurnResult(after_day, night_choices, votes, executed, night_deaths, game_winner)

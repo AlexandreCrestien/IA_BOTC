@@ -1,16 +1,13 @@
 import asyncio
-import random
 
 import pytest
 
 from backend.ai_turns import (
     collect_ai_night_choices,
     collect_ai_votes,
-    play_turn_with_ai,
 )
 from backend.game_engine import check_unique_names
-from backend.memory_manager import MemoryManager
-from backend.models import EventType, GameState, Phase, Player
+from backend.models import GameState, Phase, Player
 from backend.rules import get_role
 
 NAMES = {"a": "Ada", "b": "Bob", "c": "Cléo", "d": "Dan", "e": "Eva", "f": "Fay"}
@@ -84,35 +81,21 @@ def test_failing_voter_abstains():
     assert votes == {"a": None}
 
 
-def test_turn_with_ai_executes_the_chosen_player():
-    memory = MemoryManager(list(NAMES))
-    agents = everyone(night=first_options, vote=lambda options: "Cléo")
-    result = asyncio.run(play_turn_with_ai(night_game(), random.Random(1), agents, memory))
-    assert result.executed == "c"
-    assert not result.state.player("c").alive
-    assert result.game_winner is None
-
-
-def test_public_messages_are_recorded_during_discussion():
-    memory = MemoryManager(list(NAMES))
-    agents = everyone(night=first_options, vote=lambda options: None, speak=lambda: "Bonjour")
-    asyncio.run(play_turn_with_ai(night_game(), random.Random(1), agents, memory))
-    messages = [e for e in memory.events_for("a") if e.type == EventType.public_message]
-    assert messages
-    assert all(e.phase == Phase.DISCUSSION and e.turn == 2 for e in messages)
-
-
 def test_duplicate_names_are_refused():
     with pytest.raises(ValueError):
         check_unique_names({"a": "Ada", "b": "Ada"})
 
-def test_turn_with_ai_tells_everyone_deaths_votes_and_execution():
-    memory = MemoryManager(list(NAMES), names=NAMES)
-    agents = everyone(night=first_options, vote=lambda options: "Cléo")
-    asyncio.run(play_turn_with_ai(night_game(), random.Random(1), agents, memory))
-    seen = [(e.type, e.phase, e.content) for e in memory.events_for("e") if e.visible_to is None]
-    deaths = [s for s in seen if s[0] == EventType.death]
-    assert deaths[0][1] == Phase.NUIT  # au réveil : morts de la nuit (ou personne)
-    assert deaths[-1] == (EventType.death, Phase.VOTE, "Cléo est exécuté·e par le village.")
-    [vote] = [s for s in seen if s[0] == EventType.vote]
-    assert "→ Cléo" in vote[2]
+def test_ai_vote_options_exclude_the_voter():
+    seen = {}
+
+    def remember(pid):
+        def vote(options):
+            seen[pid] = options
+            return None
+        return vote
+
+    agents = {pid: FakeAgent(pid, vote=remember(pid)) for pid in NAMES}
+    asyncio.run(collect_ai_votes(night_game(), agents))
+    for pid, options in seen.items():
+        assert NAMES[pid] not in options
+        assert len(options) == len(NAMES) - 1

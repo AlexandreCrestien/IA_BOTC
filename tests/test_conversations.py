@@ -11,7 +11,7 @@ from backend.conversations import (
     start_private_conversation,
 )
 from backend.memory_manager import MemoryManager
-from backend.models import EventType, Player
+from backend.models import EventType
 from backend.rules.catalogue import ROLES
 
 IDS = ["ana", "bruno", "carla", "dan", "eva"]
@@ -26,7 +26,7 @@ def make_agents(memory, personalities):
     """Un agent par personnalité, dans l'ordre de IDS.
     Le prompt système est l'id du joueur : le faux LLM sait ainsi qui parle."""
     return [
-        Agent(Player(id=i, name=i, role=ROLES["monk"]), p, memory, system_prompt=i)
+        Agent(i, i, ROLES["monk"], p, memory, system_prompt=i)
         for i, p in zip(IDS, personalities)
     ]
 
@@ -113,7 +113,7 @@ HUMAN = "eva"
 
 
 def human_says(text, agents, memory):
-    """L'humain écrit dans son salon privé, puis les agents répondent (comme human_turns)."""
+    """L'humain écrit dans son salon privé, puis les agents répondent (comme turns.play_turn)."""
     participants = {HUMAN} | {agent.player_id for agent in agents}
     memory.add_private(EventType.private_summary, HUMAN, text, participants)
     return asyncio.run(private_replies(HUMAN, agents, memory))

@@ -2,7 +2,7 @@ import pytest
 
 from backend.models import GameState, Phase, Player
 from backend.rules import get_role
-from backend.rules.vote import resolve_vote, vote_result
+from backend.rules.vote import resolve_vote, vote_result, vote_targets
 
 
 def make_player(id: str, role: str, **kwargs) -> Player:
@@ -19,6 +19,13 @@ def day_game(*extra: Player) -> GameState:
         make_player("f", "butler"),
     )
     return GameState(turn=1, phase=Phase.VOTE, players=players)
+
+
+def test_nobody_can_vote_against_himself():
+    assert "c" not in vote_targets(day_game(), "c")
+    assert set(vote_targets(day_game(), "c")) == {"a", "b", "d", "e", "f"}
+    with pytest.raises(ValueError, match="lui-même"):
+        vote_result(day_game(), {"c": "c"})
 
 
 def test_majority_executes():

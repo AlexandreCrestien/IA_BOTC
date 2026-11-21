@@ -6,7 +6,7 @@ import pytest
 import backend.agent_whispers as agent_whispers
 
 from backend.game_engine import setup_game
-from backend.human_turns import play_turn_with_human
+from backend.turns import play_turn
 from backend.models import Equipe, EventType, Phase
 
 NAMES = {"h": "Alex", "p1": "Ada", "p2": "Bob", "p3": "Cléo", "p4": "Dan", "p5": "Eva"}
@@ -104,7 +104,7 @@ def test_turn_with_human_completes_and_shows_deaths():
     state, agents, memory, rng = _setup()
     human = FakeHuman()
 
-    result = asyncio.run(play_turn_with_human(state, rng, agents, memory, HUMAN_ID, human))
+    result = asyncio.run(play_turn(state, rng, agents, memory, HUMAN_ID, human))
 
     assert human.deaths_seen is not None
     assert result.game_winner is not None or result.state.phase == Phase.NUIT
@@ -115,7 +115,7 @@ def test_private_channel_message_reaches_only_its_partners():
     partner_ids = list(agents)[:2]
     human = FakeHuman(partners=partner_ids, messages=["bonjour"])
 
-    asyncio.run(play_turn_with_human(state, rng, agents, memory, HUMAN_ID, human))
+    asyncio.run(play_turn(state, rng, agents, memory, HUMAN_ID, human))
 
     # Au plus un partenaire peut mourir pendant la nuit 1 : il reste au moins une réponse.
     replies = [(pid, text) for batch in human.replies_seen for pid, text in batch]
@@ -131,7 +131,7 @@ def test_private_channel_replies_are_stored_for_the_human():
     partner_ids = list(agents)[:2]
     human = FakeHuman(partners=partner_ids, messages=["bonjour"])
 
-    asyncio.run(play_turn_with_human(state, rng, agents, memory, HUMAN_ID, human))
+    asyncio.run(play_turn(state, rng, agents, memory, HUMAN_ID, human))
 
     stored = [e for e in memory.events_for(HUMAN_ID) if e.type == EventType.private_summary]
     contents = [e.content for e in stored]
@@ -153,7 +153,7 @@ def test_no_decision_brings_an_agent_who_speaks_first():
     state, agents, memory, rng = _setup_with_personalities()
     human = FakeHuman(partners=None, messages=["bonjour"], accept_invitation=True)
 
-    asyncio.run(play_turn_with_human(state, rng, agents, memory, HUMAN_ID, human))
+    asyncio.run(play_turn(state, rng, agents, memory, HUMAN_ID, human))
 
     assert human.invited_by == "p3"  # agitateur, jamais rencontré en privé
     assert human.replies_seen[0] == [("p3", "ouverture de p3")]  # l'agent ouvre la conversation
@@ -165,7 +165,7 @@ def test_refused_invitation_opens_no_channel():
     state, agents, memory, rng = _setup_with_personalities()
     human = FakeHuman(partners=None, messages=["bonjour"], accept_invitation=False)
 
-    asyncio.run(play_turn_with_human(state, rng, agents, memory, HUMAN_ID, human))
+    asyncio.run(play_turn(state, rng, agents, memory, HUMAN_ID, human))
 
     assert human.invited_by == "p3"
     assert human.replies_seen == []
@@ -178,7 +178,7 @@ def test_invitation_comes_from_an_agent_never_met_in_private():
     memory.add_private(EventType.private_summary, HUMAN_ID, "salut", {"p3"})
     human = FakeHuman(partners=None)
 
-    asyncio.run(play_turn_with_human(state, rng, agents, memory, HUMAN_ID, human))
+    asyncio.run(play_turn(state, rng, agents, memory, HUMAN_ID, human))
 
     assert human.invited_by == "p5"  # paranoïaque : le suivant, l'agitateur a déjà parlé avec lui
 
@@ -192,7 +192,7 @@ def test_a_dead_agent_can_come_to_talk():
     state = state.replace_player(state.player(dead).die())
     human = FakeHuman(partners=None, accept_invitation=True)
 
-    asyncio.run(play_turn_with_human(state, rng, agents, memory, HUMAN_ID, human))
+    asyncio.run(play_turn(state, rng, agents, memory, HUMAN_ID, human))
 
     assert human.invited_by == dead
     assert human.replies_seen[0] == [(dead, f"ouverture de {dead}")]
@@ -204,7 +204,7 @@ def test_human_can_open_a_channel_with_a_dead_agent():
     state = state.replace_player(state.player(dead).die())
     human = FakeHuman(partners=[dead], messages=["bonjour"])
 
-    asyncio.run(play_turn_with_human(state, rng, agents, memory, HUMAN_ID, human))
+    asyncio.run(play_turn(state, rng, agents, memory, HUMAN_ID, human))
 
     assert human.replies_seen[0] == [(dead, f"réponse de {dead}")]
 
@@ -213,7 +213,7 @@ def test_explicit_skip_brings_no_agent():
     state, agents, memory, rng = _setup_with_personalities()
     human = FakeHuman(partners=[])
 
-    asyncio.run(play_turn_with_human(state, rng, agents, memory, HUMAN_ID, human))
+    asyncio.run(play_turn(state, rng, agents, memory, HUMAN_ID, human))
 
     assert human.invited_by is None
 
@@ -225,7 +225,7 @@ def test_two_other_agents_meet_while_the_human_talks_in_private():
     partner = list(agents)[0]
     human = FakeHuman(partners=[partner], messages=["bonjour"])
 
-    asyncio.run(play_turn_with_human(state, rng, agents, memory, HUMAN_ID, human))
+    asyncio.run(play_turn(state, rng, agents, memory, HUMAN_ID, human))
 
     assert len(human.meetings_seen) == 1
     first, second = human.meetings_seen[0]
@@ -244,7 +244,7 @@ def test_no_agent_meeting_when_the_human_skips_the_private_channel():
     state, agents, memory, rng = _setup()
     human = FakeHuman(partners=[])
 
-    asyncio.run(play_turn_with_human(state, rng, agents, memory, HUMAN_ID, human))
+    asyncio.run(play_turn(state, rng, agents, memory, HUMAN_ID, human))
 
     assert human.meetings_seen == []
     assert memory.meetings() == []
@@ -254,7 +254,7 @@ def test_no_agent_meeting_when_the_invitation_is_refused():
     state, agents, memory, rng = _setup_with_personalities()
     human = FakeHuman(partners=None, accept_invitation=False)
 
-    asyncio.run(play_turn_with_human(state, rng, agents, memory, HUMAN_ID, human))
+    asyncio.run(play_turn(state, rng, agents, memory, HUMAN_ID, human))
 
     assert human.meetings_seen == []
 
@@ -265,7 +265,7 @@ def test_agents_learn_deaths_votes_and_execution():
     state, agents, memory, rng = _setup()
     human = FakeHuman()
 
-    asyncio.run(play_turn_with_human(state, rng, agents, memory, HUMAN_ID, human))
+    asyncio.run(play_turn(state, rng, agents, memory, HUMAN_ID, human))
 
     public = [e.content for e in memory.events_for("p1") if e.visible_to is None]
     assert public == [

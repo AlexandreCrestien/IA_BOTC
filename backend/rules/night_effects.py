@@ -1,4 +1,4 @@
-from backend.models import Effect, GameState, Phase, TypeEffet
+from backend.models import Effect, GameState, Phase, RoleKey, TypeEffet
 from backend.rules.actions import legal_actions
 from backend.rules.powers import is_poisoned
 
@@ -10,7 +10,7 @@ def protect(state: GameState, monk_id: str, target_id: str) -> GameState:
         return state
     effect = Effect(
         type=TypeEffet.PROTEGE,
-        source="monk",
+        source=RoleKey.MONK,
         turn_start=state.turn,
         phase_start=Phase.NUIT,
         turn_end=state.turn,

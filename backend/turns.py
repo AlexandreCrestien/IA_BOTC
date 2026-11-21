@@ -1,4 +1,6 @@
-"""Tour complet avec l'humain et les IA.
+"""Tour de jeu : la seule boucle du moteur, utilisée par le serveur, les scripts et les tests.
+Le joueur sans agent IA (l'humain) passe par un HumanPort : le WebSocket (QueueHumanPort), le terminal,
+ou un joueur automatique pour les parties « IA seules » (AutoHumanPort).
 Ordre : nuit (IA puis humain), infos de nuit de l'humain, morts de la nuit affichées,
 discussion publique des IA, message public de l'humain, salon privé facultatif
 (3 messages max, 1 ou 2 IA répondant en parallèle), vote (IA puis humain).
@@ -164,7 +166,7 @@ async def _private_channel(
         await whisper  # les deux agents votent en se souvenant de leur conversation
 
 
-async def play_turn_with_human(
+async def play_turn(
     state: GameState,
     rng: random.Random,
     agents: dict,
@@ -172,8 +174,9 @@ async def play_turn_with_human(
     human_id: str,
     human: HumanPort,
 ) -> TurnResult:
-    """Tour complet avec un humain et les IA. Les IA répondent d'abord, puis l'humain,
-    à chaque étape, pour que personne n'écrive pendant qu'un appel IA est en cours."""
+    """Tour complet : nuit, contrôle de victoire, discussion, vote, contrôle de victoire.
+    Les IA répondent d'abord, puis l'humain, à chaque étape, pour que personne n'écrive
+    pendant qu'un appel IA est en cours. Passe à la nuit suivante si la partie continue."""
     if state.phase != Phase.NUIT:
         raise ValueError("un tour commence par la nuit")
 

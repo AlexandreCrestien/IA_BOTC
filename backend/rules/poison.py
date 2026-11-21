@@ -1,4 +1,4 @@
-from backend.models import Effect, GameState, Phase, TypeEffet
+from backend.models import Effect, GameState, Phase, RoleKey, TypeEffet
 from backend.rules.actions import legal_actions
 from backend.rules.powers import is_poisoned
 
@@ -12,7 +12,7 @@ def poison(state: GameState, poisoner_id: str, target_id: str) -> GameState:
         return state
     effect = Effect(
         type=TypeEffet.EMPOISONNE,
-        source="poisoner",
+        source=RoleKey.POISONER,
         turn_start=state.turn,
         phase_start=Phase.NUIT,
         turn_end=state.turn + 1,

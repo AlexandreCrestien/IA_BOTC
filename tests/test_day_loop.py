@@ -56,3 +56,7 @@ def test_no_vote_no_execution():
     new_state, _, executed = play_day(day_game(), choose=lambda s, pid: None)
     assert executed is None
     assert all(p.alive for p in new_state.players)
+
+def test_a_vote_against_oneself_becomes_an_abstention():
+    votes = collect_votes(day_game(), choose=lambda s, pid: pid)
+    assert all(target is None for target in votes.values())

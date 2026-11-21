@@ -3,7 +3,7 @@ from typing import Callable, NamedTuple, Optional
 
 from backend.agent_factory import create_all_agents
 from backend.memory_manager import MemoryManager, game_master
-from backend.models import Alignement, EventType, GameState, Phase, Player, Role
+from backend.models import Alignement, EventType, GameState, Phase, Player, RoleKey
 from backend.prompt_loader import PromptLoader
 from backend.rules import (
     assign_players,
@@ -16,7 +16,7 @@ from backend.rules import (
     resolve_vote,
     set_link,
     vote_result,
-    winner,
+    vote_targets,
 )
 from backend.rules.powers import FALSE_LEAD_KEY, psychic_answer
 
@@ -66,14 +66,14 @@ def setup_game(
     assignments = assign_players(names, human_id, personality_names, rng)
 
     players = tuple(
-        Player(id=player_id, name=name, role=Role(**role_data))
-        for player_id, (name, role_data, _) in assignments.items()
+        Player(id=player_id, name=assignment.name, role=assignment.role)
+        for player_id, assignment in assignments.items()
     )
     state = GameState(turn=1, phase=Phase.NUIT, players=players)
 
     roles = {player.id: player.role for player in players}
     false_lead = choose_false_lead(roles, rng)
-    psychic = next(player for player in players if player.role.name_EN == "psychic")
+    psychic = next(player for player in players if player.role.name_EN == RoleKey.PSYCHIC)
     state = state.replace_player(set_link(psychic, FALSE_LEAD_KEY, false_lead))
 
     memory = MemoryManager(list(names), names=names)
@@ -128,14 +128,13 @@ def play_night(
 
 def collect_votes(state: GameState, choose: Optional[VoteFn] = None) -> dict[str, Optional[str]]:
     """Recueille les votes des joueurs qui peuvent voter.
-    Une cible absente, morte ou inconnue devient une abstention."""
-    alive = {player.id for player in state.players if player.alive}
+    Une cible non permise (morte, inconnue, ou le votant lui-même) devient une abstention."""
     votes: dict[str, Optional[str]] = {}
     for player in state.players:
         if not player.can_vote:
             continue
         target = choose(state, player.id) if choose else None
-        if target not in alive:
+        if target not in vote_targets(state, player.id):
             target = None
         votes[player.id] = target
     return votes
@@ -160,48 +159,6 @@ def deaths_between(before: GameState, after: GameState) -> tuple[str, ...]:
     )
 
 
-def play_turn(
-    state: GameState,
-    rng: random.Random,
-    night_choose: Optional[ChoiceFn] = None,
-    vote_choose: Optional[VoteFn] = None,
-) -> TurnResult:
-    """Joue un tour complet : nuit, contrôle de victoire, jour, contrôle de victoire.
-    Passe à la nuit suivante si la partie continue."""
-    if state.phase != Phase.NUIT:
-        raise ValueError("un tour commence par la nuit")
-
-    after_night, night_choices = play_night(state, rng, night_choose)
-    night_deaths = deaths_between(state, after_night)
-    if winner(after_night) is not None:
-        return TurnResult(after_night, night_choices, {}, None, night_deaths, winner(after_night))
-
-    # NUIT -> DISCUSSION -> VOTE
-    day_state = after_night.next_phase().next_phase()
-    after_day, votes, executed = play_day(day_state, vote_choose)
-    game_winner = winner(after_day)
-    if game_winner is None:
-        # VOTE -> NUIT, tour suivant
-        after_day = after_day.next_phase()
-    return TurnResult(after_day, night_choices, votes, executed, night_deaths, game_winner)
-
-
-def play_game(
-    state: GameState,
-    rng: random.Random,
-    night_choose: Optional[ChoiceFn] = None,
-    vote_choose: Optional[VoteFn] = None,
-    max_turns: int = 20,
-) -> GameState:
-    """Joue des tours jusqu'à la victoire d'un camp. Renvoie l'état final."""
-    for _ in range(max_turns):
-        result = play_turn(state, rng, night_choose, vote_choose)
-        state = result.state
-        if result.game_winner is not None:
-            return state
-    raise RuntimeError(f"partie non terminée après {max_turns} tours")
-
-
 def reveal_psychic_answer(
     state: GameState,
     choices: dict[str, tuple[str, ...]],
@@ -212,7 +169,7 @@ def reveal_psychic_answer(
     À appeler après la résolution de la nuit (state = état après la nuit), avant la discussion.
     Une Voyante morte pendant la nuit ne reçoit aucune information."""
     for player in state.players:
-        if player.role.name_EN != "psychic" or player.id not in choices or not player.alive:
+        if player.role.name_EN != RoleKey.PSYCHIC or player.id not in choices or not player.alive:
             continue
         probed = choices[player.id]
         found = psychic_answer(state, player.id, probed, rng)

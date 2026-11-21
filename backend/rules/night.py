@@ -1,9 +1,9 @@
-from backend.models import GameState
+from backend.models import GameState, RoleKey
 from backend.rules.actions import legal_actions
 
 # Ordre des rôles, défini par le groupe.
-FIRST_NIGHT_ORDER = ("poisoner", "psychic", "detective", "butler")
-OTHER_NIGHT_ORDER = ("poisoner", "monk", "imp", "psychic", "butler")
+FIRST_NIGHT_ORDER = (RoleKey.POISONER, RoleKey.PSYCHIC, RoleKey.DETECTIVE, RoleKey.BUTLER)
+OTHER_NIGHT_ORDER = (RoleKey.POISONER, RoleKey.MONK, RoleKey.IMP, RoleKey.PSYCHIC, RoleKey.BUTLER)
 
 
 def night_steps(state: GameState) -> list[tuple[str, bool]]:
@@ -15,7 +15,7 @@ def night_steps(state: GameState) -> list[tuple[str, bool]]:
         for player in state.players:
             if player.role.name_EN != role_name:
                 continue
-            if role_name == "detective":
+            if role_name == RoleKey.DETECTIVE:
                 steps.append((player.id, False))
             elif legal_actions(state, player.id).targets:
                 steps.append((player.id, True))

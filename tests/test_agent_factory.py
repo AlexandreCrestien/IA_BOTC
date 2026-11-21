@@ -6,7 +6,8 @@ import pytest
 import backend.agent_factory as agent_factory
 import backend.llm_client as llm_client
 
-from backend.models import Role, Player, Equipe, Phase
+from backend.models import Role, Equipe, Phase
+from backend.rules import Assignment, get_role
 from backend.prompt_loader import PromptLoader
 from backend.agent_factory import NOBODY, PASS, Agent, AgentFactory, create_all_agents
 from backend.memory_manager import MemoryManager
@@ -43,33 +44,20 @@ def mock_memory():
 
 
 @pytest.fixture
-def sample_role_data():
-    """Données valides pour un rôle."""
-    return {
-        "name_FR": "Moine",
-        "name_EN": "monk",
-        "team": Equipe.VILLAGEOIS,
-        "phase": Phase.NUIT,
-        "description": "Un protecteur nocturne."
-    }
+def sample_role():
+    """Un rôle valide."""
+    return Role(name_FR="Moine", name_EN="monk", team=Equipe.VILLAGEOIS, phase=Phase.NUIT,
+                description="Un protecteur nocturne.")
 
 @pytest.fixture
-def sample_personality_data():
-    """Données de personnalité : nom du fichier skill."""
-    return {"personality_name_EN": "paranoid"}
+def sample_personality():
+    """Personnalité : nom du fichier skill."""
+    return "paranoid"
 
 
-def test_agent_properties(sample_role_data, mock_memory):
+def test_agent_properties(sample_role, mock_memory):
     """Vérifie que les propriétés de l'Agent restituent correctement les infos."""
-    role = Role(**sample_role_data)
-    player = Player(id="j1", name="mAIsie", role=role)
-    
-    agent = Agent(
-        player=player,
-        personality_key="paranoid",
-        memory=mock_memory,
-        system_prompt="Prompt système de test"
-    )
+    agent = Agent("j1", "mAIsie", sample_role, "paranoid", mock_memory, "Prompt système de test")
 
     assert agent.player_id == "j1"
     assert agent.name == "mAIsie"
@@ -78,16 +66,16 @@ def test_agent_properties(sample_role_data, mock_memory):
     assert "agent_1" in agent._build_system_prompt()
 
 
-def test_agent_factory_creates_agent_successfully(fake_skills_env, sample_role_data, sample_personality_data, mock_memory):
+def test_agent_factory_creates_agent_successfully(fake_skills_env, sample_role, sample_personality, mock_memory):
     """Vérifie que l'AgentFactory assemble parfaitement le tout."""
     loader = PromptLoader(base_dir=fake_skills_env)
     factory = AgentFactory(prompt_loader=loader)
 
     agent = factory.create_agent(
         agent_id="agent_1",
-        agent_name="IAn",
-        role_data=sample_role_data,
-        personality_data=sample_personality_data,
+        name="IAn",
+        role=sample_role,
+        personality_key=sample_personality,
         memory=mock_memory
     )
 
@@ -102,14 +90,14 @@ def test_agent_factory_creates_agent_successfully(fake_skills_env, sample_role_d
     assert "Personnalité Parano" in agent.system_prompt
 
 
-def test_create_all_agents_excludes_human(fake_skills_env, sample_role_data, sample_personality_data, mock_memory):
+def test_create_all_agents_excludes_human(fake_skills_env, sample_role, sample_personality, mock_memory):
     """Vérifie que create_all_agents génère les bons agents IA tout en excluant le joueur humain."""
     loader = PromptLoader(base_dir=fake_skills_env)
     
     assignments = {
-        "human_id": ("Humain", sample_role_data, sample_personality_data),
-        "agent_1": ("IAn", sample_role_data, sample_personality_data),
-        "agent_2": ("dIAna", sample_role_data, sample_personality_data)
+        "human_id": Assignment("Humain", sample_role, None),
+        "agent_1": Assignment("IAn", sample_role, sample_personality),
+        "agent_2": Assignment("dIAna", sample_role, sample_personality)
     }
 
     agents = create_all_agents(
@@ -134,26 +122,15 @@ def test_agent_factory_real_integration(mock_memory):
     """
     factory = AgentFactory()
 
-    role_data = {
-        "name_FR": "Moine",
-        "name_EN": "monk",
-        "team": Equipe.VILLAGEOIS,
-        "phase": Phase.NUIT,
-        "description": "Protection nocturne."
-    }
-
-    personality_data = {"personality_name_EN": "paranoid"}
-
     agent = factory.create_agent(
         agent_id="player_01",
-        agent_name="dIAna",
-        role_data=role_data,
-        personality_data=personality_data,
+        name="dIAna",
+        role=get_role("monk"),
+        personality_key="paranoid",
         memory=mock_memory
     )
 
     assert isinstance(agent, Agent)
-    assert isinstance(agent.player, object)
     assert agent.name == "dIAna"
     assert agent.role_name == "Moine"
     assert agent.personality_key == "paranoid"
@@ -184,10 +161,9 @@ def fake_llm(monkeypatch):
 
 
 @pytest.fixture
-def agent(sample_role_data):
+def agent(sample_role):
     memory = MemoryManager(["ana", "bruno", "carla"])
-    player = Player(id="ana", name="ana", role=Role(**sample_role_data))
-    return Agent(player=player, personality_key="agitator", memory=memory, system_prompt="prompt")
+    return Agent("ana", "ana", sample_role, "agitator", memory, "prompt")
 
 
 def test_night_action_returns_legal_target(agent, fake_llm):
@@ -266,9 +242,9 @@ def test_speak_private_mentions_partners(agent, fake_llm):
     assert "conversation privée avec bruno" in fake_llm.calls[0][-1]["content"]
 
 
-def test_create_all_agents_requires_human(fake_skills_env, sample_role_data, sample_personality_data, mock_memory):
+def test_create_all_agents_requires_human(fake_skills_env, sample_role, sample_personality, mock_memory):
     with pytest.raises(ValueError, match="humain"):
-        create_all_agents({"agent_1": ("IAn", sample_role_data, sample_personality_data)},
+        create_all_agents({"agent_1": Assignment("IAn", sample_role, sample_personality)},
                           mock_memory, human_id="human_id",
                           prompt_loader=PromptLoader(base_dir=fake_skills_env))
 
@@ -276,10 +252,9 @@ def test_create_all_agents_requires_human(fake_skills_env, sample_role_data, sam
 # --- Noms affichés dans les prompts ------------------------------------------------
 
 @pytest.fixture
-def named_agent(sample_role_data):
+def named_agent(sample_role):
     memory = MemoryManager(["p1", "p2", "p3"], names={"p1": "Ana", "p2": "Bruno", "p3": "Carla"})
-    player = Player(id="p1", name="Ana", role=Role(**sample_role_data))
-    return Agent(player=player, personality_key="agitator", memory=memory, system_prompt="prompt")
+    return Agent("p1", "Ana", sample_role, "agitator", memory, "prompt")
 
 
 def test_system_prompt_lists_player_names(named_agent, fake_llm):

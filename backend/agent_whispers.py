@@ -16,14 +16,14 @@ from pydantic import BaseModel, Field
 
 from backend.llm_client import ask_llm_json
 from backend.memory_manager import MemoryManager, game_master
-from backend.models import Alignement, EventType, GameState
+from backend.models import Alignement, EventType, GameState, RoleKey
 
 logger = logging.getLogger(__name__)
 
 # Poids d'un duo (1 par défaut)
 EVIL_PAIR_WEIGHT = 3.0    # Démon + Sbire : ils doivent se concerter sur leur stratégie
 INFO_PAIR_WEIGHT = 1.5    # duo avec un rôle du bien qui a des informations à partager
-INFO_ROLES = {"psychic", "detective"}
+INFO_ROLES = {RoleKey.PSYCHIC, RoleKey.DETECTIVE}
 SOLICITATION_PENALTY = 0.25  # par entretien passé de chacun des deux agents
 
 NEUTRAL_SUMMARY = "Vous avez échangé quelques banalités, sans rien apprendre de décisif."

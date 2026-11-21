@@ -1,12 +1,12 @@
 """Contrat entre le moteur et le front : contenu de game_state.state (game.js, players.js)."""
 from backend.server.protocol import to_front_state, whisper_channel_id
 from backend.models import GameState, Player
-from backend.models.enums import Equipe, Phase
-from backend.models.role import Role
+from backend.models.enums import Phase
+from backend.rules import get_role
 
-IMP = Role(name_FR="Diablotin", name_EN="imp", team=Equipe.DEMON, phase=Phase.NUIT)
-PSYCHIC = Role(name_FR="Voyante", name_EN="psychic", team=Equipe.VILLAGEOIS, phase=Phase.NUIT)
-VILLAGER = Role(name_FR="Villageois", name_EN="villager", team=Equipe.VILLAGEOIS)
+IMP = get_role("imp")
+PSYCHIC = get_role("psychic")
+VILLAGER = get_role("detective")  # villageois sans action de nuit
 
 
 def make_state(phase: Phase = Phase.NUIT, human_alive: bool = True) -> GameState:

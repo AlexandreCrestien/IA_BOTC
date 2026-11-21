@@ -7,10 +7,17 @@ from backend.rules.butler import filter_butler_votes
 # Un vote vaut une cible (id de joueur). None = abstention, qui n'est pas comptée.
 
 
+def vote_targets(state: GameState, voter_id: str) -> list[str]:
+    """Joueurs contre qui ce joueur peut voter : les vivants, sauf lui-même (« personne » reste possible)."""
+    return [player.id for player in state.players if player.alive and player.id != voter_id]
+
+
 def _check_vote(state: GameState, voter_id: str, target_id: str) -> None:
     voter = state.player(voter_id)
     if not voter.can_vote:
         raise ValueError(f"{voter.name} ne peut pas voter.")
+    if target_id == voter_id:
+        raise ValueError(f"{voter.name} ne peut pas voter contre lui-même.")
     target = state.player(target_id)
     if not target.alive:
         raise ValueError(f"{target.name} est mort et ne peut pas être désigné.")

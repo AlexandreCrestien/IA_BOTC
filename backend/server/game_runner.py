@@ -7,10 +7,10 @@ from typing import Optional
 
 from backend.game_config import AI_NAMES, PERSONALITY_NAMES
 from backend.game_engine import setup_game
-from backend.human_turns import play_turn_with_human
 from backend.models import Alignement
 from backend.server.protocol import GRIMOIRE, forward_requests, send_game_interrupted
 from backend.server.session import GameSession, current_session, set_current_session
+from backend.turns import play_turn
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ async def run_game(session: GameSession, names: dict[str, str], personality_name
 
     while True:
         turn = state.turn
-        result = await play_turn_with_human(state, rng, agents, memory, session.human_id, port)
+        result = await play_turn(state, rng, agents, memory, session.human_id, port)
         state = result.state
         # Même file que les messages du moteur : le front reçoit tout dans l'ordre
         # (sinon la fin de partie pourrait arriver avant les morts de la dernière nuit).

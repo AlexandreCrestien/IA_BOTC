@@ -2,12 +2,12 @@ import asyncio
 
 from backend.human_port import QueueHumanPort
 from backend.models import GameState, Player
-from backend.models.enums import Equipe, Phase
-from backend.models.role import Role
+from backend.models.enums import Phase
+from backend.rules import get_role
 
-IMP = Role(name_FR="Diablotin", name_EN="imp", team=Equipe.DEMON, phase=Phase.NUIT)
-PSYCHIC = Role(name_FR="Voyante", name_EN="psychic", team=Equipe.VILLAGEOIS, phase=Phase.NUIT)
-VILLAGER = Role(name_FR="Villageois", name_EN="villager", team=Equipe.VILLAGEOIS)
+IMP = get_role("imp")
+PSYCHIC = get_role("psychic")
+VILLAGER = get_role("detective")  # villageois sans action de nuit
 
 
 def make_state() -> GameState:
@@ -50,13 +50,13 @@ def test_night_choice_envoie_cibles_et_nombre_puis_recoit_la_reponse():
     assert "mort" in request["targets"]  # on peut toujours cibler un mort
 
 
-def test_vote_ne_propose_que_les_vivants():
+def test_vote_ne_propose_que_les_vivants_sauf_soi():
     port = QueueHumanPort()
     state = make_state()
     result, request = run_with_server(port, "imp", lambda: port.vote(state, "h"))
     assert result == "imp"
     assert request["kind"] == "vote"
-    assert request["targets"] == ["h", "imp"]
+    assert request["targets"] == ["imp"]  # ni soi-même, ni le mort
 
 
 def test_partenaires_privés_excluent_soi_mais_pas_les_morts():

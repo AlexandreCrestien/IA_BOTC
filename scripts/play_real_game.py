@@ -15,15 +15,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import litellm  # noqa: E402
 
-from backend.ai_turns import play_turn_with_ai  # noqa: E402
 from backend.game_config import AI_NAMES, PERSONALITY_NAMES  # noqa: E402
 from backend.game_engine import setup_game  # noqa: E402
+from backend.human_port import AutoHumanPort  # noqa: E402
 from backend.models import EventType  # noqa: E402
+from backend.turns import play_turn  # noqa: E402
 
 litellm.suppress_debug_info = True
 
 NAMES = {"h": "alex", **AI_NAMES}
-HUMAN_ID = "h"  # pas d'agent : reçoit un choix aléatoire pour l'instant
+HUMAN_ID = "h"  # sans agent : joueur automatique (choix de nuit au hasard, abstention, jamais de message)
 PERSONALITIES = PERSONALITY_NAMES
 MAX_TURNS = 5
 
@@ -52,7 +53,7 @@ async def main():
     already_shown = 0
     for _ in range(MAX_TURNS):
         print(f"\n=== Tour {state.turn} ===")
-        result = await play_turn_with_ai(state, rng, agents, memory)
+        result = await play_turn(state, rng, agents, memory, HUMAN_ID, AutoHumanPort())
 
         messages = [e for e in memory.events_for(HUMAN_ID) if e.type == EventType.public_message]
         print("-- Discussion --")

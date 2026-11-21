@@ -2,7 +2,37 @@ import asyncio
 from typing import Optional
 
 from backend.models import GameState
-from backend.rules import legal_actions
+from backend.rules import legal_actions, vote_targets
+
+
+class AutoHumanPort:
+    """Joueur sans agent qui ne parle jamais : parties « IA seules » (scripts, tests).
+    Choix de nuit laissé au moteur (choix légal au hasard), pas de message, pas de salon privé,
+    refuse les entretiens et s'abstient au vote."""
+
+    async def night_choice(self, state: GameState, player_id: str) -> tuple[str, ...]:
+        return ()  # le moteur remplace un choix vide par un choix légal au hasard
+
+    async def show_night_info(self, state, turn, info, allies) -> None: ...
+    async def show_night_deaths(self, state, deaths) -> None: ...
+    async def show_public_message(self, state, author, text) -> None: ...
+    async def show_private_replies(self, state, replies) -> None: ...
+    async def show_agent_meeting(self, state, agent_ids) -> None: ...
+
+    async def public_message(self, state: GameState, player_id: str) -> Optional[str]:
+        return None
+
+    async def private_partners(self, state: GameState, player_id: str) -> Optional[list[str]]:
+        return []
+
+    async def agent_invitation(self, state: GameState, player_id: str, agent_id: str) -> bool:
+        return False
+
+    async def private_message(self, state: GameState, player_id: str) -> Optional[str]:
+        return None
+
+    async def vote(self, state: GameState, player_id: str) -> Optional[str]:
+        return None
 
 
 class QueueHumanPort:
@@ -59,8 +89,7 @@ class QueueHumanPort:
         await self._tell("agent_meeting", state, agents=list(agent_ids))
 
     async def vote(self, state: GameState, player_id: str) -> Optional[str]:
-        targets = [p.id for p in state.alive_players()]
-        return await self._ask("vote", state, targets=targets)
+        return await self._ask("vote", state, targets=vote_targets(state, player_id))
 
     async def show_turn_result(self, state: GameState, turn: int, votes: list[dict], executed: Optional[str]) -> None:
         """Fin du tour : bulletins (ids, vote fantôme signalé) et exécution. Posé par game_runner."""

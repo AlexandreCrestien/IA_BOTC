@@ -1,47 +1,49 @@
-from backend.models import Equipe, Phase, Role
+from backend.models import Equipe, Phase, Role, RoleKey
 
 # Catalogue des rôles de la partie. La clé correspond au fichier skills/roles/<clé>.md.
 # Pour ajouter un rôle, on ajoute une entrée ici, avec son test.
-ROLES: dict[str, Role] = {
-    "imp": Role(
+ROLES: dict[RoleKey, Role] = {
+    RoleKey.IMP: Role(
         name_FR="Diablotin",
-        name_EN="imp",
+        name_EN=RoleKey.IMP,
         team=Equipe.DEMON,
         phase=Phase.NUIT,
         description="Chaque nuit, choisit un habitant à tuer.",
     ),
-    "poisoner": Role(
+    RoleKey.POISONER: Role(
         name_FR="Empoisonneur",
-        name_EN="poisoner",
+        name_EN=RoleKey.POISONER,
         team=Equipe.SBIRE,
         phase=Phase.NUIT,
         description="Chaque nuit, empoisonne un habitant. Le poison dure jusqu'à la fin de la journée suivante.",
     ),
-    "monk": Role(
+    RoleKey.MONK: Role(
         name_FR="Moine",
-        name_EN="monk",
+        name_EN=RoleKey.MONK,
         team=Equipe.VILLAGEOIS,
         phase=Phase.NUIT,
         description="Chaque nuit, protège un habitant de l'attaque du diablotin.",
     ),
-    "psychic": Role(
+    RoleKey.PSYCHIC: Role(
         name_FR="Voyante",
-        name_EN="psychic",
+        name_EN=RoleKey.PSYCHIC,
         team=Equipe.VILLAGEOIS,
         phase=Phase.NUIT,
+        night_targets=2,
+        can_target_self=True,
         allowed_links=("fausse_piste",),
         description="Chaque nuit, sonde deux joueurs et apprend si l'un d'eux est démon. Une fausse piste est choisie au début de la partie.",
     ),
-    "detective": Role(
+    RoleKey.DETECTIVE: Role(
         name_FR="Détective",
-        name_EN="detective",
+        name_EN=RoleKey.DETECTIVE,
         team=Equipe.VILLAGEOIS,
         phase=None,
         description="Au début de la partie, voit un sbire parmi deux joueurs, dont l'un est choisi au hasard.",
     ),
-    "butler": Role(
+    RoleKey.BUTLER: Role(
         name_FR="Majordome",
-        name_EN="butler",
+        name_EN=RoleKey.BUTLER,
         team=Equipe.OUTSIDER,
         phase=Phase.NUIT,
         allowed_links=("maitre",),
@@ -51,11 +53,12 @@ ROLES: dict[str, Role] = {
 
 
 def get_role(name: str) -> Role:
-    """Renvoie la fiche d'un rôle du catalogue. Erreur claire si le rôle est inconnu."""
+    """Renvoie la fiche d'un rôle du catalogue (clé ou chaîne équivalente). Erreur claire si le rôle est inconnu."""
     if name not in ROLES:
         raise KeyError(f"rôle inconnu : {name}")
-    return ROLES[name]
+    return ROLES[RoleKey(name)]
 
 
 # Rôles d'une partie à six joueurs : un seul de chaque, attribué au hasard.
-SIX_PLAYER_ROLES = ("imp", "poisoner", "monk", "psychic", "detective", "butler")
+SIX_PLAYER_ROLES = (RoleKey.IMP, RoleKey.POISONER, RoleKey.MONK, RoleKey.PSYCHIC, RoleKey.DETECTIVE,
+                    RoleKey.BUTLER)

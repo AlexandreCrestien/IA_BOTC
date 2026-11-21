@@ -27,7 +27,7 @@ conversations ──► agent_factory ──► memory_manager ──► models 
 
 `memory_manager` et `llm_client` ne se connaissent pas. Seul `agent_factory` les relie.
 
-Ces modules sont appelés par le moteur : `game_engine` (mise en place), `ai_turns` et `human_turns` (déroulement d'un tour), voir section 5.
+Ces modules sont appelés par le moteur : `game_engine` (mise en place) et `turns` (déroulement d'un tour, avec `ai_turns` pour les choix des IA), voir section 5.
 
 ---
 
@@ -178,8 +178,8 @@ Les phases `DISCUSSION` et `VOTE` s'affichent toutes les deux « Jour ». Le can
 
 ### Création : `AgentFactory` et `create_all_agents`
 
-- `AgentFactory(prompt_loader=None).create_agent(agent_id, agent_name, role_data, personality_data, memory)` crée un agent. `role_data` est un dictionnaire de `Role` ; `personality_data` contient `personality_name_EN` (nom du fichier skill) et, en option, `personality_name_FR` (nom affiché).
-- `create_all_agents(assignments, memory, human_id, prompt_loader=None)` crée un agent par joueur IA à partir de `{id: (nom, role_data, personality_data)}`. L'humain n'a pas d'agent.
+- `AgentFactory(prompt_loader=None).create_agent(agent_id, name, role, personality_key, memory)` crée un agent. `role` est la fiche `Role` du catalogue ; `personality_key` est le nom du fichier skill de la personnalité. L'agent garde son identité fixe (id, nom, rôle), jamais l'état du joueur (vivant, effets), qui est dans `GameState`.
+- `create_all_agents(assignments, memory, human_id, prompt_loader=None)` crée un agent par joueur IA à partir de `{id: Assignment(name, role, personality)}` (résultat de `assign_players`). L'humain n'a pas d'agent.
 
 ---
 
@@ -231,10 +231,10 @@ Une personnalité absente du tableau parle en dernier, sans obligation.
 
 ### Un tour
 
-Deux versions du tour, qui suivent le même schéma :
-
-- `ai_turns.play_turn_with_ai(state, rng, agents, memory)` : les IA jouent ; l'humain reçoit un choix aléatoire ou s'abstient.
-- `human_turns.play_turn_with_human(state, rng, agents, memory, human_id, human)` : l'humain joue aussi. `human` respecte le protocole `HumanPort` (choix de nuit, message public, salon privé, vote…), ce qui permet de brancher le terminal aujourd'hui et le WebSocket plus tard.
+Une seule boucle : `turns.play_turn(state, rng, agents, memory, human_id, human)`, utilisée par le serveur, le terminal, les scripts et les tests.
+`human` respecte le protocole `HumanPort` (choix de nuit, message public, salon privé, vote…) :
+`QueueHumanPort` pour le WebSocket, `TerminalHuman` dans `scripts/play_with_human.py`, et `AutoHumanPort`
+pour une partie « IA seules » (choix de nuit tiré au hasard par le moteur, aucun message, abstention).
 
 ```
 NUIT        memory.set_moment(tour, NUIT)
@@ -272,7 +272,7 @@ VOTE        memory.set_moment(tour, VOTE)
 | État de la partie (vivants / morts, rôles réels, effets) | `backend/models` (`GameState`, `Player`, `Role`) |
 | Tirage des rôles et des personnalités | `backend/rules` (`assign_players`) |
 | Mise en place, nuit, vote, victoire | `game_engine` |
-| Déroulement d'un tour avec les IA / avec l'humain | `ai_turns`, `human_turns` |
+| Déroulement d'un tour | `turns` (choix des IA : `ai_turns`) |
 | Chargement des skills | `prompt_loader` |
 | Lien avec le front, choix de l'humain | `server`, `static/` |
 
@@ -281,7 +281,7 @@ VOTE        memory.set_moment(tour, VOTE)
 Tous les joueurs les connaissent, comme à une vraie table : `game_engine.record_night_deaths` (au réveil,
 « X est mort·e cette nuit. » ou « Personne n'est mort cette nuit. ») et `game_engine.record_vote`
 (« Votes : A → B, C → personne, D → B (vote fantôme). » puis l'exécution ou son absence) écrivent des
-événements publics (`EventType.death`, `EventType.vote`). Appelés par `ai_turns` et `human_turns`.
+événements publics (`EventType.death`, `EventType.vote`). Appelés par `turns.play_turn`.
 
 
 ### Agent qui vient parler à l'humain
@@ -290,7 +290,7 @@ Dans le navigateur, si le joueur ne choisit aucun interlocuteur (ni « Passer au
 après l'affichage du choix du salon privé, le front envoie `discussion_timeout`. Le délai ne compte pas
 tant qu'une modale est ouverte, et il s'arrête dès que le joueur sélectionne quelqu'un.
 `QueueHumanPort.private_partners` renvoie alors `None` (au lieu de `[]` pour « Passer au vote ») :
-`human_turns` appelle `choose_agent_for_human`, puis `agent_invitation` (modale « … souhaite s'entretenir »).
+`turns` appelle `choose_agent_for_human`, puis `agent_invitation` (modale « … souhaite s'entretenir »).
 Accepté : le salon s'ouvre et l'agent parle en premier (`agent_speaks_first=True`). Refusé : place au vote.
 
 

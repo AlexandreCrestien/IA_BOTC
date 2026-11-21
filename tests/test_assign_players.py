@@ -10,15 +10,15 @@ PERSONALITIES = ["agitator", "clown", "observer", "paranoid", "strategist"]
 def test_each_player_gets_a_role_and_human_has_no_personality():
     assignments = assign_players(NAMES, "h", PERSONALITIES, random.Random(1))
     assert set(assignments) == set(NAMES)
-    assert assignments["h"][2] is None
-    assert len({assignments[p][1]["name_EN"] for p in NAMES}) == 6
-    for player_id in NAMES:
-        Role(**assignments[player_id][1])
+    assert assignments["h"].personality is None
+    assert assignments["h"].name == "Alex"
+    assert len({assignments[p].role.name_EN for p in NAMES}) == 6
+    assert all(isinstance(assignments[p].role, Role) for p in NAMES)
 
 
 def test_ai_personalities_are_unique():
     assignments = assign_players(NAMES, "h", PERSONALITIES, random.Random(1))
-    keys = [assignments[p][2]["personality_name_EN"] for p in NAMES if p != "h"]
+    keys = [assignments[p].personality for p in NAMES if p != "h"]
     assert sorted(keys) == sorted(PERSONALITIES)
 
 

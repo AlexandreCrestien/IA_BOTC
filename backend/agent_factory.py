@@ -5,35 +5,30 @@ from pydantic import BaseModel, ValidationInfo, field_validator
 from backend.llm_client import ask_llm, ask_llm_json
 from backend.memory_manager import MemoryManager
 from backend.prompt_loader import PromptLoader
-from backend.models import Player, Role
+from backend.models import Role
+from backend.rules import Assignment
 
 logger = logging.getLogger(__name__)
 
 
 class Agent:
     """
-    Représente un agent IA complet pour le jeu, combinant :
-    - L'état de jeu officiel (le Player et son Role de models.py)
-    - La couche IA et comportementale (le system_prompt généré par le PromptLoader, la mémoire et les actions)
+    Agent IA d'un joueur : son identité fixe (id, nom, rôle), sa personnalité, son prompt système
+    et la mémoire de la partie. L'état du joueur (vivant, effets…) n'est pas ici : il est dans GameState.
     """
-    def __init__(self, player: Player, personality_key: str, memory: MemoryManager, system_prompt: str):
-        self.player = player
+    def __init__(self, player_id: str, name: str, role: Role, personality_key: str,
+                 memory: MemoryManager, system_prompt: str):
+        self.player_id = player_id
+        self.name = name
+        self.role = role
         # Personnalité = nom du fichier skill (ex. "agitator"). Interne : jamais montrée au joueur.
         self.personality_key = personality_key
         self.memory = memory
         self.system_prompt = system_prompt
 
     @property
-    def player_id(self) -> str:
-        return self.player.id
-
-    @property
-    def name(self) -> str:
-        return self.player.name
-
-    @property
     def role_name(self) -> str:
-        return self.player.role.name_FR
+        return self.role.name_FR
 
     def _build_system_prompt(self) -> str:
         """Injecte dynamiquement la liste des joueurs présents, par leur nom, sans dupliquer le general_rules."""
@@ -143,66 +138,29 @@ class Vote(BaseModel):
 
 
 class AgentFactory:
-    """
-    Fabrique qui assemble l'Agent, le PromptLoader et les modèles Pydantic officiels.
-    """
+    """Assemble un Agent : rôle, personnalité, prompt système (skills) et mémoire de la partie."""
     def __init__(self, prompt_loader: Optional[PromptLoader] = None):
         self.prompt_loader = prompt_loader or PromptLoader()
 
-    def create_agent(self, agent_id: str, agent_name: str, role_data: dict, personality_data: dict, memory: MemoryManager) -> Agent:
-        """
-        Crée un agent prêt à jouer en combinant le rôle, le joueur, les assets markdown et la mémoire de partie.
-        """
-        role_obj = Role(**role_data)
-
-        player_obj = Player(
-            id=agent_id,
-            name=agent_name,
-            role=role_obj
-        )
-
-        role_file = role_obj.name_EN
-        personality_file = personality_data["personality_name_EN"]
-
+    def create_agent(self, agent_id: str, name: str, role: Role, personality_key: str,
+                     memory: MemoryManager) -> Agent:
         system_prompt = self.prompt_loader.assemble_system_prompt(
-            role_name=role_file,
-            personality_name=personality_file,
-            agent_name=agent_name
+            role_name=role.name_EN,
+            personality_name=personality_key,
+            agent_name=name,
         )
-
-        return Agent(
-            player=player_obj,
-            personality_key=personality_file,
-            memory=memory,
-            system_prompt=system_prompt
-        )
+        return Agent(agent_id, name, role, personality_key, memory, system_prompt)
 
 
-# !! A déplacer dans un fichier qui gère le déroulement du jeu si besoin
-
-def create_all_agents(assignments: dict[str, tuple[str, dict, dict]], memory: MemoryManager, human_id: str, prompt_loader: Optional[PromptLoader] = None) -> dict[str, Agent]:
-    """
-    Initialise tous les agents IA de la partie à partir d'un dictionnaire d'affectations.
-    assignments : {id_joueur: (nom_du_joueur, role_data, personality_data)}
-    L'humain (human_id) est exclu des agents IA générés.
-    """
+def create_all_agents(assignments: dict[str, Assignment], memory: MemoryManager, human_id: str,
+                      prompt_loader: Optional[PromptLoader] = None) -> dict[str, Agent]:
+    """Crée un agent IA par joueur, sauf le joueur humain (human_id)."""
     if human_id not in assignments:
         raise ValueError(f"Le joueur humain {human_id} n'est pas dans la répartition")
-
     factory = AgentFactory(prompt_loader=prompt_loader)
-    agents = {}
-
-    for player_id, (agent_name, role_data, personality_data) in assignments.items():
-        if player_id == human_id:
-            continue
-
-        agent = factory.create_agent(
-            agent_id=player_id,
-            agent_name=agent_name,
-            role_data=role_data,
-            personality_data=personality_data,
-            memory=memory
-        )
-        agents[player_id] = agent
-
-    return agents
+    return {
+        player_id: factory.create_agent(player_id, assignment.name, assignment.role,
+                                        assignment.personality, memory)
+        for player_id, assignment in assignments.items()
+        if player_id != human_id
+    }

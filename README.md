@@ -30,7 +30,7 @@ Provocateur, Parano, Bouffon, Stratège et Observateur (fichiers dans `skills/pe
   - **Discussion :** les IA parlent dans le salon public (10 messages au plus, dans un ordre fixé par leur personnalité), puis l'humain peut écrire un message public. Il peut ensuite ouvrir un salon privé avec 1 ou 2 agents, vivants ou morts (3 messages au plus).
   - **Vote :** les IA puis l'humain votent. Chaque étape attend la précédente : l'humain n'écrit jamais pendant qu'une IA répond.
 - La première nuit, personne ne meurt. Le Diablotin et l'Empoisonneur apprennent qui est leur allié, et le Détective reçoit son information.
-- Si un joueur (IA) fait un choix de nuit invalide ou n'en fait pas, un choix légal est tiré au hasard. Un vote pour un joueur mort ou inconnu compte comme une abstention.
+- Si un joueur (IA) fait un choix de nuit invalide ou n'en fait pas, un choix légal est tiré au hasard. Personne ne peut voter contre soi-même ; un vote pour soi, pour un joueur mort ou inconnu compte comme une abstention.
 - Les morts restent dans la partie et gardent un dernier vote (vote fantôme).
 - **Victoire :** le bien gagne si le Diablotin meurt ; le mal gagne s'il ne reste aucun joueur du bien vivant.
 
@@ -54,9 +54,11 @@ backend/
 ├── agent_factory.py   Création des agents IA et leurs actions (parler, agir la nuit, voter)
 ├── conversations.py   Phases de conversation publique et privée
 ├── prompt_loader.py   Assemblage du prompt des agents à partir des skills
-├── game_engine.py     Boucle de jeu : mise en place de la partie, nuit, vote, tours jusqu'à la victoire
-├── ai_turns.py        Tour joué par les IA (choix de nuit, discussion, votes)
-└── human_turns.py     Tour avec l'humain et les IA (HumanPort : interface entre le moteur et l'humain)
+├── game_engine.py     Mise en place de la partie et étapes du tour : nuit, vote, annonces publiques
+├── turns.py           Le tour de jeu (seule boucle) ; HumanPort : interface entre le moteur et l'humain
+├── ai_turns.py        Choix de nuit et votes des agents IA
+├── human_port.py      Ports de l'humain : WebSocket (QueueHumanPort), joueur automatique (AutoHumanPort)
+└── game_config.py     Noms des agents IA et personnalités
 static/                Interface web (HTML, CSS, JS), servie par FastAPI
 skills/                Textes des prompts : règles générales, rôles, personnalités
 scripts/               Parties avec les vrais modèles, dans le terminal
@@ -147,8 +149,8 @@ Les tests du frontend (`tests/frontend/`) pilotent un vrai navigateur avec Playw
 - Mémoire par joueur (avec les noms des joueurs, datée par le moteur) et agents IA
 - Phases de conversation publique et privée
 - Serveur : WebSocket, validation des actions, route admin
-- Boucle de jeu (`game_engine.py`) : mise en place (rôles, personnalités, fausse piste de la Voyante, agents, infos de première nuit), tours nuit → vote, arrêt à la victoire
-- Tours avec les IA (`ai_turns.py`) et avec l'humain (`human_turns.py`) : choix de nuit, réponse de la Voyante, discussion publique, salon privé, votes
+- Mise en place (`game_engine.py`) : rôles, personnalités, fausse piste de la Voyante, agents, infos de première nuit
+- Tour de jeu (`turns.py`), le même pour le serveur, le terminal, les scripts « IA seules » et les tests : choix de nuit, réponse de la Voyante, discussion publique, salon privé, votes
 - Première version de l'interface web (`static/`) : écrans et affichage, pas encore reliés au moteur
 - Parties dans le terminal (`scripts/`)
 

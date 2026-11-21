@@ -3,15 +3,15 @@ import random
 import pytest
 
 from backend.models import GameState, Player
-from backend.models.enums import Equipe, Phase
-from backend.models.role import Role
+from backend.models.enums import Phase
 from backend.rules.actions import legal_actions
 from backend.rules.night_effects import kill
 from backend.rules.powers import psychic_answer
+from backend.rules import get_role
 
-IMP = Role(name_FR="Diablotin", name_EN="imp", team=Equipe.DEMON, phase=Phase.NUIT)
-PSYCHIC = Role(name_FR="Voyante", name_EN="psychic", team=Equipe.VILLAGEOIS, phase=Phase.NUIT)
-VILLAGER = Role(name_FR="Villageois", name_EN="villager", team=Equipe.VILLAGEOIS)
+IMP = get_role("imp")
+PSYCHIC = get_role("psychic")
+VILLAGER = get_role("detective")  # villageois sans action de nuit
 
 
 def make_state(phase: Phase = Phase.NUIT) -> GameState:

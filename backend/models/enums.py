@@ -1,4 +1,15 @@
-from enum import Enum
+from enum import Enum, StrEnum
+
+
+class RoleKey(StrEnum):
+    """Identifiant d'un rôle : clé du catalogue et nom du fichier skills/roles/<clé>.md.
+    StrEnum : vaut sa chaîne ("imp"…), mais une faute de frappe est une erreur immédiate."""
+    IMP = "imp"
+    POISONER = "poisoner"
+    MONK = "monk"
+    PSYCHIC = "psychic"
+    DETECTIVE = "detective"
+    BUTLER = "butler"
 
 
 class Phase(str, Enum):

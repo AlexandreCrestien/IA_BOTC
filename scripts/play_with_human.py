@@ -17,7 +17,7 @@ import litellm  # noqa: E402
 
 from backend.game_config import AI_NAMES, PERSONALITY_NAMES  # noqa: E402
 from backend.game_engine import setup_game  # noqa: E402
-from backend.human_turns import play_turn_with_human  # noqa: E402
+from backend.turns import play_turn  # noqa: E402
 from backend.rules import legal_actions  # noqa: E402
 from historique import RecordingAgent, save_histories  # noqa: E402
 
@@ -144,7 +144,7 @@ async def main():
 
     for turn_number in range(1, MAX_TURNS + 1):
         print(f"\n=== Tour {state.turn} ===")
-        result = await play_turn_with_human(state, rng, agents, memory, HUMAN_ID, human)
+        result = await play_turn(state, rng, agents, memory, HUMAN_ID, human)
         print("-- Votes --")
         for voter, target in result.votes.items():
             cible = state.player(target).name if target else "personne"

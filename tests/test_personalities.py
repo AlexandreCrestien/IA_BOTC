@@ -4,16 +4,12 @@ import pytest
 
 from backend.rules.distribution import distribute_personalities
 
-PERSONALITIES = [
-    {"personality_name_EN": n}
-    for n in ["paranoid", "clown", "agitator", "observer", "strategist"]
-]
+PERSONALITIES = ["paranoid", "clown", "agitator", "observer", "strategist"]
 
 
 def test_each_ai_gets_a_different_personality():
     result = distribute_personalities(["p1", "p2", "p3", "p4", "p5"], PERSONALITIES, random.Random(1))
-    names = [data["personality_name_EN"] for data in result.values()]
-    assert sorted(names) == sorted(p["personality_name_EN"] for p in PERSONALITIES)
+    assert sorted(result.values()) == sorted(PERSONALITIES)
 
 
 def test_not_enough_personalities_raises():

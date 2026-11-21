@@ -30,7 +30,7 @@ def _queued(session):
 
 
 def _run(monkeypatch, turns, setup_state=None):
-    """Joue run_game avec un moteur factice : turns = résultats successifs de play_turn_with_human."""
+    """Joue run_game avec un moteur factice : turns = résultats successifs de play_turn."""
     calls = []
 
     def fake_setup(names, human_id, personality_names, rng):
@@ -42,7 +42,7 @@ def _run(monkeypatch, turns, setup_state=None):
         return await result(port) if callable(result) else result  # callable : tour qui parle au port
 
     monkeypatch.setattr(gr, "setup_game", fake_setup)
-    monkeypatch.setattr(gr, "play_turn_with_human", fake_turn)
+    monkeypatch.setattr(gr, "play_turn", fake_turn)
     session = GameSession(human_id="h")
     final = asyncio.run(gr.run_game(session, {"h": "Alex"}, [], seed=1))
     return session, final, calls

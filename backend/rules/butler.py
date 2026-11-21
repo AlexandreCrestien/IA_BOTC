@@ -1,6 +1,6 @@
 from typing import Optional
 
-from backend.models import GameState
+from backend.models import GameState, RoleKey
 from backend.rules.actions import legal_actions
 from backend.rules.links import set_link
 from backend.rules.powers import is_poisoned
@@ -27,7 +27,7 @@ def filter_butler_votes(state: GameState, votes: dict[str, Optional[str]]) -> di
     Un Majordome empoisonné n'est jamais bloqué : son vote passe toujours."""
     filtered = dict(votes)
     for player in state.players:
-        if player.role.name_EN != "butler" or player.id not in votes:
+        if player.role.name_EN != RoleKey.BUTLER or player.id not in votes:
             continue
         if is_poisoned(player):
             continue
