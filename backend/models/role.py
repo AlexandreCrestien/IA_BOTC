@@ -4,8 +4,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from backend.models.enums import Alignment, Team, Phase, RoleKey
 
-# Camps du côté du bien. L'outsider est villageois, donc du côté du bien.
-GOOD_TEAMS = {Team.TOWNSFOLK, Team.OUTSIDER}
+# Camps du côté du bien. Le Paria (Valet) est du côté des villageois.
+GOOD_TEAMS = {Team.TOWNSFOLK, Team.OUTCAST}
 
 
 class Role(BaseModel):

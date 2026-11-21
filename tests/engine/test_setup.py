@@ -15,11 +15,11 @@ def test_setup_creates_six_players_and_five_agents():
     assert state.phase == Phase.NIGHT
 
 
-def test_psychic_gets_a_false_lead_among_good_players():
+def test_medium_gets_a_false_lead_among_good_players():
     state, _, _ = setup_game(NAMES, "h", PERSONALITIES, random.Random(1))
-    psychic = next(p for p in state.players if p.role.name_EN == "psychic")
-    false_lead = psychic.links["false_lead"]
-    assert false_lead != psychic.id
+    medium = next(p for p in state.players if p.role.name_EN == "medium")
+    false_lead = medium.links["false_lead"]
+    assert false_lead != medium.id
     assert state.player(false_lead).role.alignment == Alignment.GOOD
 
 

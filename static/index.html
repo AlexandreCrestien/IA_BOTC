@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Blood on the AI Clocktower</title>
+    <title>Lantern Hollow</title>
 
     <!-- Polices Google Fonts recommandées par Lovable -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -25,19 +25,19 @@
             
             <div class="text-center space-y-3 w-full">
                 <div class="ornament text-xs tracking-[0.3em] uppercase font-serif">
-                    RAVENSWOOD · 1888
+                    LANTERNSWOOD · 1888
                 </div>
 
                 <h1 class="font-display text-3xl font-bold tracking-wide text-gilt uppercase">
-                    Blood on the AI Clocktower
+                    Lantern Hollow
                 </h1>
                 
                 <p class="text-sm text-gray-300 leading-relaxed font-semibold font-serif italic">
-                    Bienvenue dans Blood on the AI Clocktower !
+                    Bienvenue à Lantern Hollow !
                 </p>
                 
                 <p class="text-sm text-gray-400 leading-relaxed">
-                    Jouez à une variante du loup-garou en affrontant des agents IA autonomes. Faites gagner votre camp en démasquant les démons ou en bluffant pour éviter d'être exécuté par les villageois.
+                    Jouez seul à une variante du loup-garou contre cinq personnages pilotés par des intelligences artificielles. Faites gagner votre camp en démasquant les démons ou en bluffant pour éviter d'être exécuté par les villageois.
                 </p>
             </div>
 
@@ -66,7 +66,7 @@
         <header class="panel border-b px-6 h-16 shrink-0 relative grid grid-cols-[minmax(max-content,1fr)_minmax(0,42rem)_minmax(max-content,1fr)] items-center gap-4 shadow-md z-10">
             <!-- Gauche : Titre -->
             <div class="flex items-center space-x-2 justify-self-start">
-                <span class="font-display font-bold tracking-wider text-gilt text-base uppercase">Blood on the AI Clocktower</span>
+                <span class="font-display font-bold tracking-wider text-gilt text-base uppercase">Lantern Hollow</span>
             </div>
 
             <!-- Centre : Bandeau d'annonces -->
@@ -224,10 +224,10 @@
                 </div>
             </section>
 
-            <!-- ZONE CENTRALE : Table ronde & Grimoire (6 colonnes)
+            <!-- ZONE CENTRALE : Table ronde & Codex (6 colonnes)
                  data-phase (nuit | discussion | vote) pilote la lueur d'ambiance, cf. .center-stage -->
             <section id="center-stage" data-phase="discussion" class="center-stage md:col-span-6 panel flex flex-col items-center p-4 relative overflow-hidden h-full min-h-0">
-                <div class="absolute top-4 left-4 z-10 font-serif text-xs uppercase tracking-[0.3em] text-gold-dim">Table ronde &amp; Grimoire</div>
+                <div class="absolute top-4 left-4 z-10 font-serif text-xs uppercase tracking-[0.3em] text-gold-dim">Table ronde &amp; Codex</div>
 
                 <!-- Table ronde : carré responsive, les sièges sont placés en % par renderRoundTable() -->
                 <div class="flex-1 min-h-0 w-full flex items-center justify-center">
@@ -236,17 +236,17 @@
                         <div class="table-surface absolute inset-[11%] rounded-full">
                             <div class="table-inner-ring absolute inset-[7%] rounded-full"></div>
 
-                            <!-- Bouton Grimoire au centre de la table (ouvre la modale des règles) -->
+                            <!-- Bouton Codex au centre de la table (ouvre la modale des règles) -->
                             <div class="absolute inset-0 flex items-center justify-center">
-                                <button type="button" data-action="open-grimoire" title="Ouvrir le Grimoire : règles et rôles"
-                                    class="grimoire-btn group focus-visible:outline-none">
+                                <button type="button" data-action="open-codex" title="Ouvrir le Codex : règles et rôles"
+                                    class="codex-btn group focus-visible:outline-none">
                                     <!-- Icône + titre dans le même cercle : le cercle est exactement au centre de la table -->
-                                    <span class="grimoire-dial relative flex size-32 sm:size-36 flex-col items-center justify-center gap-1 rounded-full transition-transform duration-300 group-hover:scale-105">
+                                    <span class="codex-dial relative flex size-32 sm:size-36 flex-col items-center justify-center gap-1 rounded-full transition-transform duration-300 group-hover:scale-105">
                                         <span class="clock-hand absolute inset-2" aria-hidden="true">
                                             <span class="absolute left-1/2 top-1 h-[45%] w-px -translate-x-1/2"></span>
                                         </span>
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="grimoire-icon relative size-8 sm:size-9" aria-hidden="true"><path d="M12 7v14"></path><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"></path></svg>
-                                        <span class="relative font-display text-lg sm:text-xl leading-none text-gilt">Grimoire</span>
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="codex-icon relative size-8 sm:size-9" aria-hidden="true"><path d="M12 7v14"></path><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"></path></svg>
+                                        <span class="relative font-display text-lg sm:text-xl leading-none text-gilt">Codex</span>
                                     </span>
                                 </button>
                             </div>
@@ -274,99 +274,119 @@
                 </div>
             </section>
 
-            <!-- Modale du Grimoire (Règles & Rôles) -->
-            <div id="modal-grimoire" class="modal-backdrop hidden" data-action="close-grimoire" data-backdrop>
-                <div class="modal-card w-[560px] max-h-[85vh] flex flex-col" data-tone="gold" role="dialog" aria-modal="true" aria-labelledby="grimoire-title">
+            <!-- Modale du Codex (Règles & Rôles) -->
+            <div id="modal-codex" class="modal-backdrop hidden" data-action="close-codex" data-backdrop>
+                <div class="modal-card w-[560px] max-h-[85vh] flex flex-col" data-tone="gold" role="dialog" aria-modal="true" aria-labelledby="codex-title">
                     <!-- En-tête -->
                     <div class="flex items-center justify-between gap-3 mb-4 shrink-0">
                         <div class="flex items-center gap-3">
                             <span class="modal-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="size-6"><path d="M12 7v14"></path><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"></path></svg></span>
                             <div>
                                 <p class="modal-kicker">Les secrets du village</p>
-                                <h3 id="grimoire-title" class="modal-title">Grimoire du Village</h3>
+                                <h3 id="codex-title" class="modal-title">Codex des Ombres</h3>
                             </div>
                         </div>
-                        <button type="button" data-action="close-grimoire" class="modal-close" aria-label="Fermer le Grimoire"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-5"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button>
+                        <button type="button" data-action="close-codex" class="modal-close" aria-label="Fermer le Codex"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-5"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button>
                     </div>
 
-                    <!-- Onglets internes du Grimoire -->
+                    <!-- Onglets internes du Codex -->
                     <div class="flex border-b mb-4 shrink-0">
-                        <button type="button" id="grimoire-tab-btn-roles" data-action="grimoire-tab" data-tab="roles" class="grimoire-tab is-active">Les rôles</button>
-                        <button type="button" id="grimoire-tab-btn-rules" data-action="grimoire-tab" data-tab="rules" class="grimoire-tab">Règles du jeu</button>
+                        <button type="button" id="codex-tab-btn-roles" data-action="codex-tab" data-tab="roles" class="codex-tab is-active">Les rôles</button>
+                        <button type="button" id="codex-tab-btn-rules" data-action="codex-tab" data-tab="rules" class="codex-tab">Règles du jeu</button>
+                        <button type="button" id="codex-tab-btn-data" data-action="codex-tab" data-tab="data" class="codex-tab">IA &amp; données</button>
                     </div>
 
                     <!-- Contenu défilant -->
                     <div class="overflow-y-auto pr-2 flex-1 min-h-0">
                         <!-- Section Rôles -->
-                        <div id="grimoire-tab-roles" class="flex flex-col gap-2">
+                        <div id="codex-tab-roles" class="flex flex-col gap-2">
                             <p class="font-serif italic text-sm opacity-70 mb-1">Compendium des rôles présents dans cette édition :</p>
-                            <article class="grimoire-card rounded-lg p-3">
+                            <article class="codex-card rounded-lg p-3">
                                 <div class="flex items-center justify-between gap-2 mb-1">
-                                    <span class="font-display text-lg text-gold">Diablotin</span>
+                                    <span class="font-display text-lg text-gold">Faucheur</span>
                                     <span class="role-tag tag-demon">Démon</span>
                                 </div>
                                 <p class="text-sm leading-relaxed opacity-85">Chaque nuit (sauf la première), il choisit un joueur à tuer. S'il est exécuté, les Villageois remportent la partie.</p>
                             </article>
-                            <article class="grimoire-card rounded-lg p-3">
+                            <article class="codex-card rounded-lg p-3">
                                 <div class="flex items-center justify-between gap-2 mb-1">
-                                    <span class="font-display text-lg text-gold">Empoisonneur</span>
-                                    <span class="role-tag tag-minion">Démon - Sbire</span>
+                                    <span class="font-display text-lg text-gold">Apothicaire</span>
+                                    <span class="role-tag tag-accomplice">Démon - Complice</span>
                                 </div>
                                 <p class="text-sm leading-relaxed opacity-85">Chaque nuit, il empoisonne un joueur. Le pouvoir de celui-ci échoue sans qu'il le sache.</p>
                             </article>
-                            <article class="grimoire-card rounded-lg p-3">
+                            <article class="codex-card rounded-lg p-3">
                                 <div class="flex items-center justify-between gap-2 mb-1">
-                                    <span class="font-display text-lg text-gold">Voyante</span>
+                                    <span class="font-display text-lg text-gold">Médium</span>
                                     <span class="role-tag tag-good">Villageois</span>
                                 </div>
-                                <p class="text-sm leading-relaxed opacity-85">Chaque nuit, elle choisit 2 joueurs et découvre si au moins l'un d'eux est un Démon. Il existe un leurre : un Villageois qu'elle voit comme un Démon.</p>
+                                <p class="text-sm leading-relaxed opacity-85">Chaque nuit, il choisit 2 joueurs et découvre si au moins l'un d'eux est un Démon. Il existe un leurre : un Villageois qu'elle voit comme un Démon.</p>
                             </article>
-                            <article class="grimoire-card rounded-lg p-3">
+                            <article class="codex-card rounded-lg p-3">
                                 <div class="flex items-center justify-between gap-2 mb-1">
-                                    <span class="font-display text-lg text-gold">Moine</span>
+                                    <span class="font-display text-lg text-gold">Veilleur</span>
                                     <span class="role-tag tag-good">Villageois</span>
                                 </div>
-                                <p class="text-sm leading-relaxed opacity-85">Chaque nuit (sauf la première), il protège un joueur (sauf lui-même) du Diablotin.</p>
+                                <p class="text-sm leading-relaxed opacity-85">Chaque nuit (sauf la première), il protège un joueur (sauf lui-même) du Faucheur.</p>
                             </article>
-                            <article class="grimoire-card rounded-lg p-3">
+                            <article class="codex-card rounded-lg p-3">
                                 <div class="flex items-center justify-between gap-2 mb-1">
-                                    <span class="font-display text-lg text-gold">Détective</span>
+                                    <span class="font-display text-lg text-gold">Inquisiteur</span>
                                     <span class="role-tag tag-good">Villageois</span>
                                 </div>
-                                <p class="text-sm leading-relaxed opacity-85">La première nuit, il reçoit le nom de 2 joueurs et sait que l'un d'eux est l'Empoisonneur.</p>
+                                <p class="text-sm leading-relaxed opacity-85">La première nuit, il reçoit le nom de 2 joueurs et sait que l'un d'eux est l'Apothicaire.</p>
                             </article>
-                            <article class="grimoire-card rounded-lg p-3">
+                            <article class="codex-card rounded-lg p-3">
                                 <div class="flex items-center justify-between gap-2 mb-1">
-                                    <span class="font-display text-lg text-gold">Majordome</span>
-                                    <span class="role-tag tag-outsider">Villageois - Outsider</span>
+                                    <span class="font-display text-lg text-gold">Valet</span>
+                                    <span class="role-tag tag-outcast">Villageois - Paria</span>
                                 </div>
                                 <p class="text-sm leading-relaxed opacity-85">Chaque nuit, il choisit son maître. Il ne pourra voter pour un joueur que si son maître décide également de voter.</p>
                             </article>
                         </div>
 
                         <!-- Section Règles -->
-                        <div id="grimoire-tab-rules" class="flex flex-col gap-2 hidden">
-                            <article class="grimoire-card rounded-lg p-3">
+                        <div id="codex-tab-rules" class="flex flex-col gap-2 hidden">
+                            <article class="codex-card rounded-lg p-3">
                                 <h4 class="font-display text-lg text-gold mb-1">Phase de Jour - Discussions</h4>
                                 <p class="text-sm leading-relaxed opacity-85">Discutez en public ou en privé avec vos voisins. L'objectif est d'échanger des informations ou de bluffer pour démasquer les Démons.</p>
                             </article>
-                            <article class="grimoire-card rounded-lg p-3">
+                            <article class="codex-card rounded-lg p-3">
                                 <h4 class="font-display text-lg text-gold mb-1">Phase de Jour - Vote</h4>
                                 <p class="text-sm leading-relaxed opacity-85">Les joueurs peuvent désigner un suspect à exécuter. Celui ayant recueilli la majorité des voix meurt. En cas d'égalité, personne ne meurt.</p>
                             </article>
-                            <article class="grimoire-card rounded-lg p-3">
+                            <article class="codex-card rounded-lg p-3">
                                 <h4 class="font-display text-lg text-gold mb-1">Phase de Nuit</h4>
-                                <p class="text-sm leading-relaxed opacity-85">Le village s'endort. Les rôles à pouvoir (Voyante, Moine, Démon...) sont appelés dans l'ombre pour effectuer leurs actions secrètes.</p>
+                                <p class="text-sm leading-relaxed opacity-85">Le village s'endort. Les rôles à pouvoir (Médium, Veilleur, Démon...) sont appelés dans l'ombre pour effectuer leurs actions secrètes.</p>
                             </article>
-                            <article class="grimoire-card rounded-lg p-3">
+                            <article class="codex-card rounded-lg p-3">
                                 <h4 class="font-display text-lg text-gold mb-1">Morts</h4>
                                 <p class="text-sm leading-relaxed opacity-85">Les morts continuent de jouer. Leur rôle n'est pas révélé, ils continuent de participer aux discussions et peuvent encore voter une fois dans la partie. Ils ne peuvent plus utiliser leur pouvoir nocturne.</p>
+                            </article>
+                        </div>
+                        <!-- Section IA & données (AI Act, RGPD) -->
+                        <div id="codex-tab-data" class="flex flex-col gap-2 hidden">
+                            <article class="codex-card rounded-lg p-3">
+                                <h4 class="font-display text-lg text-gold mb-1">Vous jouez contre des IA</h4>
+                                <p class="text-sm leading-relaxed opacity-85">Les cinq autres personnages sont des intelligences artificielles : des modèles de langage génèrent leurs messages, leurs votes et leurs actions. Aucun humain ne se cache derrière eux. Comme le veut le jeu, ils peuvent bluffer et mentir ; ils peuvent aussi se tromper ou se montrer incohérents.</p>
+                            </article>
+                            <article class="codex-card rounded-lg p-3">
+                                <h4 class="font-display text-lg text-gold mb-1">Ce qui est envoyé aux IA</h4>
+                                <p class="text-sm leading-relaxed opacity-85">Pour faire parler les personnages, le déroulé de la partie (messages publics et privés, votes, actions) et vos propres messages sont envoyés à des fournisseurs de modèles d'IA : Groq, Google (Gemini) et OpenRouter. Ces services peuvent être situés hors de l'Union européenne. N'écrivez pas d'informations personnelles dans le chat.</p>
+                            </article>
+                            <article class="codex-card rounded-lg p-3">
+                                <h4 class="font-display text-lg text-gold mb-1">Données collectées</h4>
+                                <p class="text-sm leading-relaxed opacity-85">Uniquement le pseudo que vous choisissez à l'accueil, qui sert de nom pendant la partie. Pas de compte, pas d'adresse e-mail, pas de cookie ni de traceur publicitaire.</p>
+                            </article>
+                            <article class="codex-card rounded-lg p-3">
+                                <h4 class="font-display text-lg text-gold mb-1">Conservation</h4>
+                                <p class="text-sm leading-relaxed opacity-85">La partie est gardée en mémoire par le serveur tant qu'il tourne, pour pouvoir la reprendre après un rechargement de la page. Elle est effacée quand vous l'abandonnez, quand vous en lancez une nouvelle ou quand le serveur s'arrête : rien n'est enregistré dans une base de données.</p>
                             </article>
                         </div>
                     </div>
 
                     <!-- Bouton Fermer -->
-                    <button type="button" data-action="close-grimoire" class="btn-seal mt-4 w-full shrink-0">Fermer le Grimoire</button>
+                    <button type="button" data-action="close-codex" class="btn-seal mt-4 w-full shrink-0">Fermer le Codex</button>
                 </div>
             </div>
 
@@ -406,7 +426,7 @@
     <div id="modal-role-reveal" class="modal-backdrop hidden">
         <div class="modal-card w-[440px] text-center" data-tone="gold" role="dialog" aria-modal="true" aria-labelledby="modal-role-title">
             <span class="modal-icon mx-auto mb-3"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="size-6"><path d="M15 12h-5"></path><path d="M15 8h-5"></path><path d="M19 17V5a2 2 0 0 0-2-2H4"></path><path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3"></path></svg></span>
-            <p class="modal-kicker ornament">Le Grimoire s'ouvre</p>
+            <p class="modal-kicker ornament">Le Codex s'ouvre</p>
             <h2 id="modal-role-title" class="modal-title text-3xl my-2">Votre rôle secret</h2>
             <p id="modal-role-description" class="font-serif text-base italic leading-relaxed opacity-90">
                 Description de votre rôle et de votre capacité spéciale dans l'ombre du village.
@@ -464,7 +484,7 @@
 
             <!-- MESSAGE SI LE JOUEUR MEURT -->
             <div id="night-death-notice" class="modal-notice notice-blood hidden">
-                <strong class="block mb-1 font-display text-lg">Vous avez été tué·e par le Diablotin.</strong>
+                <strong class="block mb-1 font-display text-lg">Vous avez été tué·e par le Faucheur.</strong>
                 La partie n'est pas finie, vous pouvez encore faire gagner les Villageois. Vous pouvez continuer à discuter avec les autres joueurs et il vous reste un vote pour le reste de la partie.
             </div>
 

@@ -2,7 +2,7 @@ import random
 
 from backend.models import Team, GameState, Player, EffectType
 
-# Clé de lien qui désigne le leurre de la Voyante.
+# Clé de lien qui désigne le leurre du Médium.
 FALSE_LEAD_KEY = "false_lead"
 
 
@@ -11,9 +11,9 @@ def is_poisoned(player: Player) -> bool:
     return player.has_effect(EffectType.POISONED)
 
 
-def psychic_answer(state: GameState, viewer_id: str, probed_ids: tuple[str, ...], rng: random.Random) -> bool:
-    """Réponse de la Voyante : True si au moins un des joueurs sondés est démon,
-    le leurre comptant comme démon. Réponse au hasard si la Voyante est poisonede."""
+def medium_answer(state: GameState, viewer_id: str, probed_ids: tuple[str, ...], rng: random.Random) -> bool:
+    """Réponse du Médium : True si au moins un des joueurs sondés est démon,
+    le leurre comptant comme démon. Réponse au hasard si le Médium est empoisonné."""
     viewer = state.player(viewer_id)
     if is_poisoned(viewer):
         return rng.random() < 0.5

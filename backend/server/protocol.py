@@ -14,6 +14,7 @@ from backend.models import GameState, Phase
 from backend.server.connection_manager import manager
 from backend.server.schemas import (
     ActionRequest,
+    Announcement,
     AgentWhisperRequest,
     Ally,
     Ballot,
@@ -39,7 +40,7 @@ from backend.server.session import ANSWERABLE, WHISPER_MESSAGES, GameSession
 logger = logging.getLogger(__name__)
 
 PUBLIC_CHANNEL = "public"
-GRIMOIRE = "Grimoire"  # expéditeur des annonces du chat (pseudo réservé)
+CODEX = "Codex"  # expéditeur des annonces du chat (pseudo réservé)
 
 # Valeurs attendues par le front (game.js : PHASES, actions.js : kind)
 PHASE_FRONT = {
@@ -126,7 +127,7 @@ async def open_whisper(session: GameSession, partner_ids: list[str]) -> None:
 
     names = ", ".join(session.state.player(pid).name for pid in partner_ids)
     me = session.state.player(human).name
-    await send_chat(session, PUBLIC_CHANNEL, GRIMOIRE,
+    await send_chat(session, PUBLIC_CHANNEL, CODEX,
                     f"💬 {me} est entré en discussion privée avec {names}.", broadcast=True)
     await send(human, PrivateChannelOpened(channel_id=channel_id, members=members,
                                            text=f"Salon privé ouvert avec {names}"))
@@ -190,11 +191,14 @@ async def send_request(session: GameSession, request: dict) -> None:
     elif kind == "agent_meeting":
         # Deux agents s'entretiennent en privé pendant le salon du joueur : annonce publique
         first, second = (state.player(pid).name for pid in request["agents"])
-        await send_chat(session, PUBLIC_CHANNEL, GRIMOIRE,
+        await send_chat(session, PUBLIC_CHANNEL, CODEX,
                         f"💬 {first} et {second} se sont entretenus en privé.", broadcast=True)
 
+    elif kind == "agent_unavailable":
+        await report_agent_unavailable(session, state, request["agent"], request["step"])
+
     elif kind == "night_info":
-        # Information privée de nuit (première nuit, Voyante). allies seulement pour le camp du mal.
+        # Information privée de nuit (première nuit, Médium). allies seulement pour le camp du mal.
         allies = [Ally(**ally) for ally in request["allies"]] if request["allies"] is not None else None
         if allies is not None:
             session.allies = allies
@@ -227,8 +231,31 @@ async def send_request(session: GameSession, request: dict) -> None:
 
 
 async def send_vote_result(session: GameSession, turn: int, executed: Optional[str], votes: list[dict]) -> None:
-    """votes : [{"voter": id, "target": id ou None, "ghost": bool}]. Gardés pour l'onglet Votes."""
+    """votes : [{"voter": id, "target": id ou None, "ghost": bool, "unavailable": bool}]. Gardés pour l'onglet Votes."""
     ballots = [Ballot(**vote) for vote in votes]
     session.vote_log.extend(
-        VoteHistoryEntry(turn=turn, voter=b.voter, target=b.target, executed=executed) for b in ballots)
+        VoteHistoryEntry(turn=turn, voter=b.voter, target=b.target, executed=executed, unavailable=b.unavailable)
+        for b in ballots)
     await send(session.human_id, VoteResult(turn=turn, executed=executed, votes=ballots))
+
+
+# Échecs d'un agent IA (son modèle n'a pas répondu) : ce que le joueur voit selon le moment
+FAILURE_BANNER_AFTER = 3  # échecs dans la partie avant le bandeau « les IA rencontrent des difficultés »
+
+
+async def report_agent_unavailable(session: GameSession, state: GameState, agent_id: str, step: str) -> None:
+    """Discussion : message du Codex sur la place publique. Salon privé : message du Codex dans le salon.
+    Vote : rien ici, le bulletin porte la mention « IA indisponible ». Nuit : rien, ce serait révéler
+    que l'agent a un pouvoir de nuit. Tout est gardé pour le panel admin ; bandeau une seule fois si
+    les échecs s'accumulent (panne d'un fournisseur)."""
+    name = state.player(agent_id).name
+    session.agent_failures.append({"turn": state.turn, "phase": state.phase.value, "agent": agent_id, "step": step})
+    if step == "public":
+        await send_chat(session, PUBLIC_CHANNEL, CODEX, f"🕯️ {name} ne dit rien : son IA n'a pas répondu.",
+                        broadcast=True)
+    elif step == "private" and session.whisper is not None:
+        await send_chat(session, session.whisper, CODEX, f"🕯️ {name} ne répond pas : son IA n'a pas répondu.")
+    if len(session.agent_failures) >= FAILURE_BANNER_AFTER and not session.failure_banner_shown:
+        session.failure_banner_shown = True
+        await send(session.human_id, Announcement(
+            text="Les IA rencontrent des difficultés : la partie continue avec des réponses de secours."))

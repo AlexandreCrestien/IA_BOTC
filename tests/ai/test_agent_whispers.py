@@ -8,8 +8,8 @@ from backend.ai.memory_manager import MemoryManager
 from backend.models import EventType, GameState, Phase, Player
 from backend.rules.catalogue import ROLES
 
-# Le joueur humain (h) est le Moine. a : Diablotin, b : Empoisonneur, c : Voyante, d : Majordome, e : Détective
-ROLE_OF = {"h": "monk", "a": "imp", "b": "poisoner", "c": "psychic", "d": "butler", "e": "detective"}
+# Le joueur humain (h) est le Veilleur. a : Faucheur, b : Apothicaire, c : Médium, d : Valet, e : Inquisiteur
+ROLE_OF = {"h": "watchman", "a": "reaper", "b": "apothecary", "c": "medium", "d": "valet", "e": "inquisitor"}
 AGENTS = ["a", "b", "c", "d", "e"]
 
 
@@ -33,8 +33,8 @@ def pair(*ids):
 def test_weights_follow_the_roles():
     state = make_state()
     assert aw.pair_weight(state, pair("a", "b"), [], 2) == aw.EVIL_PAIR_WEIGHT  # duo du mal
-    assert aw.pair_weight(state, pair("c", "d"), [], 2) == aw.INFO_PAIR_WEIGHT  # avec la Voyante
-    assert aw.pair_weight(state, pair("a", "e"), [], 2) == aw.INFO_PAIR_WEIGHT  # avec le Détective
+    assert aw.pair_weight(state, pair("c", "d"), [], 2) == aw.INFO_PAIR_WEIGHT  # avec le Médium
+    assert aw.pair_weight(state, pair("a", "e"), [], 2) == aw.INFO_PAIR_WEIGHT  # avec l'Inquisiteur
     assert aw.pair_weight(state, pair("a", "d"), [], 2) == 1.0
 
 
@@ -108,7 +108,7 @@ def test_each_agent_gets_its_own_summary(monkeypatch):
 
     assert len(calls) == 1  # un seul appel pour les deux résumés
     prompt = calls[0][-1]["content"]
-    assert "Diablotin" in prompt and "Empoisonneur" in prompt
+    assert "Faucheur" in prompt and "Apothicaire" in prompt
     a_events = [e for e in memory.events_for("a") if e.type == EventType.PRIVATE_SUMMARY]
     b_events = [e for e in memory.events_for("b") if e.type == EventType.PRIVATE_SUMMARY]
     assert [e.content for e in a_events] == ["Conversation privée avec B : Tu as convenu de viser C cette nuit."]

@@ -4,9 +4,9 @@ from backend.models import GameState, Player
 from backend.models.enums import Phase
 from backend.rules import get_role
 
-IMP = get_role("imp")
-PSYCHIC = get_role("psychic")
-VILLAGER = get_role("detective")  # villageois sans action de nuit
+REAPER = get_role("reaper")
+MEDIUM = get_role("medium")
+VILLAGER = get_role("inquisitor")  # villageois sans action de nuit
 
 
 def make_state(phase: Phase = Phase.NIGHT, human_alive: bool = True) -> GameState:
@@ -14,8 +14,8 @@ def make_state(phase: Phase = Phase.NIGHT, human_alive: bool = True) -> GameStat
         turn=2,
         phase=phase,
         players=(
-            Player(id="h", name="Alex", role=PSYCHIC, alive=human_alive, ghost_vote=not human_alive),
-            Player(id="imp", name="Imp", role=IMP),
+            Player(id="h", name="Alex", role=MEDIUM, alive=human_alive, ghost_vote=not human_alive),
+            Player(id="imp", name="Imp", role=REAPER),
             Player(id="mort", name="Mort", role=VILLAGER, alive=False, ghost_vote=True),
         ),
     )
@@ -38,7 +38,7 @@ def test_players_with_status_and_remaining_vote():
     by_id = {p["id"]: p for p in to_front_state(make_state()).model_dump()["players"]}
     assert by_id["h"] == {"id": "h", "name": "Alex", "alive": True, "has_vote": True}
     assert by_id["mort"]["alive"] is False
-    assert by_id["mort"]["has_vote"] is True  # vote fantôme encore disponible
+    assert by_id["mort"]["has_vote"] is True  # voix d'outre-tombe encore disponible
 
 
 def test_players_roles_never_sent():

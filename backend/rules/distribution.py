@@ -17,12 +17,12 @@ def distribute_roles(ids: list[str], rng: random.Random) -> dict[str, Role]:
 
 
 def choose_false_lead(roles: dict[str, Role], rng: random.Random) -> str:
-    """Choisit au hasard le joueur du bien qui apparaîtra comme démon à la Voyante.
-    La Voyante ne peut pas être sa propre fausse piste, et le vrai démon n'est jamais choisi."""
+    """Choisit au hasard le joueur du bien qui apparaîtra comme démon au Médium.
+    Le Médium ne peut pas être sa propre fausse piste, et le vrai démon n'est jamais choisi."""
     candidates = sorted(
         player_id
         for player_id, role in roles.items()
-        if role.alignment == Alignment.GOOD and role.name_EN != RoleKey.PSYCHIC
+        if role.alignment == Alignment.GOOD and role.name_EN != RoleKey.MEDIUM
     )
     if not candidates:
         raise ValueError("aucun joueur du bien éligible pour la fausse piste")

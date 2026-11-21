@@ -1,5 +1,5 @@
 /* ==========================================================
-   Blood on the AI Clocktower - Design System Lovable (Vanilla)
+   Lantern Hollow - Design System Lovable (Vanilla)
    ========================================================== */
 
 /* Variables du Thème Lovable */
@@ -363,7 +363,7 @@ body {
 .suspicion-select:disabled:hover { border-color: var(--border); }
 
 /* ==========================================================
-   Zone centrale : table ronde, grimoire, barre du rôle
+   Zone centrale : table ronde, codex, barre du rôle
    ========================================================== */
 
 /* Lueur d'ambiance selon la phase (data-phase sur la section) */
@@ -393,18 +393,18 @@ body {
   border: 1px dashed color-mix(in oklab, var(--gold-dim) 22%, transparent);
 }
 
-/* Grimoire central */
-.grimoire-btn .grimoire-dial {
+/* Codex central */
+.codex-btn .codex-dial {
   border: 1px solid color-mix(in oklab, var(--gold-dim) 40%, transparent);
   background-color: color-mix(in oklab, var(--background) 40%, transparent);
   transition: transform 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
 }
-.grimoire-btn:hover .grimoire-dial,
-.grimoire-btn:focus-visible .grimoire-dial {
+.codex-btn:hover .codex-dial,
+.codex-btn:focus-visible .codex-dial {
   border-color: var(--gold);
   box-shadow: 0 0 24px -6px oklch(0.76 0.115 80 / 45%);
 }
-.grimoire-icon {
+.codex-icon {
   color: var(--gold);
   animation: flicker 4s ease-in-out infinite;
 }
@@ -704,8 +704,8 @@ body {
   box-shadow: 0 8px 24px -8px oklch(0.5 0.18 22 / 70%);
 }
 
-/* Grimoire : onglets, cartes, étiquettes de camp */
-.grimoire-tab {
+/* Codex : onglets, cartes, étiquettes de camp */
+.codex-tab {
   flex: 1;
   padding: 0.5rem 0;
   margin-bottom: -1px;
@@ -715,13 +715,13 @@ body {
   color: color-mix(in oklab, var(--foreground) 60%, transparent);
   transition: color 0.15s ease, border-color 0.15s ease;
 }
-.grimoire-tab:hover { color: var(--foreground); }
-.grimoire-tab.is-active {
+.codex-tab:hover { color: var(--foreground); }
+.codex-tab.is-active {
   color: var(--gold);
   font-weight: 600;
   border-bottom-color: var(--gold);
 }
-.grimoire-card {
+.codex-card {
   border: 1px solid color-mix(in oklab, var(--gold-dim) 35%, transparent);
   background-color: color-mix(in oklab, var(--secondary) 55%, transparent);
 }
@@ -735,9 +735,9 @@ body {
   border: 1px solid currentColor;
 }
 .tag-demon    { color: oklch(0.66 0.22 25);  background-color: oklch(0.5 0.18 22 / 15%); }
-.tag-minion   { color: oklch(0.7 0.15 330);  background-color: oklch(0.47 0.16 315 / 18%); }
+.tag-accomplice   { color: oklch(0.7 0.15 330);  background-color: oklch(0.47 0.16 315 / 18%); }
 .tag-good     { color: oklch(0.75 0.12 150); background-color: oklch(0.6 0.12 150 / 12%); }
-.tag-outsider { color: oklch(0.78 0.1 200);  background-color: oklch(0.6 0.1 200 / 12%); }
+.tag-outcast { color: oklch(0.78 0.1 200);  background-color: oklch(0.6 0.1 200 / 12%); }
 
 /* Mots mis en avant dans le texte des modales */
 .modal-highlight-blood { color: oklch(0.72 0.2 25); font-weight: 700; font-style: normal; }

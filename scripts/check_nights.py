@@ -15,7 +15,7 @@ import random
 from backend.ai.choices import collect_ai_night_choices
 from backend.engine.config import AI_NAMES, PERSONALITY_NAMES
 from backend.engine.setup import setup_game
-from backend.engine.steps import play_night, record_night_choices, reveal_psychic_answer
+from backend.engine.steps import play_night, record_night_choices, reveal_medium_answer
 
 logging.getLogger("LiteLLM").setLevel(logging.CRITICAL)
 logging.getLogger("litellm").setLevel(logging.CRITICAL)
@@ -33,7 +33,7 @@ async def play_night_once(state, rng, agents, memory):
     ai_night = await collect_ai_night_choices(state, agents)
     after, choices = play_night(state, rng, lambda s, pid: ai_night.get(pid, ()))
     record_night_choices(after, choices, memory)
-    reveal_psychic_answer(after, choices, memory, rng)
+    reveal_medium_answer(after, choices, memory, rng)
     return after, choices
 
 

@@ -1,4 +1,4 @@
-"""Mise en place d'une partie : rôles, personnalités, fausse piste de la Voyante, mémoire, agents IA
+"""Mise en place d'une partie : rôles, personnalités, fausse piste du Médium, mémoire, agents IA
 et informations de la première nuit."""
 import random
 from typing import Optional
@@ -14,13 +14,13 @@ from backend.rules.powers import FALSE_LEAD_KEY
 def _info_text(state: GameState, info) -> str:
     subjects = ", ".join(state.player(pid).name for pid in info.subject_ids)
     if info.kind == "demon":
-        # Le sbire voit le démon
-        return f"Première nuit : tu es l'Empoisonneur. Le Diablotin est : {subjects}."
-    if info.kind == "minion":
-        # Le démon voit le sbire
-        return f"Première nuit : tu es le Diablotin. Tes alliés sont : {subjects}."
-    # Le Détective voit un sbire parmi deux joueurs
-    return f"Première nuit : parmi {subjects}, l'un d'eux est l'Empoisonneur."
+        # Le complice voit le démon
+        return f"Première nuit : tu es l'Apothicaire. Le Faucheur est : {subjects}."
+    if info.kind == "accomplice":
+        # Le démon voit le complice
+        return f"Première nuit : tu es le Faucheur. Tes alliés sont : {subjects}."
+    # L'Inquisiteur voit un complice parmi deux joueurs
+    return f"Première nuit : parmi {subjects}, l'un d'eux est l'Apothicaire."
 
 
 def check_unique_names(names: dict[str, str]) -> None:
@@ -36,7 +36,7 @@ def setup_game(
     rng: random.Random,
     prompt_loader: Optional[PromptLoader] = None,
 ):
-    """Met en place une partie : rôles, personnalités, fausse piste de la Voyante,
+    """Met en place une partie : rôles, personnalités, fausse piste du Médium,
     agents IA et infos de première nuit. Renvoie (état, agents, mémoire)."""
     check_unique_names(names)
     assignments = assign_players(names, human_id, personality_names, rng)
@@ -49,8 +49,8 @@ def setup_game(
 
     roles = {player.id: player.role for player in players}
     false_lead = choose_false_lead(roles, rng)
-    psychic = next(player for player in players if player.role.name_EN == RoleKey.PSYCHIC)
-    state = state.replace_player(set_link(psychic, FALSE_LEAD_KEY, false_lead))
+    medium = next(player for player in players if player.role.name_EN == RoleKey.MEDIUM)
+    state = state.replace_player(set_link(medium, FALSE_LEAD_KEY, false_lead))
 
     memory = MemoryManager(list(names), names=names)
     agents = create_all_agents(assignments, memory, human_id, prompt_loader)

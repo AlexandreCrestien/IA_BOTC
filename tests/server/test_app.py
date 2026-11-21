@@ -36,7 +36,7 @@ def no_real_game(monkeypatch, clean_server):
 def waiting_for(player_id: str, kind: str, **request):
     """Simule un moteur qui attend la réponse `kind` du joueur, dans une petite partie (le joueur, ana, agent_1).
     À la connexion, le serveur renvoie le rôle, l'état, puis la demande en attente."""
-    players = tuple(Player(id=pid, name=pid.capitalize(), role=get_role("monk")) for pid in (player_id, "ana", "agent_1"))
+    players = tuple(Player(id=pid, name=pid.capitalize(), role=get_role("watchman")) for pid in (player_id, "ana", "agent_1"))
     return waiting_session(player_id, kind, GameState(players=players), **request)
 
 

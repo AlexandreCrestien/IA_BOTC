@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Blood on the AI Clocktower - Grimoire Admin</title>
+    <title>Lantern Hollow - Codex Admin</title>
 
     <!-- Mêmes polices que l'interface de jeu -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -26,11 +26,11 @@
 
             <div class="text-center space-y-3 w-full">
                 <div class="ornament text-xs tracking-[0.3em] uppercase font-serif">
-                    RAVENSWOOD · 1888
+                    LANTERNSWOOD · 1888
                 </div>
 
                 <h1 class="font-display text-3xl font-bold tracking-wide text-gilt uppercase">
-                    Blood on the AI Clocktower
+                    Lantern Hollow
                 </h1>
 
                 <p class="text-sm text-gray-300 leading-relaxed font-semibold font-serif italic">
@@ -148,6 +148,14 @@
                 <h2 class="admin-section-title">Actions de nuit</h2>
                 <div id="night-actions-container" class="admin-scroll max-h-72 overflow-y-auto pr-2 flex flex-col gap-2 text-sm">
                     <span class="italic opacity-60">Aucune action de nuit pour l'instant.</span>
+                </div>
+            </section>
+
+            <!-- IA QUI N'ONT PAS RÉPONDU (le joueur ne voit pas celles de la nuit) -->
+            <section class="admin-section rounded-2xl p-6 space-y-4">
+                <h2 class="admin-section-title">IA indisponibles</h2>
+                <div id="agent-failures-container" class="admin-scroll max-h-72 overflow-y-auto pr-2 flex flex-col gap-2 text-sm">
+                    <span class="italic opacity-60">Aucune IA indisponible pour l'instant.</span>
                 </div>
             </section>
 

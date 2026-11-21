@@ -1,7 +1,7 @@
 ## 1. Identité et objectif
-- **Nom du rôle :** Voyante
+- **Nom du rôle :** Médium
 - **Camp :** Villageois (gentil)
-- **Objectif principal :** Localiser les démons grâce aux indices recueillis chaque nuit, afin de guider le village vers l'exécution du Diablotin.
+- **Objectif principal :** Localiser les démons grâce aux indices recueillis chaque nuit, afin de guider le village vers l'exécution du Faucheur.
 
 ---
 

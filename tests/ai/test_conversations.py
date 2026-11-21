@@ -26,7 +26,7 @@ def make_agents(memory, personalities):
     """Un agent par personnalité, dans l'ordre de IDS.
     Le prompt système est l'id du joueur : le faux LLM sait ainsi qui parle."""
     return [
-        Agent(i, i, ROLES["monk"], p, memory, system_prompt=i)
+        Agent(i, i, ROLES["watchman"], p, memory, system_prompt=i)
         for i, p in zip(IDS, personalities)
     ]
 
@@ -103,8 +103,26 @@ def test_failing_agent_is_skipped(memory, fake_llm):
 
     fake_llm.reply = reply
     agents = make_agents(memory, ["agitator", "paranoid"])
-    said = asyncio.run(public_conversation(agents, memory, max_messages=2))
+    failures = []
+    said = asyncio.run(public_conversation(agents, memory, max_messages=2, failures=failures))
     assert said == [("bruno", "message de bruno"), ("bruno", "message de bruno")]
+    # Signalé une seule fois, à sa place dans la discussion, et plus réinterrogé ensuite
+    assert failures == [(0, "ana")]
+    assert [pid for pid, _ in fake_llm.calls].count("ana") == 1
+
+
+def test_failing_private_reply_is_reported(memory, fake_llm):
+    def reply(player_id, optional):
+        if player_id == "ana":
+            raise RuntimeError("tous les modèles ont échoué")
+        return f"message de {player_id}"
+
+    fake_llm.reply = reply
+    agents = make_agents(memory, ["agitator", "clown"])
+    failures = []
+    replies = asyncio.run(private_replies(HUMAN, agents, memory, failures=failures))
+    assert replies == [("bruno", "message de bruno")]
+    assert failures == ["ana"]
 
 
 # --- Conversation privée -----------------------------------------------------

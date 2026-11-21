@@ -14,12 +14,12 @@ def night_game(turn: int = 1) -> GameState:
         turn=turn,
         phase=Phase.NIGHT,
         players=(
-            make_player("a", "imp"),
-            make_player("b", "poisoner"),
-            make_player("c", "monk"),
-            make_player("d", "psychic"),
-            make_player("e", "detective"),
-            make_player("f", "butler"),
+            make_player("a", "reaper"),
+            make_player("b", "apothecary"),
+            make_player("c", "watchman"),
+            make_player("d", "medium"),
+            make_player("e", "inquisitor"),
+            make_player("f", "valet"),
         ),
     )
 
@@ -36,19 +36,19 @@ def test_poison_lasts_through_next_day():
     assert effect.is_expired(2, Phase.NIGHT)
 
 
-def test_poisoner_cannot_target_himself():
+def test_apothecary_cannot_target_himself():
     with pytest.raises(ValueError):
         poison(night_game(), "b", "b")
 
 
 def test_poison_on_dead_target_is_allowed():
-    state = night_game().replace_player(make_player("c", "monk", alive=False))
+    state = night_game().replace_player(make_player("c", "watchman", alive=False))
     result = poison(state, "b", "c")
     assert result.player("c").has_effect(EffectType.POISONED)
 
 
-def test_poisoned_poisoner_has_no_effect():
-    poisoned = make_player("b", "poisoner").add_effect(
+def test_poisoned_apothecary_has_no_effect():
+    poisoned = make_player("b", "apothecary").add_effect(
         __import__("backend.models", fromlist=["Effect"]).Effect(
             type=EffectType.POISONED, source="x", turn_start=1, phase_start=Phase.NIGHT,
         )

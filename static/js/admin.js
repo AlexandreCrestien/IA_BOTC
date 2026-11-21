@@ -1,7 +1,7 @@
 'use strict';
 
 const ADMIN_API_URL = "/admin/debug/all-states";
-const TOKEN_STORAGE_KEY = 'botc_admin_token';
+const TOKEN_STORAGE_KEY = 'Lantern_hollow_admin_token';
 
 // Données gardées en mémoire pour changer d'agent sans refaire de requête
 let currentAdminData = null;
@@ -141,6 +141,7 @@ function renderDashboard(data) {
     renderPublicHistory(data.public_history || []);
     renderAgents();
     renderNightActions(data.night_actions || []);
+    renderAgentFailures(data.agent_failures || []);
     renderNightHistory(data.night_history || []);
     renderVoteHistory(data.vote_history || []);
 }
@@ -177,9 +178,9 @@ function renderPlayers(players) {
     `;
 }
 
-// Mêmes couleurs d'étiquette que le Grimoire du jeu
+// Mêmes couleurs d'étiquette que le Codex du jeu
 function teamTagClass(team) {
-    return { "Démon": "tag-demon", "Sbire": "tag-minion", "Outsider": "tag-outsider" }[team] || "tag-good";
+    return { "Démon": "tag-demon", "Complice": "tag-accomplice", "Paria": "tag-outcast" }[team] || "tag-good";
 }
 
 function renderNightActions(actions) {
@@ -194,6 +195,21 @@ function renderNightActions(actions) {
             </div>
         `).join('')
         : emptyLine("Aucune action de nuit pour l'instant.");
+}
+
+// IA dont le modèle n'a pas répondu : moment, agent, et ce qu'elle devait faire
+function renderAgentFailures(failures) {
+    const container = document.getElementById('agent-failures-container');
+    container.innerHTML = failures.length
+        ? failures.map(f => `
+            <div class="history-line">
+                <span class="memory-role mr-2">${escapeHtml(f.moment)}</span>
+                <span class="font-semibold text-gold">${escapeHtml(f.agent)}</span>
+                <span class="opacity-50 mx-1">·</span>
+                <span class="memory-content">${escapeHtml(f.step)}</span>
+            </div>
+        `).join('')
+        : emptyLine("Aucune IA indisponible pour l'instant.");
 }
 
 function renderNightHistory(history) {

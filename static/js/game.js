@@ -65,7 +65,7 @@ function setAnnouncement(text) {
 }
 
 // ================= TABLE RONDE =================
-// Place les joueurs autour de la table (le Grimoire central est statique dans le HTML).
+// Place les joueurs autour de la table (le Codex central est statique dans le HTML).
 function renderRoundTable() {
     const seats = document.getElementById('round-table-seats');
     const players = gameState.players || [];

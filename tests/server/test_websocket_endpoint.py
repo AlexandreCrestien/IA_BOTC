@@ -14,8 +14,8 @@ from backend.server import websocket_endpoint as ws
 from backend.server.schemas import NightHistoryEntry, VoteHistoryEntry
 from server_helpers import waiting_session
 
-NAMES = {"h": "Alex", "imp": "Imp", "p1": "marIA", "moine": "Moine"}
-ROLES = {"h": "psychic", "imp": "imp", "p1": "poisoner", "moine": "monk"}
+NAMES = {"h": "Alex", "imp": "Imp", "p1": "marIA", "moine": "Veilleur"}
+ROLES = {"h": "medium", "imp": "reaper", "p1": "apothecary", "moine": "watchman"}
 
 
 def make_state(dead=()) -> GameState:
@@ -146,7 +146,7 @@ def test_whisper_opens_the_channel_and_answers_the_engine():
         announce = act(conn, "request_whisper", targets=["imp"])
         opened = json.loads(conn.receive_text())
 
-    assert announce == {"type": "chat", "channel_id": "public", "sender": "Grimoire",
+    assert announce == {"type": "chat", "channel_id": "public", "sender": "Codex",
                         "content": "💬 Alex est entré en discussion privée avec Imp."}
     assert opened == {"type": "private_channel_opened", "channel_id": "whisper_h_imp", "members": ["h", "imp"],
                       "text": "Salon privé ouvert avec Imp", "focus": True}
@@ -176,7 +176,7 @@ def test_reconnection_reopens_the_channel_and_resends_the_chat():
         "connected", "role_assigned", "game_state", "private_channel_opened", "chat", "chat"]
     assert messages[3] == {"type": "private_channel_opened", "channel_id": "whisper_h_imp",
                            "members": ["h", "imp"], "text": "", "focus": False}
-    assert messages[4]["sender"] == "Grimoire"
+    assert messages[4]["sender"] == "Codex"
     assert messages[5] == {"type": "chat", "channel_id": "whisper_h_imp", "sender": "h", "content": "Psst"}
 
 
@@ -184,12 +184,12 @@ def test_revealed_allies_resent_with_the_role():
     session = waiting()
     # La révélation de la première nuit est retenue…
     relay(session, {"kind": "night_info", "turn": 1, "info": "Ton allié est marIA.",
-                    "allies": [{"id": "p1", "role": "Empoisonneur"}]})
+                    "allies": [{"id": "p1", "role": "Apothicaire"}]})
 
     # …et renvoyée avec le rôle à la reconnexion
     with make_client().websocket_connect("/ws/h") as conn:
         role = next(m for m in connect(conn) if m["type"] == "role_assigned")
-    assert role["allies"] == [{"id": "p1", "role": "Empoisonneur"}]
+    assert role["allies"] == [{"id": "p1", "role": "Apothicaire"}]
 
 
 # --- Étapes facultatives -------------------------------------------------------------
@@ -271,7 +271,7 @@ def test_night_and_vote_histories_kept_and_resent_on_reconnection():
         {"turn": 2, "type": "role_info", "info": "L'un des deux est le Démon.", "dead_player": None},
         {"turn": 2, "type": "result", "info": None, "dead_player": "p1"},
     ]
-    assert history["votes"][0] == {"turn": 2, "voter": "h", "target": "p1", "executed": "p1"}
+    assert history["votes"][0] == {"turn": 2, "voter": "h", "target": "p1", "executed": "p1", "unavailable": False}
 
 
 def test_night_without_death():
@@ -319,7 +319,7 @@ def test_accepting_the_invitation_opens_the_channel():
         announce = act(conn, "respond_whisper_invitation", target_agent_id="imp", accepted=True)
         opened = json.loads(conn.receive_text())
 
-    assert announce["sender"] == "Grimoire"
+    assert announce["sender"] == "Codex"
     assert opened["type"] == "private_channel_opened" and opened["channel_id"] == "whisper_h_imp"
     assert session.whisper == "whisper_h_imp"
     assert session.port.answers.get_nowait() is True
@@ -351,7 +351,40 @@ def test_meeting_between_two_agents_announced_publicly():
     session = waiting()
     sent = relay(session, {"kind": "agent_meeting", "agents": ["imp", "moine"]})
 
-    message = {"type": "chat", "channel_id": "public", "sender": "Grimoire",
-               "content": "💬 Imp et Moine se sont entretenus en privé."}
+    message = {"type": "chat", "channel_id": "public", "sender": "Codex",
+               "content": "💬 Imp et Veilleur se sont entretenus en privé."}
     assert sent == [message]
     assert [m.model_dump() for m in session.chat_log] == [message]  # renvoyé après une reconnexion
+
+
+# --- IA indisponible : ce que le joueur voit selon le moment ---------------------------
+
+def test_unavailable_agent_in_public_discussion_announced_by_the_codex():
+    session = waiting()
+    sent = relay(session, {"kind": "agent_unavailable", "agent": "imp", "step": "public"})
+    assert sent == [{"type": "chat", "channel_id": "public", "sender": "Codex",
+                     "content": "🕯️ Imp ne dit rien : son IA n'a pas répondu."}]
+
+
+def test_unavailable_agent_in_private_channel_announced_in_the_channel():
+    session = waiting()
+    session.whisper = "whisper_h_imp"
+    sent = relay(session, {"kind": "agent_unavailable", "agent": "imp", "step": "private"})
+    assert sent[0]["channel_id"] == "whisper_h_imp"
+    assert sent[0]["content"] == "🕯️ Imp ne répond pas : son IA n'a pas répondu."
+
+
+@pytest.mark.parametrize("step", ["night", "vote"])
+def test_unavailable_agent_at_night_or_vote_shows_nothing_but_is_kept_for_admin(step):
+    """Nuit : l'annoncer révélerait un pouvoir. Vote : la mention est sur le bulletin."""
+    session = waiting()
+    assert relay(session, {"kind": "agent_unavailable", "agent": "imp", "step": step}) == []
+    assert session.agent_failures == [{"turn": 2, "phase": "discussion", "agent": "imp", "step": step}]
+
+
+def test_banner_once_when_failures_pile_up():
+    session = waiting()
+    failure = {"kind": "agent_unavailable", "agent": "imp", "step": "night"}
+    sent = relay(session, failure, failure, failure, failure)
+    assert sent == [{"type": "announcement",
+                     "text": "Les IA rencontrent des difficultés : la partie continue avec des réponses de secours."}]

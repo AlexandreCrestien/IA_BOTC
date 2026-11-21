@@ -3,13 +3,13 @@ from enum import Enum, StrEnum
 
 class RoleKey(StrEnum):
     """Identifiant d'un rôle : clé du catalogue et nom du fichier skills/roles/<clé>.md.
-    StrEnum : vaut sa chaîne ("imp"…), mais une faute de frappe est une erreur immédiate."""
-    IMP = "imp"
-    POISONER = "poisoner"
-    MONK = "monk"
-    PSYCHIC = "psychic"
-    DETECTIVE = "detective"
-    BUTLER = "butler"
+    StrEnum : vaut sa chaîne ("reaper"…), mais une faute de frappe est une erreur immédiate."""
+    REAPER = "reaper"          # Faucheur
+    APOTHECARY = "apothecary"  # Apothicaire
+    WATCHMAN = "watchman"      # Veilleur
+    MEDIUM = "medium"          # Médium
+    INQUISITOR = "inquisitor"  # Inquisiteur
+    VALET = "valet"            # Valet
 
 
 class Phase(str, Enum):
@@ -19,20 +19,20 @@ class Phase(str, Enum):
 
 
 class Team(str, Enum):
-    TOWNSFOLK = "villageois"
-    OUTSIDER = "outsider"
-    MINION = "sbire"
-    DEMON = "demon"
+    TOWNSFOLK = "townsfolk"    # Villageois
+    OUTCAST = "outcast"        # Paria
+    ACCOMPLICE = "accomplice"  # Complice
+    DEMON = "demon"            # Démon
 
 
 class Alignment(str, Enum):
-    GOOD = "villageois"
-    EVIL = "demon"
+    GOOD = "good"
+    EVIL = "evil"
 
 
 class EffectType(str, Enum):
-    PROTECTED = "protege"
-    POISONED = "empoisonne"
+    PROTECTED = "protected"
+    POISONED = "poisoned"
 
 class EventType(str, Enum):
     DEATH = "death"

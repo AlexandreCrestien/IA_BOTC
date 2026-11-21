@@ -18,14 +18,14 @@ def test_answer_accepted_for_the_expected_request():
 
 def test_answer_refused_for_another_request():
     session = session_waiting_for("night_choice")
-    assert session.answer("vote", "imp") is False
+    assert session.answer("vote", "reaper") is False
     assert session.port.answers.empty()
     assert session.waits_for("night_choice")
 
 
 def test_answer_refused_without_pending_request():
     session = GameSession(human_id="h")
-    assert session.answer("vote", "imp") is False
+    assert session.answer("vote", "reaper") is False
 
 
 def test_one_answer_per_request():

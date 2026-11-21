@@ -19,7 +19,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="Blood on the AI Clocktower - Backend API",
+    title="Lantern Hollow - Backend API",
     description="API en temps réel (websockets) pour lier le moteur de jeu Python et le frontend.",
     version="1.0.0"
 )
@@ -35,7 +35,7 @@ def serve_admin_page():
 @app.get("/health", tags=["Health Check"])
 def health_check():
     """Route de santé pour vérifier rapidement si le serveur tourne."""
-    return {"status": "online", "message": "Le serveur Blood on the AI Clocktower tourne à merveille !"}
+    return {"status": "online", "message": "Le serveur Lantern Hollow tourne à merveille !"}
 
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")

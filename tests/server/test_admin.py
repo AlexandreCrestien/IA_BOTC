@@ -50,7 +50,7 @@ def test_players_with_role_team_and_personality(game):
     assert by_name["Alex"]["is_human"] is True and by_name["Alex"]["personality"] is None
     # Personnalités internes : le nom du fichier skill (jamais montré au joueur)
     assert {by_name[n]["personality"] for n in ["marIA", "tobIAs", "mAIsie", "adrIAn", "dIAne"]} == set(PERSONALITIES)
-    assert {p["team"] for p in view["players"]} >= {"Démon", "Sbire"}
+    assert {p["team"] for p in view["players"]} >= {"Démon", "Complice"}
 
 
 def test_personal_history_of_each_agent(game):
@@ -76,7 +76,7 @@ def test_night_actions_of_every_player(game):
 
 def test_player_histories_use_names(session):
     session.night_log += [
-        NightHistoryEntry(turn=1, type="role_info", info="Tu es la Voyante."),
+        NightHistoryEntry(turn=1, type="role_info", info="Tu es le Médium."),
         NightHistoryEntry(turn=2, type="result", dead_player="p1"),
         NightHistoryEntry(turn=3, type="result", dead_player=None),
     ]
@@ -85,7 +85,7 @@ def test_player_histories_use_names(session):
     view = admin.build_debug_state()
 
     assert [n["info"] for n in view["night_history"]] == [
-        "Tu es la Voyante.", "marIA est mort·e cette nuit.", "Personne n'est mort cette nuit."]
+        "Tu es le Médium.", "marIA est mort·e cette nuit.", "Personne n'est mort cette nuit."]
     assert view["vote_history"] == [{"turn": 1, "voter": "Alex", "target": "tobIAs", "executed": "tobIAs"}]
     assert view["channels"] == ["Alex, marIA"]
 
@@ -142,3 +142,10 @@ def test_admin_is_closed_when_token_is_empty(client, monkeypatch):
     """Un jeton vide (comme dans .env.example) ne doit pas ouvrir l'admin avec un header vide."""
     monkeypatch.setattr(admin, "ADMIN_SECRET_TOKEN", "")
     assert client.get(ADMIN_URL, headers={"x-admin-token": ""}).status_code == 403
+
+
+def test_unavailable_agents_listed_with_names(session):
+    session.agent_failures.append({"turn": 2, "phase": "nuit", "agent": "p1", "step": "night"})
+    view = admin.build_debug_state()
+    assert view["agent_failures"] == [
+        {"moment": "Nuit 2", "agent": "marIA", "step": "action de nuit (choix tiré au hasard)"}]

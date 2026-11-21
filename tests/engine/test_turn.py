@@ -12,8 +12,8 @@ from backend.rules import get_role
 from backend.engine.turn import play_turn
 
 NAMES = {"a": "Ada", "b": "Bob", "c": "Cléo", "d": "Dan", "e": "Eva", "f": "Fay"}
-ROLES = {"a": "imp", "b": "poisoner", "c": "monk", "d": "psychic", "e": "detective", "f": "butler"}
-HUMAN = "f"  # le Majordome n'a pas d'agent : joueur automatique
+ROLES = {"a": "reaper", "b": "apothecary", "c": "watchman", "d": "medium", "e": "inquisitor", "f": "valet"}
+HUMAN = "f"  # le Valet n'a pas d'agent : joueur automatique
 
 
 class FakeAgent:

@@ -48,13 +48,13 @@ Une action hors de son moment, ou avec un choix non proposé, reçoit un message
 | `action_request` | `kind` (`nuit` / `vote` / `discussion`), `candidates` (ids), `max_targets`, `min_targets`, `role` (nom anglais, nuit) | Encadré d'action |
 | `input_request` | `kind` (`public_message` / `private_message`), `channel_id`, `text`, `left` | Bandeau « c'est à vous d'écrire » |
 | `agent_whisper_request` | `agent_id` | Un agent propose un entretien (modale) |
-| `chat` | `channel_id`, `sender` (id, ou `"Grimoire"` pour les annonces), `content` | Message de chat |
+| `chat` | `channel_id`, `sender` (id, ou `"Codex"` pour les annonces), `content` | Message de chat |
 | `private_channel_opened` | `channel_id`, `members` (ids), `text`, `focus` | Ouverture (ou réouverture) d'un salon privé |
 | `night_info` | `turn`, `info`, `allies` | Information de nuit ; `allies` [`id`, `role`] pour le camp du mal, la première nuit |
 | `night_result` | `turn`, `dead_player` (id ou `null`) | Réveil du village |
 | `night_action_ack` | `text` | Choix de nuit bien reçu |
-| `vote_result` | `turn`, `executed` (id ou `null`), `votes` [`voter`, `target`, `ghost`] | Résultat du vote ; `ghost` : vote fantôme |
-| `history` | `nights` [`turn`, `type` (`role_info` / `result`), `info`, `dead_player`], `votes` [`turn`, `voter`, `target`, `executed`] | Onglets Nuits et Votes, à la reconnexion |
+| `vote_result` | `turn`, `executed` (id ou `null`), `votes` [`voter`, `target`, `ghost`, `unavailable`] | Résultat du vote ; `ghost` : voix d'outre-tombe ; `unavailable` : l'IA du votant n'a pas répondu (abstention forcée) |
+| `history` | `nights` [`turn`, `type` (`role_info` / `result`), `info`, `dead_player`], `votes` [`turn`, `voter`, `target`, `executed`, `unavailable`] | Onglets Nuits et Votes, à la reconnexion |
 | `announcement` | `text` | Annonce courte (bandeau central) |
 | `error` | `data` | Action refusée ou invalide |
 | `game_over` | `winner` (`good` / `evil`), `details` | Fin de partie |

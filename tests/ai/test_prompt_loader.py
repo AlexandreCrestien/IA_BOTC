@@ -19,7 +19,7 @@ def fake_skills_dir(tmp_path):
     personalities_dir.mkdir(parents=True)
 
     (skills_dir / "general_rules.md").write_text("RÈGLES GLOBALES DE TEST", encoding="utf-8")
-    (roles_dir / "monk.md").write_text("RÔLE DU MOINE", encoding="utf-8")
+    (roles_dir / "watchman.md").write_text("RÔLE DU VEILLEUR", encoding="utf-8")
     (personalities_dir / "parano.md").write_text("STYLE PARANO", encoding="utf-8")
 
     return skills_dir
@@ -31,14 +31,14 @@ def test_assemble_system_prompt_success(fake_skills_dir):
     agent_name = "TestBot"
     
     prompt = loader.assemble_system_prompt(
-        role_name="monk", 
+        role_name="watchman", 
         personality_name="parano", 
         agent_name=agent_name
     )
 
     assert agent_name in prompt
     assert "RÈGLES GLOBALES DE TEST" in prompt
-    assert "RÔLE DU MOINE" in prompt
+    assert "RÔLE DU VEILLEUR" in prompt
     assert "STYLE PARANO" in prompt
     assert "# CONTEXTE ET OBJECTIF" in prompt
 
@@ -48,11 +48,11 @@ def test_assemble_system_prompt_case_and_whitespace_insensitivity(fake_skills_di
     loader = PromptLoader(base_dir=fake_skills_dir)
 
     prompt = loader.assemble_system_prompt(
-        role_name="  MoNk  ", 
+        role_name="  WaTcHmAn  ",
         personality_name=" PaRaNo "
     )
 
-    assert "RÔLE DU MOINE" in prompt
+    assert "RÔLE DU VEILLEUR" in prompt
     assert "STYLE PARANO" in prompt
 
 
@@ -71,7 +71,7 @@ def test_missing_personality_file_raises_error(fake_skills_dir):
     loader = PromptLoader(base_dir=fake_skills_dir)
 
     with pytest.raises(FileNotFoundError) as exc_info:
-        loader.assemble_system_prompt(role_name="monk", personality_name="non_existent_personality")
+        loader.assemble_system_prompt(role_name="watchman", personality_name="non_existent_personality")
     
     assert "non_existent_personality.md" in str(exc_info.value)
 

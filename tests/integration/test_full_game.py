@@ -28,7 +28,7 @@ def simulated_llm(monkeypatch, clean_server):
     monkeypatch.setitem(game_runner.GAME_CONFIG, "seed", None)
 
 
-# 1 : Moine ; 3 : Diablotin (partie courte) ; 5 : Empoisonneur, partie longue
+# 1 : Veilleur ; 3 : Faucheur (partie courte) ; 5 : Apothicaire, partie longue
 @pytest.mark.parametrize("seed", [1, 3, 5])
 def test_full_game(simulated_llm, seed):
     script = load_script()

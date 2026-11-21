@@ -6,7 +6,7 @@ from backend.rules import get_role
 
 
 def player(**kwargs) -> Player:
-    base = dict(id="j1", name="Odette", role=get_role("monk"))
+    base = dict(id="j1", name="Odette", role=get_role("watchman"))
     base.update(kwargs)
     return Player(**base)
 
@@ -14,7 +14,7 @@ def player(**kwargs) -> Player:
 def protection() -> Effect:
     return Effect(
         type=EffectType.PROTECTED,
-        source="monk",
+        source="watchman",
         turn_start=2,
         phase_start=Phase.NIGHT,
         turn_end=2,
@@ -27,7 +27,7 @@ def test_alive_by_default():
     assert p.alive and not p.ghost_vote and p.effects == ()
 
 
-def test_monk_can_act_when_alive():
+def test_watchman_can_act_when_alive():
     assert player().can_act
 
 
@@ -36,7 +36,7 @@ def test_dead_player_cannot_act():
 
 
 def test_role_without_phase_cannot_act():
-    assert not player(role=Role(name_FR="Recluse", name_EN="detective", team=Team.OUTSIDER)).can_act
+    assert not player(role=Role(name_FR="Recluse", name_EN="inquisitor", team=Team.OUTCAST)).can_act
 
 
 def test_used_power_blocks_action():

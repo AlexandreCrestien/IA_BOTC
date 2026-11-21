@@ -46,6 +46,10 @@ class GameSession:
     night_log: list[dict] = field(default_factory=list)                # onglet Nuits
     vote_log: list[dict] = field(default_factory=list)                 # onglet Votes
 
+    # IA qui n'ont pas répondu : [{turn, phase, agent, step}] (panel admin), et bandeau déjà affiché
+    agent_failures: list[dict] = field(default_factory=list)
+    failure_banner_shown: bool = False
+
     @property
     def running(self) -> bool:
         return self.game_task is not None and not self.game_task.done()

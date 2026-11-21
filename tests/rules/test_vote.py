@@ -11,12 +11,12 @@ def make_player(id: str, role: str, **kwargs) -> Player:
 
 def day_game(*extra: Player) -> GameState:
     players = (
-        make_player("a", "imp"),
-        make_player("b", "poisoner"),
-        make_player("c", "monk"),
-        make_player("d", "psychic"),
-        make_player("e", "detective"),
-        make_player("f", "butler"),
+        make_player("a", "reaper"),
+        make_player("b", "apothecary"),
+        make_player("c", "watchman"),
+        make_player("d", "medium"),
+        make_player("e", "inquisitor"),
+        make_player("f", "valet"),
     )
     return GameState(turn=1, phase=Phase.VOTE, players=players)
 
@@ -56,7 +56,7 @@ def test_all_abstain_no_death():
 
 
 def test_dead_voter_with_ghost_vote_uses_it():
-    dead = make_player("e", "detective", alive=False, ghost_vote=True)
+    dead = make_player("e", "inquisitor", alive=False, ghost_vote=True)
     state = day_game().replace_player(dead)
     state = resolve_vote(state, {"e": "c", "a": "c"})
     assert not state.player("e").ghost_vote
@@ -64,21 +64,21 @@ def test_dead_voter_with_ghost_vote_uses_it():
 
 
 def test_dead_voter_abstention_keeps_ghost_vote():
-    dead = make_player("e", "detective", alive=False, ghost_vote=True)
+    dead = make_player("e", "inquisitor", alive=False, ghost_vote=True)
     state = day_game().replace_player(dead)
     state = resolve_vote(state, {"e": None, "a": None})
     assert state.player("e").ghost_vote
 
 
 def test_dead_voter_without_ghost_vote_raises():
-    dead = make_player("e", "detective", alive=False, ghost_vote=False)
+    dead = make_player("e", "inquisitor", alive=False, ghost_vote=False)
     state = day_game().replace_player(dead)
     with pytest.raises(ValueError):
         vote_result(state, {"e": "c"})
 
 
 def test_dead_target_raises():
-    dead = make_player("c", "monk", alive=False)
+    dead = make_player("c", "watchman", alive=False)
     state = day_game().replace_player(dead)
     with pytest.raises(ValueError):
         vote_result(state, {"a": "c"})

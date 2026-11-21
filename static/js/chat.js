@@ -210,6 +210,7 @@ function renderVoteHistory() {
                             <span class="font-semibold">${escapeHtml(getPlayerName(v.voter))}</span>
                             <span class="ml-1.5 opacity-70">a voté pour</span>
                             <span class="font-semibold text-gold ml-1">${v.target ? escapeHtml(getPlayerName(v.target)) : "Personne"}</span>
+                            ${v.unavailable ? '<span class="ml-1 opacity-60">(IA indisponible)</span>' : ''}
                         </div>
                     `).join('')}
                 </div>

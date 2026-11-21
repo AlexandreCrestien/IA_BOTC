@@ -9,12 +9,12 @@ def make_player(id: str, role: str, **kwargs) -> Player:
 
 def day_game(*overrides: Player) -> GameState:
     players = [
-        make_player("a", "imp"),
-        make_player("b", "poisoner"),
-        make_player("c", "monk"),
-        make_player("d", "psychic"),
-        make_player("e", "detective"),
-        make_player("f", "butler"),
+        make_player("a", "reaper"),
+        make_player("b", "apothecary"),
+        make_player("c", "watchman"),
+        make_player("d", "medium"),
+        make_player("e", "inquisitor"),
+        make_player("f", "valet"),
     ]
     by_id = {p.id: p for p in overrides}
     players = tuple(by_id.get(p.id, p) for p in players)
@@ -31,7 +31,7 @@ def test_everyone_who_can_vote_is_collected():
 
 
 def test_dead_voter_without_ghost_vote_is_excluded():
-    state = day_game(make_player("e", "detective", alive=False, ghost_vote=False))
+    state = day_game(make_player("e", "inquisitor", alive=False, ghost_vote=False))
     assert "e" not in collect_votes(state)
 
 
@@ -41,7 +41,7 @@ def test_missing_or_invalid_choice_is_abstention():
 
 
 def test_dead_target_becomes_abstention():
-    state = day_game(make_player("c", "monk", alive=False))
+    state = day_game(make_player("c", "watchman", alive=False))
     votes = collect_votes(state, choose=lambda s, pid: "c")
     assert all(target is None for target in votes.values())
 

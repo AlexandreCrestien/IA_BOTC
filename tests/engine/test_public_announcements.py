@@ -5,7 +5,7 @@ from backend.models import EventType, GameState, Phase, Player
 from backend.rules import get_role
 
 NAMES = {"a": "Ada", "b": "Bob", "c": "Cléo", "d": "Dan"}
-ROLES = {"a": "imp", "b": "poisoner", "c": "monk", "d": "psychic"}
+ROLES = {"a": "reaper", "b": "apothecary", "c": "watchman", "d": "medium"}
 
 
 def make_state(dead=()):
@@ -39,10 +39,10 @@ def test_night_without_death_is_announced_too():
 
 def test_votes_and_execution_are_public_with_ghost_votes():
     memory = make_memory()
-    votes = {"a": "c", "b": "c", "c": None, "d": "a"}  # Dan est déjà mort : vote fantôme
+    votes = {"a": "c", "b": "c", "c": None, "d": "a"}  # Dan est déjà mort : voix d'outre-tombe
     record_vote(make_state(dead=["d"]), votes, "c", memory)
     assert public_lines(memory, reader="b") == [
-        (EventType.VOTE, "Votes : Ada → Cléo, Bob → Cléo, Cléo → personne, Dan → Ada (vote fantôme)."),
+        (EventType.VOTE, "Votes : Ada → Cléo, Bob → Cléo, Cléo → personne, Dan → Ada (voix d'outre-tombe)."),
         (EventType.DEATH, "Cléo est exécuté·e par le village."),
     ]
 

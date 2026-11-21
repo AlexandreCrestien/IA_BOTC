@@ -18,7 +18,7 @@ import litellm  # noqa: E402
 from backend.engine.config import AI_NAMES, PERSONALITY_NAMES  # noqa: E402
 from backend.engine.setup import setup_game  # noqa: E402
 from backend.engine.human_port import AutoHumanPort  # noqa: E402
-from backend.models import EventType  # noqa: E402
+from backend.models import Alignment, EventType  # noqa: E402
 from backend.engine.turn import play_turn  # noqa: E402
 
 litellm.suppress_debug_info = True
@@ -27,6 +27,7 @@ NAMES = {"h": "alex", **AI_NAMES}
 HUMAN_ID = "h"  # sans agent : joueur automatique (choix de nuit au hasard, abstention, jamais de message)
 PERSONALITIES = PERSONALITY_NAMES
 MAX_TURNS = 5
+WINNER_LABELS = {Alignment.GOOD: "des Villageois", Alignment.EVIL: "des Démons"}
 
 # Les logs de LiteLLM (routeur, fallbacks, cooldowns) noient la partie : on ne garde que les avertissements.
 LITELLM_LOGGERS = ("LiteLLM", "LiteLLM Router", "LiteLLM Proxy")
@@ -77,7 +78,7 @@ async def main():
 
         state = result.state
         if result.game_winner is not None:
-            print(f"\n=== Fin de partie : victoire {result.game_winner.value} ===")
+            print(f"\n=== Fin de partie : victoire {WINNER_LABELS[result.game_winner]} ===")
             return
     print("\n=== Arrêt après le nombre maximum de tours ===")
 

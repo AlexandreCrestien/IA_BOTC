@@ -11,7 +11,7 @@ from backend.models import GameState, Phase, Player
 from backend.rules import get_role
 
 NAMES = {"a": "Ada", "b": "Bob", "c": "Cléo", "d": "Dan", "e": "Eva", "f": "Fay"}
-ROLES = {"a": "imp", "b": "poisoner", "c": "monk", "d": "psychic", "e": "detective", "f": "butler"}
+ROLES = {"a": "reaper", "b": "apothecary", "c": "watchman", "d": "medium", "e": "inquisitor", "f": "valet"}
 
 
 def night_game() -> GameState:
@@ -61,9 +61,17 @@ def test_options_are_names_and_choice_is_an_id():
     assert choices["a"] == ("b",)
 
 
-def test_failing_night_agent_gives_empty_choice():
-    choices = asyncio.run(collect_ai_night_choices(night_game(), {"a": FakeAgent("a")}))
-    assert choices["a"] == ()
+def test_failing_night_agent_gives_empty_choice_and_is_reported():
+    failures = []
+    choices = asyncio.run(collect_ai_night_choices(night_game(), {"a": FakeAgent("a")}, failures=failures))
+    assert choices["a"] == ()  # le moteur tirera un choix au hasard
+    assert failures == ["a"]
+
+
+def test_successful_night_choice_is_not_reported():
+    failures = []
+    asyncio.run(collect_ai_night_choices(night_game(), {"a": FakeAgent("a", night=first_options)}, failures=failures))
+    assert failures == []
 
 
 def test_vote_names_become_ids():
@@ -76,9 +84,12 @@ def test_abstention_is_none():
     assert all(target is None for target in votes.values())
 
 
-def test_failing_voter_abstains():
-    votes = asyncio.run(collect_ai_votes(night_game(), {"a": FakeAgent("a")}))
-    assert votes == {"a": None}
+def test_failing_voter_abstains_and_is_reported():
+    failures = []
+    agents = {"a": FakeAgent("a"), "b": FakeAgent("b", vote=lambda options: None)}
+    votes = asyncio.run(collect_ai_votes(night_game(), agents, failures=failures))
+    assert votes == {"a": None, "b": None}
+    assert failures == ["a"]  # b s'abstient volontairement : ce n'est pas un échec
 
 
 def test_duplicate_names_are_refused():

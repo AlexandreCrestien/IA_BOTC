@@ -1,6 +1,7 @@
 
 import asyncio
 import logging
+from typing import Optional
 
 from backend.ai.agent import Agent
 from backend.ai.memory_manager import MemoryManager
@@ -32,7 +33,8 @@ def _rule_for(agent: Agent) -> dict:
 
 
 async def public_conversation(agents: list[Agent], memory: MemoryManager,
-                              max_messages: int = MAX_PUBLIC_MESSAGES) -> list[tuple[str, str]]:
+                              max_messages: int = MAX_PUBLIC_MESSAGES,
+                              failures: Optional[list[tuple[int, str]]] = None) -> list[tuple[str, str]]:
     """Phase de conversation publique entre les agents IA (l'humain n'est pas dans `agents`).
 
     Les agents parlent à tour de rôle dans l'ordre des personnalités, jusqu'à max_messages au total.
@@ -40,20 +42,28 @@ async def public_conversation(agents: list[Agent], memory: MemoryManager,
     Chaque message est enregistré tout de suite dans la mémoire, pour que le suivant le voie.
 
     Renvoie la liste des messages (id_joueur, texte), dans l'ordre, pour l'affichage.
+    failures reçoit (position dans les messages, id) pour chaque agent dont l'IA n'a pas répondu :
+    il ne reparle plus de cette discussion (une seule annonce, pas d'attente inutile).
     """
     speakers = sorted(agents, key=lambda agent: _rule_for(agent)["order"])
     said: list[tuple[str, str]] = []
+    failed: set[str] = set()
 
     while len(said) < max_messages:
         said_this_round = 0
         for agent in speakers:
             if len(said) >= max_messages:
                 break
+            if agent.player_id in failed:
+                continue
             try:
                 text = await agent.speak_public(optional=not _rule_for(agent)["is_obliged"])
             except Exception:
                 # Filet de sécurité : si le LLM échoue, l'agent ne parle pas et la partie continue.
                 logger.exception("%s n'a pas pu parler", agent.player_id)
+                failed.add(agent.player_id)
+                if failures is not None:
+                    failures.append((len(said), agent.player_id))
                 continue
             if text is None:
                 logger.info("%s passe son tour", agent.player_id)
@@ -91,11 +101,11 @@ def _check_partners(human_id: str, partners: list[Agent]) -> None:
 
 
 async def private_replies(human_id: str, partners: list[Agent], memory: MemoryManager,
-                          opening: bool = False) -> list[tuple[str, str]]:
+                          opening: bool = False, failures: Optional[list[str]] = None) -> list[tuple[str, str]]:
     """Réponses des agents du salon privé de l'humain. Les agents répondent en même temps,
     à partir du même contexte ; les réponses sont enregistrées ensuite, dans l'ordre des partenaires.
     opening=True : les agents ouvrent la conversation (l'humain n'a encore rien dit).
-    Un agent en échec ne répond pas, les autres répondent quand même."""
+    Un agent en échec ne répond pas, les autres répondent quand même ; failures reçoit son id."""
     participants = {human_id} | {agent.player_id for agent in partners}
 
     async def ask(agent: Agent) -> str | None:
@@ -113,6 +123,8 @@ async def private_replies(human_id: str, partners: list[Agent], memory: MemoryMa
     replies = []
     for agent, text in zip(partners, texts):
         if text is None:
+            if failures is not None:
+                failures.append(agent.player_id)
             continue
         memory.add_private(EventType.PRIVATE_SUMMARY, agent.player_id, text, participants)
         replies.append((agent.player_id, text))
@@ -120,7 +132,8 @@ async def private_replies(human_id: str, partners: list[Agent], memory: MemoryMa
 
 
 async def start_private_conversation(human_id: str, partners: list[Agent], memory: MemoryManager,
-                                     agent_speaks_first: bool = False) -> list[tuple[str, str]]:
+                                     agent_speaks_first: bool = False,
+                                     failures: Optional[list[str]] = None) -> list[tuple[str, str]]:
     """Ouvre une conversation privée entre l'humain et 1 ou 2 agents.
 
     Annonce publiquement que la conversation a lieu (sans son contenu).
@@ -130,5 +143,5 @@ async def start_private_conversation(human_id: str, partners: list[Agent], memor
     _check_partners(human_id, partners)
     memory.add_meeting([human_id] + [agent.player_id for agent in partners])
     if agent_speaks_first:
-        return await private_replies(human_id, partners, memory, opening=True)
+        return await private_replies(human_id, partners, memory, opening=True, failures=failures)
     return []

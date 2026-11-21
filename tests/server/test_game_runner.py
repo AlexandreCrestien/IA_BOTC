@@ -14,7 +14,7 @@ def no_game_yet(clean_server):
 
 
 def _state(turn, dead=()):
-    """État minimal : run_game lit le tour et les joueurs (votes fantômes)."""
+    """État minimal : run_game lit le tour et les joueurs (voix d'outre-tombe)."""
     return SimpleNamespace(turn=turn, players=tuple(
         SimpleNamespace(id=pid, alive=pid not in dead) for pid in ("h", "p1", "p2")))
 
@@ -51,8 +51,8 @@ def _run(monkeypatch, turns, setup_state=None):
 def test_run_game_plays_until_victory(monkeypatch):
     states = [_state(2), _state(3)]
     session, final, calls = _run(monkeypatch, [
-        SimpleNamespace(state=states[0], game_winner=None, votes={"h": "p1"}, executed="p1"),
-        SimpleNamespace(state=states[1], game_winner=Alignment.GOOD, votes={"h": None}, executed=None),
+        SimpleNamespace(state=states[0], game_winner=None, votes={"h": "p1"}, executed="p1", vote_failures=frozenset()),
+        SimpleNamespace(state=states[1], game_winner=Alignment.GOOD, votes={"h": None}, executed=None, vote_failures=frozenset()),
     ])
 
     assert final is states[1]
@@ -61,24 +61,26 @@ def test_run_game_plays_until_victory(monkeypatch):
     queued = _queued(session)
     # Le front reçoit des identifiants ; il affiche les noms lui-même
     assert queued[0] == {"kind": "vote_result", "turn": 1, "executed": "p1",
-                         "votes": [{"voter": "h", "target": "p1", "ghost": False}]}
+                         "votes": [{"voter": "h", "target": "p1", "ghost": False, "unavailable": False}]}
     assert queued[-1] == {"kind": "game_over", "winner": "good", "details": "Le village a rendu son dernier verdict."}
 
 
 def test_evil_victory_sent_as_team(monkeypatch):
     session, _, _ = _run(monkeypatch, [
-        SimpleNamespace(state=_state(1), game_winner=Alignment.EVIL, votes={}, executed=None)])
+        SimpleNamespace(state=_state(1), game_winner=Alignment.EVIL, votes={}, executed=None, vote_failures=frozenset())])
     assert _queued(session)[-1]["winner"] == "evil"
 
 
 def test_ballots_flag_ghost_votes(monkeypatch):
-    """Vote fantôme : votant déjà mort au moment du vote. Le joueur exécuté ce tour-ci votait vivant."""
+    """Voix d'outre-tombe : votant déjà mort au moment du vote. Le joueur exécuté ce tour-ci votait vivant."""
     after_day = _state(2, dead=("p1", "p2"))  # p1 morte lors d'une nuit précédente, p2 exécuté ce tour-ci
     session, _, _ = _run(monkeypatch, [SimpleNamespace(
-        state=after_day, game_winner=Alignment.GOOD, votes={"h": "p2", "p1": "p2", "p2": None}, executed="p2")])
+        state=after_day, game_winner=Alignment.GOOD, votes={"h": "p2", "p1": "p2", "p2": None}, executed="p2",
+        vote_failures=frozenset({"p2"}))])  # l'IA de p2 n'a pas répondu : abstention forcée
 
-    votes = {v["voter"]: v["ghost"] for v in _queued(session)[0]["votes"]}
-    assert votes == {"h": False, "p1": True, "p2": False}
+    ballots = _queued(session)[0]["votes"]
+    assert {v["voter"]: v["ghost"] for v in ballots} == {"h": False, "p1": True, "p2": False}
+    assert {v["voter"]: v["unavailable"] for v in ballots} == {"h": False, "p1": False, "p2": True}
 
 
 def test_game_over_comes_after_the_last_night_deaths(monkeypatch):
@@ -86,7 +88,7 @@ def test_game_over_comes_after_the_last_night_deaths(monkeypatch):
     le résultat du tour et la fin de partie, car tout passe par la même file."""
     async def night_win(port):
         await port.show_night_deaths(_state(1), ("p1",))  # le moteur annonce le mort
-        return SimpleNamespace(state=_state(1), game_winner=Alignment.EVIL, votes={}, executed=None)
+        return SimpleNamespace(state=_state(1), game_winner=Alignment.EVIL, votes={}, executed=None, vote_failures=frozenset())
 
     session, _, _ = _run(monkeypatch, [night_win])
     assert [item["kind"] for item in _queued(session)] == ["night_deaths", "vote_result", "game_over"]
@@ -160,7 +162,7 @@ def test_other_pseudo_refused_during_a_game(fake_game):
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("pseudo", ["", "  ", "marIA", "MARIA", "p1", "game_master", "grimoire"])
+@pytest.mark.parametrize("pseudo", ["", "  ", "marIA", "MARIA", "p1", "game_master", "codex"])
 def test_invalid_pseudo_refused(fake_game, pseudo):
     assert gr.ensure_started(pseudo) == gr.REFUSED_PSEUDO
     assert fake_game["started"] == []

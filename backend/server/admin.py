@@ -42,7 +42,9 @@ def get_all_debug_states():
     return build_debug_state()
 
 
-TEAM_LABELS = {"villageois": "Villageois", "outsider": "Outsider", "sbire": "Sbire", "demon": "Démon"}
+TEAM_LABELS = {"townsfolk": "Villageois", "outcast": "Paria", "accomplice": "Complice", "demon": "Démon"}
+FAILURE_STEPS = {"night": "action de nuit (choix tiré au hasard)", "public": "message public",
+                 "private": "réponse en salon privé", "vote": "vote (abstention)"}
 def _moment(event) -> str:
     return f"{'Nuit' if event.phase.value == 'nuit' else 'Jour'} {event.turn}"
 
@@ -140,6 +142,15 @@ def build_debug_state() -> dict:
             ),
             key=lambda action: action["turn"],
         ),
+        # IA qui n'ont pas répondu (les échecs de nuit ne sont montrés qu'ici)
+        "agent_failures": [
+            {
+                "moment": f"{'Nuit' if f['phase'] == 'nuit' else 'Jour'} {f['turn']}",
+                "agent": memory.name_of(f["agent"]),
+                "step": FAILURE_STEPS.get(f["step"], f["step"]),
+            }
+            for f in session.agent_failures
+        ],
         # Onglets Nuits et Votes du joueur humain
         "night_history": _night_history(session),
         "vote_history": _vote_history(session),

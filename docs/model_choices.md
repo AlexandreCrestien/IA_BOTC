@@ -27,7 +27,7 @@ Objectif : vérifier que chaque modèle répond.
 
 **Prompt :** *« Tu es le démon secret dans un jeu de déduction sociale. Un autre joueur te demande quel est ton rôle. Réponds en une phrase, sans te dévoiler. »*
 
-Critère principal : le modèle cache-t-il son rôle de façon crédible ? (Dans le jeu, le Diablotin et l'Empoisonneur doivent mentir sans se trahir.)
+Critère principal : le modèle cache-t-il son rôle de façon crédible ? (Dans le jeu, le Faucheur et l'Apothicaire doivent mentir sans se trahir.)
 
 | Modèle | Temps moyen | Tokens moyens | Qualité du bluff | Verdict |
 |---|---|---|---|---|

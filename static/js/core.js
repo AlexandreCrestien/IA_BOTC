@@ -53,14 +53,14 @@ const PHASES = {
 // ================= RÔLES =================
 // Textes de la nuit selon le rôle (clé = name_EN du catalogue backend)
 const NIGHT_ROLE_TEXTS = {
-    imp:       { label: "Diablotin",    prompt: "Qui sera votre victime cette nuit ?" },
-    poisoner:  { label: "Empoisonneur", prompt: "Qui empoisonnerez-vous jusqu'à la fin de la prochaine journée ?" },
-    monk:      { label: "Moine",        prompt: "Qui protégerez-vous des griffes du Diablotin cette nuit ?" },
-    psychic:   { label: "Voyante",      prompt: "Quels sont les deux joueurs que vous souhaitez sonder ?" },
-    butler:    { label: "Majordome",    prompt: "Qui choisissez-vous comme Maître ? Vous ne pourrez voter que s'il vote aussi." }
+    reaper:     { label: "Faucheur",    prompt: "Qui sera votre victime cette nuit ?" },
+    apothecary: { label: "Apothicaire", prompt: "Qui empoisonnerez-vous jusqu'à la fin de la prochaine journée ?" },
+    watchman:   { label: "Veilleur",    prompt: "Qui protégerez-vous des griffes du Faucheur cette nuit ?" },
+    medium:     { label: "Médium",      prompt: "Quels sont les deux joueurs que vous souhaitez sonder ?" },
+    valet:      { label: "Valet",       prompt: "Qui choisissez-vous comme Maître ? Vous ne pourrez voter que s'il vote aussi." }
 };
 
-// Accepte indifféremment "imp", "Diablotin", "diablotin"…
+// Accepte indifféremment "reaper", "Faucheur", "faucheur"…
 function resolveRoleKey(role) {
     if (!role) return null;
     const wanted = normalizeText(role);
@@ -69,9 +69,9 @@ function resolveRoleKey(role) {
     ) || null;
 }
 
-// Rôle maléfique du joueur humain (Diablotin ou Empoisonneur)
+// Rôle maléfique du joueur humain (Faucheur ou Apothicaire)
 function isEvilRole() {
-    return ["imp", "poisoner"].includes(resolveRoleKey(gameState.roleInfo?.name));
+    return ["reaper", "apothecary"].includes(resolveRoleKey(gameState.roleInfo?.name));
 }
 
 // ================= UTILITAIRES =================
@@ -126,7 +126,7 @@ function nightDeathText(deadPlayerId) {
 // Ajoute les bulletins d'un vote dans l'historique de l'onglet "Votes"
 function addVoteHistory(turn, executed, votes) {
     (votes || []).forEach(v => {
-        gameState.vote_history.push({ turn, voter: v.voter, target: v.target, executed });
+        gameState.vote_history.push({ turn, voter: v.voter, target: v.target, executed, unavailable: !!v.unavailable });
     });
     renderVoteHistory();
 }

@@ -16,8 +16,8 @@ ADMIN_DATA = {
         "L'Ombre": [{"role": "assistant", "content": "Je me cache."}],
     },
     "players": [
-        {"name": "Alex", "is_human": True, "role": "Voyante", "team": "Villageois", "personality": None, "alive": True, "has_vote": True},
-        {"name": "Lord Ashcombe", "is_human": False, "role": "Diablotin", "team": "Démon", "personality": "Stratège", "alive": False, "has_vote": True},
+        {"name": "Alex", "is_human": True, "role": "Médium", "team": "Villageois", "personality": None, "alive": True, "has_vote": True},
+        {"name": "Lord Ashcombe", "is_human": False, "role": "Faucheur", "team": "Démon", "personality": "Stratège", "alive": False, "has_vote": True},
     ],
     "night_actions": [{"turn": 1, "player": "Lord Ashcombe", "content": "Nuit 1 : tu as choisi Alex."}],
     "night_history": [{"turn": 2, "type": "result", "info": "Mère Grimsby est mort·e cette nuit."}],
@@ -63,7 +63,7 @@ def test_rejected_token_returns_to_login(page, static_url):
 
     expect(page.locator("#login-error")).to_have_text("Jeton administrateur invalide.")
     expect(page.locator("#dashboard-section")).to_be_hidden()
-    assert page.evaluate("localStorage.getItem('botc_admin_token')") is None
+    assert page.evaluate("localStorage.getItem('Lantern_hollow_admin_token')") is None
 
 
 def test_unexpected_api_response_shows_notice(page, static_url):
@@ -89,7 +89,7 @@ def test_logout_clears_the_token(page, static_url):
     page.click("#logout-btn")
 
     expect(page.locator("#login-section")).to_be_visible()
-    assert page.evaluate("localStorage.getItem('botc_admin_token')") is None
+    assert page.evaluate("localStorage.getItem('Lantern_hollow_admin_token')") is None
 
 
 def test_players_roles_and_night_actions_are_shown(page, static_url):
@@ -98,7 +98,7 @@ def test_players_roles_and_night_actions_are_shown(page, static_url):
 
     players = page.locator("#players-container")
     expect(players).to_contain_text("Alex (humain)")
-    expect(players.locator("tr", has_text="Lord Ashcombe")).to_contain_text("Diablotin")
+    expect(players.locator("tr", has_text="Lord Ashcombe")).to_contain_text("Faucheur")
     expect(players.locator("tr", has_text="Lord Ashcombe")).to_contain_text("Stratège")
     expect(players.locator("tr", has_text="Lord Ashcombe")).to_contain_text("Mort")
     expect(page.locator("#night-actions-container")).to_contain_text("Nuit 1 : tu as choisi Alex.")

@@ -5,7 +5,7 @@
    Le serveur envoie ce qu'il faut afficher via un message "action_request" :
      { type: "action_request", kind: "discussion" | "vote" | "nuit",
        candidates: [playerId, ...], max_targets: 1 | 2,
-       min_targets?: n, role?: "imp" | "Diablotin" | ... }
+       min_targets?: n, role?: "reaper" | "Faucheur" | ... }
    Seul le texte (titre, consigne, bouton) est défini côté client, selon la phase et le rôle.
    ========================================================== */
 'use strict';
@@ -180,14 +180,14 @@ function renderVoteResult(result) {
     }
 
     // Un bulletin par votant : "votant → cible" (ou "Personne").
-    // Un votant déjà mort a utilisé son vote fantôme : on le signale.
+    // Un votant déjà mort a utilisé sa voix d'outre-tombe ; une IA qui n'a pas répondu s'abstient : on le signale.
     const ballots = result.votes.map(v => {
         const target = v.target
             ? `<span class="font-semibold ${v.target === result.executedId ? 'text-blood-bright' : 'text-gold'}">${escapeHtml(getPlayerName(v.target))}</span>`
             : `<span class="italic opacity-60">Personne</span>`;
         return `
             <li class="ballot flex items-center gap-2 rounded-md px-3 py-1.5 text-sm">
-                <span class="truncate">${escapeHtml(getPlayerName(v.voter))}${v.ghost ? ' <span class="text-xs opacity-60">(vote fantôme)</span>' : ''}</span>
+                <span class="truncate">${escapeHtml(getPlayerName(v.voter))}${v.ghost ? ' <span class="text-xs opacity-60">(outre-tombe)</span>' : ''}${v.unavailable ? ' <span class="text-xs opacity-60">(IA indisponible)</span>' : ''}</span>
                 <span class="truncate ml-auto text-right">${target}</span>
             </li>
         `;

@@ -18,6 +18,7 @@ import litellm  # noqa: E402
 from backend.engine.config import AI_NAMES, PERSONALITY_NAMES  # noqa: E402
 from backend.engine.setup import setup_game  # noqa: E402
 from backend.engine.turn import play_turn  # noqa: E402
+from backend.models import Alignment  # noqa: E402
 from backend.rules import legal_actions  # noqa: E402
 from recording import RecordingAgent, save_histories  # noqa: E402
 
@@ -27,6 +28,7 @@ NAMES = {"h": "alex", **AI_NAMES}
 HUMAN_ID = "h"
 PERSONALITIES = PERSONALITY_NAMES
 MAX_TURNS = 5
+WINNER_LABELS = {Alignment.GOOD: "des Villageois", Alignment.EVIL: "des Démons"}
 # Les logs de télémétrie LiteLLM sont coupés : seules nos erreurs et nos réponses comptent.
 LITELLM_LOGGERS = ("LiteLLM", "LiteLLM Router", "LiteLLM Proxy")
 HISTORY_ROOT = Path(__file__).resolve().parent.parent / "histories"
@@ -112,7 +114,11 @@ class TerminalHuman:
 
     async def show_agent_meeting(self, state, agent_ids):
         first, second = (state.player(pid).name for pid in agent_ids)
-        print(f"[Grimoire] {first} et {second} se sont entretenus en privé.")
+        print(f"[Codex] {first} et {second} se sont entretenus en privé.")
+
+    async def show_agent_unavailable(self, state, agent_id, step):
+        if step != "night":  # la nuit, l'annoncer révélerait que l'agent a un pouvoir
+            print(f"[Codex] {state.player(agent_id).name} n'a pas répondu (IA indisponible).")
 
     async def vote(self, state, player_id):
         options = [p.id for p in state.players if p.alive]
@@ -153,7 +159,7 @@ async def main():
         state = result.state
         save_histories(memory, state, run_dir / f"tour_{turn_number}")
         if result.game_winner is not None:
-            print(f"\n=== Fin de partie : victoire {result.game_winner.value} ===")
+            print(f"\n=== Fin de partie : victoire {WINNER_LABELS[result.game_winner]} ===")
             return
     print("\n=== Arrêt après le nombre maximum de tours ===")
 

@@ -1,6 +1,6 @@
 ## 1. Identité et objectif
-- **Nom du rôle :** Majordome
-- **Camp :** Villageois (gentil)
+- **Nom du rôle :** Valet
+- **Camp :** Villageois (gentil), en tant que Paria
 - **Objectif principal :** Survivre et influencer discrètement les votes du village tout en subordonnant ton vote à celui d'un autre joueur de ton choix.
 
 ---

@@ -34,6 +34,8 @@ class AutoHumanPort:
     async def vote(self, state: GameState, player_id: str) -> Optional[str]:
         return None
 
+    async def show_agent_unavailable(self, state, agent_id, step) -> None: ...
+
 
 class QueueHumanPort:
     """Implémentation de HumanPort pilotée par des files.
@@ -92,8 +94,12 @@ class QueueHumanPort:
         return await self._ask("vote", state, targets=vote_targets(state, player_id))
 
     async def show_turn_result(self, state: GameState, turn: int, votes: list[dict], executed: Optional[str]) -> None:
-        """Fin du tour : bulletins (ids, vote fantôme signalé) et exécution. Posé par game_runner."""
+        """Fin du tour : bulletins (ids, voix d'outre-tombe signalées) et exécution. Posé par game_runner."""
         await self._tell("vote_result", state, turn=turn, votes=votes, executed=executed)
+
+    async def show_agent_unavailable(self, state: GameState, agent_id: str, step: str) -> None:
+        """L'IA d'un agent n'a pas répondu (step : night, public, private, vote). Le serveur décide quoi montrer."""
+        await self._tell("agent_unavailable", state, agent=agent_id, step=step)
 
     async def show_game_over(self, state: GameState, winner: str, details: str) -> None:
         """Fin de partie : winner = "good" | "evil". Posé par game_runner."""

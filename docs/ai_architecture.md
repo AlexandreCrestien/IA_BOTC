@@ -102,7 +102,7 @@ Pour écrire au nom du Maître du Jeu, on passe l'auteur `game_master` : la mém
 | Annonce, mort, message public, vote, « Conversation privée entre A, B » | Tous | `add_public` |
 | Messages d'une conversation privée, alliance entre démons | Les participants | `add_private` |
 | Action de nuit, information de nuit, rôle | Un seul joueur | `add_personal` |
-| Fausse piste de la Voyante, joueur empoisonné, vrais rôles | **Personne** : c'est l'état du jeu (`GameState`), pas la mémoire | — |
+| Fausse piste du Médium, joueur empoisonné, vrais rôles | **Personne** : c'est l'état du jeu (`GameState`), pas la mémoire | — |
 
 La mémoire **ne décide pas** si une information est vraie ou fausse (empoisonnement, fausse piste) : elle enregistre ce que l'orchestrateur lui donne.
 
@@ -135,7 +135,7 @@ L'horloge n'est **pas** calculée par la mémoire : elle vient de `GameState`. L
 Avec `MemoryManager(["p1", "p2", "p3", "p5"], names={"p1": "Ana", "p2": "Bruno", "p3": "Carla", "p5": "Eva"})` :
 
 ```
-[Nuit 1] (personnel) Maître du Jeu : Tu es le Moine.
+[Nuit 1] (personnel) Maître du Jeu : Tu es le Veilleur.
 [Nuit 1] (personnel) Toi : Je protège Bruno.
 [Jour 1] (public) Maître du Jeu : Le jour 1 se lève. Personne n'est mort cette nuit.
 [Jour 1] (public) Carla : Bonjour à tous !
@@ -167,7 +167,7 @@ Les phases `DISCUSSION` et `VOTE` s'affichent toutes les deux « Jour ». Le can
 |---|---|---|
 | `await speak_public(optional=False)` | fast | Texte du message. Avec `optional=True`, l'instruction dit que passer est un choix normal et qu'il ne faut parler que pour apporter du nouveau ; si l'agent répond `PASSE` (même avec ponctuation, guillemets ou gras), la méthode renvoie `None`. |
 | `await speak_private(partners, opening=False)` | fast | Réponse dans une conversation privée. `partners` = ids ; le prompt montre leurs noms. `opening=True` : l'agent ouvre la conversation qu'il a proposée. |
-| `await night_action(options, number_of_targets=1)` | capable | Liste des cibles (2 pour la Voyante) |
+| `await night_action(options, number_of_targets=1)` | capable | Liste des cibles (2 pour le Médium) |
 | `await vote(options)` | capable | L'id du joueur choisi, ou `None` pour « Personne » |
 
 - `options` = les **choix légaux**, fournis par le moteur de règles (`legal_actions(state, id).targets` pour la nuit). Un choix hors des options est refusé par la validation et redemandé au modèle.
@@ -225,7 +225,7 @@ Une personnalité absente du tableau parle en dernier, sans obligation.
 
 ### Mise en place : `engine.setup.setup_game`
 
-`setup_game(names, human_id, personality_names, rng)` tire les rôles et les personnalités (`assign_players`), choisit la fausse piste de la Voyante, crée la mémoire avec les noms (`MemoryManager(ids, names=names)`) et les agents (`create_all_agents`), puis enregistre les informations de première nuit (`first_night_info`) en `role_info`, visibles du seul joueur concerné. Elle renvoie `(state, agents, memory)`.
+`setup_game(names, human_id, personality_names, rng)` tire les rôles et les personnalités (`assign_players`), choisit la fausse piste du Médium, crée la mémoire avec les noms (`MemoryManager(ids, names=names)`) et les agents (`create_all_agents`), puis enregistre les informations de première nuit (`first_night_info`) en `role_info`, visibles du seul joueur concerné. Elle renvoie `(state, agents, memory)`.
 
 ### Un tour
 
@@ -239,7 +239,7 @@ NUIT        memory.set_moment(tour, NUIT)
             collect_ai_night_choices        agent.night_action(noms) → ids     (2 appels LLM en parallèle au plus)
             (humain : human.night_choice)
             play_night                      choix invalide ou absent → choix légal au hasard
-            reveal_psychic_answer           réponse de la Voyante → sa mémoire (role_info)
+            reveal_medium_answer           réponse du Médium → sa mémoire (role_info)
             victoire ? → fin
 DISCUSSION  memory.set_moment(tour, DISCUSSION)
             public_conversation(agents)     conversations.py, un agent après l'autre
@@ -253,8 +253,8 @@ VOTE        memory.set_moment(tour, VOTE)
 
 - **Noms et ids** : les agents reçoivent les **noms** des joueurs comme options, et `ai.choices` traduit leur réponse en **id** (les noms doivent donc être uniques).
 - **Échecs** : un agent dont l'appel échoue rend un choix vide (remplacé par un choix au hasard) ou s'abstient.
-- **Ordre** : chaque étape attend la précédente ; l'humain n'écrit jamais pendant un appel IA. Les morts peuvent encore parler et voter (vote fantôme).
-- **Qui écrit dans la mémoire** : `conversations.py` pour les messages, `reveal_psychic_answer` pour la Voyante, `setup_game` pour la première nuit. Les agents, eux, n'écrivent jamais dans la mémoire : ils renvoient un résultat.
+- **Ordre** : chaque étape attend la précédente ; l'humain n'écrit jamais pendant un appel IA. Les morts peuvent encore parler et voter (voix d'outre-tombe).
+- **Qui écrit dans la mémoire** : `conversations.py` pour les messages, `reveal_medium_answer` pour le Médium, `setup_game` pour la première nuit. Les agents, eux, n'écrivent jamais dans la mémoire : ils renvoient un résultat.
 
 ### Parties dans le terminal
 
@@ -266,7 +266,7 @@ VOTE        memory.set_moment(tour, VOTE)
 
 | Sujet | Où |
 |---|---|
-| Choix légaux, effets des pouvoirs, nuit, vote, Majordome, victoire, informations de la première nuit | `backend/rules` |
+| Choix légaux, effets des pouvoirs, nuit, vote, Valet, victoire, informations de la première nuit | `backend/rules` |
 | État de la partie (vivants / morts, rôles réels, effets) | `backend/models` (`GameState`, `Player`, `Role`) |
 | Tirage des rôles et des personnalités | `backend/rules` (`assign_players`) |
 | Mise en place ; étapes de la nuit et du vote, annonces publiques | `engine.setup` ; `engine.steps` |
@@ -278,7 +278,7 @@ VOTE        memory.set_moment(tour, VOTE)
 
 Tous les joueurs les connaissent, comme à une vraie table : `engine.steps.record_night_deaths` (au réveil,
 « X est mort·e cette nuit. » ou « Personne n'est mort cette nuit. ») et `engine.steps.record_vote`
-(« Votes : A → B, C → personne, D → B (vote fantôme). » puis l'exécution ou son absence) écrivent des
+(« Votes : A → B, C → personne, D → B (voix d'outre-tombe). » puis l'exécution ou son absence) écrivent des
 événements publics (`EventType.DEATH`, `EventType.VOTE`). Appelés par `engine.turn.play_turn`.
 
 
@@ -299,7 +299,7 @@ s'entretiennent en privé. Aucune conversation si l'humain passe son salon priv�
 
 - **Choix du duo** (`choose_whisper_pair`, aucun appel LLM) : tirage au sort pondéré parmi les agents hors
   du salon de l'humain, vivants ou morts. Poids de base 1 ; duo du mal ×3 (`EVIL_PAIR_WEIGHT`) ; duo avec
-  la Voyante ou le Détective ×1,5 (`INFO_PAIR_WEIGHT`) ; divisé par (1 + rencontres passées du duo)² ;
+  le Médium ou l'Inquisiteur ×1,5 (`INFO_PAIR_WEIGHT`) ; divisé par (1 + rencontres passées du duo)² ;
   un peu réduit pour les agents déjà souvent en entretien ; duo du tour précédent exclu.
   Seuls les entretiens entre agents comptent (`MemoryManager.meetings()`, hors salons de l'humain).
 - **Annonce** : « A et B se sont entretenus en privé » sur la place publique (indice pour le joueur) et
@@ -309,6 +309,24 @@ s'entretiennent en privé. Aucune conversation si l'humain passe son salon priv�
   face au bien et se concerte entre lui). Chaque résumé va dans la seule mémoire personnelle de son agent.
   L'appel tourne pendant que l'humain discute ; le moteur l'attend avant le vote. En cas d'échec, chacun
   garde un souvenir neutre.
+
+
+### IA qui ne répondent pas
+
+Quand tous les modèles d'un profil échouent pour un agent, la partie continue avec une réponse de secours
+(choix de nuit tiré au hasard, silence, abstention). Les fonctions de `ai/choices.py` et `ai/conversations.py`
+notent ces agents (`failures`) ; `engine.turn` les transmet au port (`show_agent_unavailable(state, agent, step)`),
+et le serveur (`protocol.report_agent_unavailable`) décide quoi montrer :
+
+| Moment | Ce que voit le joueur |
+|---|---|
+| Discussion publique | « 🕯️ X ne dit rien : son IA n'a pas répondu. » (Codex, place publique). L'agent n'est plus sollicité pour le reste de la discussion. |
+| Salon privé | « 🕯️ X ne répond pas : son IA n'a pas répondu. » (Codex, dans le salon) |
+| Vote | Mention « (IA indisponible) » sur le bulletin et dans l'onglet Votes |
+| Nuit | Rien : l'annoncer révélerait que l'agent a un pouvoir de nuit |
+
+Après 3 échecs dans la partie, un bandeau unique prévient que les IA rencontrent des difficultés.
+Tous les échecs, nuit comprise, apparaissent dans la section « IA indisponibles » du panel admin.
 
 
 ## 7. Points encore ouverts

@@ -41,11 +41,11 @@ class PromptLoader:
 
         system_prompt = f"""
 # CONTEXTE ET OBJECTIF
-Tu participes à une partie de jeu de rôle et de déduction sociale inspirée du loup-garou : "Blood on the Clocktower". 
+Tu participes à une partie de "Lantern Hollow", un jeu de rôle et de déduction sociale inspiré du loup-garou.
 Ton nom dans cette partie est {agent_name}. 
 
 **Fonctionnement global du jeu :**
-- La partie alterne entre des **phases de nuit** (où les personnages agissent en secret, et où le Diablotin peut éliminer quelqu'un) et des **phases de jour** (où les habitants du village débattent publiquement, s'analysent et votent pour exécuter un suspect).
+- La partie alterne entre des **phases de nuit** (où les personnages agissent en secret, et où le Faucheur peut éliminer quelqu'un) et des **phases de jour** (où les habitants du village débattent publiquement, s'analysent et votent pour exécuter un suspect).
 - Ton objectif suprême est de faire gagner ton camp : les Villageois (gentils) ou les Démons (méchants). Pour cela tu dois survivre, enquêter et manipuler les autres.
 ---
 

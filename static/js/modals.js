@@ -1,6 +1,6 @@
 /* ==========================================================
    modals.js — modales : rôle, entretien, exécution, nuit, fin de partie,
-   connexion perdue, Grimoire
+   connexion perdue, Codex
    ========================================================== */
 'use strict';
 
@@ -165,19 +165,20 @@ function closeDisconnectedModal() {
     closeModal('modal-disconnected');
 }
 
-// ================= GRIMOIRE =================
-function openGrimoireModal() {
-    openModal('modal-grimoire');
+// ================= CODEX =================
+function openCodexModal() {
+    openModal('modal-codex');
 }
 
-function closeGrimoireModal() {
-    closeModal('modal-grimoire');
+function closeCodexModal() {
+    closeModal('modal-codex');
 }
 
-function switchGrimoireTab(tabName) {
-    const showRoles = tabName === 'roles';
-    document.getElementById('grimoire-tab-roles').classList.toggle('hidden', !showRoles);
-    document.getElementById('grimoire-tab-rules').classList.toggle('hidden', showRoles);
-    document.getElementById('grimoire-tab-btn-roles').classList.toggle('is-active', showRoles);
-    document.getElementById('grimoire-tab-btn-rules').classList.toggle('is-active', !showRoles);
+const CODEX_TABS = ['roles', 'rules', 'data'];
+
+function switchCodexTab(tabName) {
+    CODEX_TABS.forEach(tab => {
+        document.getElementById(`codex-tab-${tab}`).classList.toggle('hidden', tab !== tabName);
+        document.getElementById(`codex-tab-btn-${tab}`).classList.toggle('is-active', tab === tabName);
+    });
 }

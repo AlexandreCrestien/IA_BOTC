@@ -11,12 +11,12 @@ def make_player(id: str, role: str) -> Player:
 
 def night_game() -> GameState:
     players = (
-        make_player("a", "imp"),
-        make_player("b", "poisoner"),
-        make_player("c", "monk"),
-        make_player("d", "psychic"),
-        make_player("e", "detective"),
-        make_player("f", "butler"),
+        make_player("a", "reaper"),
+        make_player("b", "apothecary"),
+        make_player("c", "watchman"),
+        make_player("d", "medium"),
+        make_player("e", "inquisitor"),
+        make_player("f", "valet"),
     )
     return GameState(turn=2, phase=Phase.NIGHT, players=players, channels=(), log=())
 

@@ -1,5 +1,5 @@
 """Étapes d'un tour, utilisées par la boucle de jeu (engine/turn.py) : choix et résolution de la nuit,
-vote, morts de la nuit, réponse de la Voyante, et annonces dans la mémoire des joueurs."""
+vote, morts de la nuit, réponse du Médium, et annonces dans la mémoire des joueurs."""
 import random
 from typing import Callable, NamedTuple, Optional
 
@@ -14,7 +14,7 @@ from backend.rules import (
     vote_result,
     vote_targets,
 )
-from backend.rules.powers import psychic_answer
+from backend.rules.powers import medium_answer
 
 # Fonction optionnelle qui renvoie le choix d'un joueur (ou () si elle n'en a pas).
 ChoiceFn = Callable[[GameState, str], tuple[str, ...]]
@@ -29,6 +29,8 @@ class TurnResult(NamedTuple):
     executed: Optional[str]
     night_deaths: tuple[str, ...]
     game_winner: Optional[Alignment]
+    # Agents dont l'IA n'a pas répondu au vote : leur abstention est signalée sur le bulletin
+    vote_failures: frozenset[str] = frozenset()
 
 
 def _is_valid_choice(state: GameState, player_id: str, choice: tuple[str, ...]) -> bool:
@@ -61,7 +63,7 @@ def play_night(
     choose: Optional[ChoiceFn] = None,
 ) -> tuple[GameState, dict[str, tuple[str, ...]]]:
     """Joue la nuit : recueille les choix, puis les résout.
-    Renvoie (état après la nuit, choix de nuit). Les choix servent aussi à la Voyante."""
+    Renvoie (état après la nuit, choix de nuit). Les choix servent aussi au Médium."""
     choices = collect_night_choices(state, rng, choose)
     return resolve_night(state, choices), choices
 
@@ -99,20 +101,20 @@ def deaths_between(before: GameState, after: GameState) -> tuple[str, ...]:
     )
 
 
-def reveal_psychic_answer(
+def reveal_medium_answer(
     state: GameState,
     choices: dict[str, tuple[str, ...]],
     memory: MemoryManager,
     rng: random.Random,
 ) -> None:
-    """Écrit dans la mémoire de la Voyante le résultat de son sondage de la nuit.
+    """Écrit dans la mémoire du Médium le résultat de son sondage de la nuit.
     À appeler après la résolution de la nuit (state = état après la nuit), avant la discussion.
-    Une Voyante morte pendant la nuit ne reçoit aucune information."""
+    Un Médium mort pendant la nuit ne reçoit aucune information."""
     for player in state.players:
-        if player.role.name_EN != RoleKey.PSYCHIC or player.id not in choices or not player.alive:
+        if player.role.name_EN != RoleKey.MEDIUM or player.id not in choices or not player.alive:
             continue
         probed = choices[player.id]
-        found = psychic_answer(state, player.id, probed, rng)
+        found = medium_answer(state, player.id, probed, rng)
         names = " et ".join(state.player(pid).name for pid in probed)
         verdict = "au moins un est un démon" if found else "aucun n'est un démon"
         memory.add_event(
@@ -144,13 +146,13 @@ def record_night_deaths(state: GameState, deaths: tuple[str, ...], memory: Memor
 def record_vote(state: GameState, votes: dict[str, Optional[str]], executed: Optional[str],
                 memory: MemoryManager) -> None:
     """Annonce publique du vote : le bulletin de chaque votant, puis l'exécution.
-    state = état au moment du vote (avant l'exécution) : un votant déjà mort a utilisé son vote fantôme."""
+    state = état au moment du vote (avant l'exécution) : un votant déjà mort a utilisé sa voix d'outre-tombe."""
     if votes:
         ballots = []
         for voter_id, target_id in votes.items():
             voter = state.player(voter_id)
             target = state.player(target_id).name if target_id else "personne"
-            ghost = " (vote fantôme)" if target_id and not voter.alive else ""
+            ghost = " (voix d'outre-tombe)" if target_id and not voter.alive else ""
             ballots.append(f"{voter.name} → {target}{ghost}")
         memory.add_public(EventType.VOTE, game_master, f"Votes : {', '.join(ballots)}.")
     else:

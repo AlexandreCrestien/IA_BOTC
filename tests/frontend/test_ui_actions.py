@@ -49,28 +49,28 @@ def test_vote_excludes_player_and_dead_then_shows_loader_and_results(game, serve
     panel = game.locator("#dynamic-action-panel")
     expect(panel).to_contain_text("Mère Grimsby est exécuté·e avec 2 voix.")
     expect(game.locator(".ballot")).to_have_count(4)
-    expect(game.locator(".ballot", has_text="Dr. Thorne")).to_contain_text("(vote fantôme)")
+    expect(game.locator(".ballot", has_text="Dr. Thorne")).to_contain_text("(outre-tombe)")
     # Le joueur exécuté ce tour-ci votait vivant : pas de mention
-    expect(game.locator(".ballot", has_text="Lord Ashcombe").first).not_to_contain_text("(vote fantôme)")
+    expect(game.locator(".ballot", has_text="Lord Ashcombe").first).not_to_contain_text("(outre-tombe)")
 
 
 def test_next_action_waits_while_a_result_is_displayed(game, server):
     server.send(type="vote_result", turn=2, executed=None, votes=[])
     server.send(type="game_state", state={"phase": "nuit"})
-    server.send(type="action_request", kind="nuit", candidates=ALL_IDS, max_targets=1, role="monk")
+    server.send(type="action_request", kind="nuit", candidates=ALL_IDS, max_targets=1, role="watchman")
 
     expect(game.locator("#dynamic-action-panel")).to_contain_text("Résultats du vote")
     game.click("[data-action='close-result']")
-    expect(game.locator("#dynamic-action-panel")).to_contain_text("Pouvoir : Moine")
+    expect(game.locator("#dynamic-action-panel")).to_contain_text("Pouvoir : Veilleur")
 
 
 def test_night_action_needs_exact_targets_and_shows_server_answer(game, server):
     server.send(type="game_state", state={"phase": "nuit"})
-    server.send(type="action_request", kind="nuit", candidates=ALL_IDS, max_targets=2, role="psychic")
-    expect(game.locator("#dynamic-action-panel")).to_contain_text("Pouvoir : Voyante")
+    server.send(type="action_request", kind="nuit", candidates=ALL_IDS, max_targets=2, role="medium")
+    expect(game.locator("#dynamic-action-panel")).to_contain_text("Pouvoir : Médium")
 
     option(game, "Lord Ashcombe").click()
-    expect(game.locator("#action-submit")).to_be_disabled()  # la Voyante doit choisir 2 joueurs
+    expect(game.locator("#action-submit")).to_be_disabled()  # le Médium doit choisir 2 joueurs
     option(game, "Mère Grimsby").click()
     game.click("#action-submit")
     assert server.wait_for("submit_night_action") == {"targets": [ID["Lord Ashcombe"], ID["Mère Grimsby"]]}
@@ -82,7 +82,7 @@ def test_night_action_needs_exact_targets_and_shows_server_answer(game, server):
 
 def test_server_error_lets_the_player_choose_again(game, server):
     server.send(type="game_state", state={"phase": "nuit"})
-    server.send(type="action_request", kind="nuit", candidates=ALL_IDS, max_targets=1, role="imp")
+    server.send(type="action_request", kind="nuit", candidates=ALL_IDS, max_targets=1, role="reaper")
     option(game, "Lord Ashcombe").click()
     game.click("#action-submit")
     server.wait_for("submit_night_action")
@@ -159,3 +159,15 @@ def test_delay_waits_while_a_modal_is_open(game, server):
     game.click("[data-action='close-night-result']")
     game.clock.run_for(INVITATION_DELAY_MS)
     server.wait_for("discussion_timeout")
+
+
+def test_unavailable_ai_is_flagged_on_its_ballot_and_in_the_votes_tab(game, server):
+    server.send(type="vote_result", turn=2, executed=None, votes=[
+        {"voter": ID["Lord Ashcombe"], "target": None, "ghost": False, "unavailable": True},
+        {"voter": ID["Mère Grimsby"], "target": None, "ghost": False, "unavailable": False},
+    ])
+    expect(game.locator(".ballot", has_text="Lord Ashcombe")).to_contain_text("(IA indisponible)")
+    expect(game.locator(".ballot", has_text="Mère Grimsby")).not_to_contain_text("(IA indisponible)")
+
+    game.click("#tab-btn-votes")
+    expect(game.locator("#tab-content-votes")).to_contain_text("(IA indisponible)")

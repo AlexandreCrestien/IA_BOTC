@@ -21,9 +21,9 @@ from backend.models import Alignment, EventType, GameState, RoleKey
 logger = logging.getLogger(__name__)
 
 # Poids d'un duo (1 par défaut)
-EVIL_PAIR_WEIGHT = 3.0    # Démon + Sbire : ils doivent se concerter sur leur stratégie
+EVIL_PAIR_WEIGHT = 3.0    # Démon + Complice : ils doivent se concerter sur leur stratégie
 INFO_PAIR_WEIGHT = 1.5    # duo avec un rôle du bien qui a des informations à partager
-INFO_ROLES = {RoleKey.PSYCHIC, RoleKey.DETECTIVE}
+INFO_ROLES = {RoleKey.MEDIUM, RoleKey.INQUISITOR}
 SOLICITATION_PENALTY = 0.25  # par entretien passé de chacun des deux agents
 
 NEUTRAL_SUMMARY = "Vous avez échangé quelques banalités, sans rien apprendre de décisif."
@@ -33,7 +33,7 @@ def pair_weight(state: GameState, pair: frozenset[str], past: list[tuple[int, fr
     """Poids d'un duo pour le tirage. past : entretiens passés entre agents seuls (tour, duo).
 
     - duo qui s'est entretenu au tour précédent : exclu (deux soirs de suite, trop flagrant) ;
-    - duo du mal ×EVIL_PAIR_WEIGHT, duo avec la Voyante ou le Détective ×INFO_PAIR_WEIGHT ;
+    - duo du mal ×EVIL_PAIR_WEIGHT, duo avec le Médium ou l'Inquisiteur ×INFO_PAIR_WEIGHT ;
     - chaque entretien passé du même duo divise le poids par (1 + n)² ;
     - les agents déjà très sollicités sont un peu moins choisis.
     """
@@ -83,7 +83,7 @@ def _summary_messages(state: GameState, memory: MemoryManager, pair: tuple[str, 
         )
     a, b = memory.name_of(first), memory.name_of(second)
     system = (
-        "Tu es le narrateur d'une partie de Blood on the Clocktower jouée par des IA. "
+        "Tu es le narrateur d'une partie de Lantern Hollow (jeu de déduction sociale inspiré du loup-garou) jouée par des IA. "
         f"{a} et {b} viennent d'avoir une conversation privée. Tu ne l'écris pas en entier : "
         "tu en écris un résumé pour chacun des deux, de son propre point de vue."
     )

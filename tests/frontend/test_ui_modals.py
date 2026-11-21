@@ -1,17 +1,17 @@
-"""Modales : rôle, entretien, exécution, réveil, fin de partie, connexion perdue, Grimoire."""
+"""Modales : rôle, entretien, exécution, réveil, fin de partie, connexion perdue, Codex."""
 from playwright.sync_api import expect
 
 from conftest import ID, PLAYER
 
 
 def test_role_reveal_fills_the_role_bar(game, server):
-    server.send(type="role_assigned", role_name="Moine", description="Protégez un joueur chaque nuit.")
+    server.send(type="role_assigned", role_name="Veilleur", description="Protégez un joueur chaque nuit.")
     expect(game.locator("#modal-role-reveal")).to_be_visible()
-    expect(game.locator("#modal-role-title")).to_have_text("Moine")
+    expect(game.locator("#modal-role-title")).to_have_text("Veilleur")
 
     game.click("[data-action='close-role-reveal']")
     expect(game.locator("#modal-role-reveal")).to_be_hidden()
-    expect(game.locator("#player-role-name")).to_have_text("Moine")
+    expect(game.locator("#player-role-name")).to_have_text("Veilleur")
 
 
 def test_agent_whisper_accept_waits_for_the_server_channel(game, server):
@@ -53,16 +53,16 @@ def test_dawn_modal_announces_the_night_victim(game, server):
 
 
 def test_game_over_tells_if_the_player_won(game, server):
-    server.send(type="role_assigned", role_name="Diablotin", description="…")
+    server.send(type="role_assigned", role_name="Faucheur", description="…")
     game.click("[data-action='close-role-reveal']")
-    server.send(type="game_over", winner="good", details="Le Diablotin a été exécuté.")
+    server.send(type="game_over", winner="good", details="Le Faucheur a été exécuté.")
 
     expect(game.locator("#gameover-title")).to_have_text("Victoire des Villageois")
     expect(game.locator("#gameover-outcome")).to_have_text("Votre camp a perdu…")
 
 
 def test_game_over_for_the_evil_team(game, server):
-    server.send(type="role_assigned", role_name="Diablotin", description="…")
+    server.send(type="role_assigned", role_name="Faucheur", description="…")
     game.click("[data-action='close-role-reveal']")
     server.send(type="game_over", winner="evil", details="Le mal l'emporte.")
 
@@ -79,23 +79,29 @@ def test_disconnection_shows_modal(game, server):
     expect(game.locator("#modal-disconnected")).to_be_hidden()
 
 
-def test_grimoire_tabs_backdrop_and_escape(game):
-    game.click("[data-action='open-grimoire']")
-    grimoire = game.locator("#modal-grimoire")
-    expect(grimoire).to_be_visible()
+def test_codex_tabs_backdrop_and_escape(game):
+    game.click("[data-action='open-codex']")
+    codex = game.locator("#modal-codex")
+    expect(codex).to_be_visible()
 
-    game.click("#grimoire-tab-btn-rules")
-    expect(game.locator("#grimoire-tab-rules")).to_be_visible()
-    expect(game.locator("#grimoire-tab-roles")).to_be_hidden()
+    game.click("#codex-tab-btn-rules")
+    expect(game.locator("#codex-tab-rules")).to_be_visible()
+    expect(game.locator("#codex-tab-roles")).to_be_hidden()
 
-    game.locator("#modal-grimoire .modal-card").click()  # un clic sur la carte ne ferme pas
-    expect(grimoire).to_be_visible()
-    grimoire.click(position={"x": 5, "y": 5})  # un clic sur le voile ferme
-    expect(grimoire).to_be_hidden()
+    game.click("#codex-tab-btn-data")
+    expect(game.locator("#codex-tab-data")).to_be_visible()
+    expect(game.locator("#codex-tab-data")).to_contain_text("Vous jouez contre des IA")
+    expect(game.locator("#codex-tab-rules")).to_be_hidden()
+    expect(game.locator("#codex-tab-btn-data")).to_have_class("codex-tab is-active")
 
-    game.click("[data-action='open-grimoire']")
+    game.locator("#modal-codex .modal-card").click()  # un clic sur la carte ne ferme pas
+    expect(codex).to_be_visible()
+    codex.click(position={"x": 5, "y": 5})  # un clic sur le voile ferme
+    expect(codex).to_be_hidden()
+
+    game.click("[data-action='open-codex']")
     game.keyboard.press("Escape")
-    expect(grimoire).to_be_hidden()
+    expect(codex).to_be_hidden()
 
 
 def test_abandon_asks_for_confirmation_and_can_be_cancelled(game, server):
@@ -134,7 +140,7 @@ def test_server_crash_offers_a_new_game(game, server):
 
 def test_role_reveal_is_read_before_the_dawn_modal(game, server):
     """Au démarrage, le réveil du village peut arriver en même temps que le rôle : le rôle passe devant."""
-    server.send(type="role_assigned", role_name="Moine", description="Protégez un joueur.")
+    server.send(type="role_assigned", role_name="Veilleur", description="Protégez un joueur.")
     server.send(type="night_result", turn=1, dead_player=None)
     expect(game.locator("#modal-night-result")).to_be_visible()
 

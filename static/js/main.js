@@ -13,9 +13,9 @@ const CLICK_ACTIONS = {
     'toggle-target':     el => toggleActionTarget(el.dataset.id),
     'submit-action':     () => submitPendingAction(),
     'close-result':      () => closeActionResult(),
-    'open-grimoire':     () => openGrimoireModal(),
-    'close-grimoire':    () => closeGrimoireModal(),
-    'grimoire-tab':      el => switchGrimoireTab(el.dataset.tab),
+    'open-codex':     () => openCodexModal(),
+    'close-codex':    () => closeCodexModal(),
+    'codex-tab':      el => switchCodexTab(el.dataset.tab),
     'close-role-reveal': () => closeRoleRevealModal(),
     'accept-whisper':    () => answerAgentWhisper(true),
     'refuse-whisper':    () => answerAgentWhisper(false),
@@ -66,10 +66,10 @@ document.getElementById('chat-input').addEventListener('keydown', (event) => {
     }
 });
 
-// Échap ferme le Grimoire et la confirmation d'abandon
+// Échap ferme le Codex et la confirmation d'abandon
 document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
-        closeGrimoireModal();
+        closeCodexModal();
         closeModal('modal-abandon');
     }
 });

@@ -22,7 +22,7 @@ class Player(BaseModel):
     # Un joueur mort garde une seule voix pour le reste de la partie.
     ghost_vote: bool = False
     effects: tuple[Effect, ...] = ()
-    # Liens vers d'autres joueurs (ex. "master" du Majordome, "false_lead" de la Voyante). Les clés autorisées sont dans la fiche du rôle.
+    # Liens vers d'autres joueurs (ex. "master" du Valet, "false_lead" du Médium). Les clés autorisées sont dans la fiche du rôle.
     links: dict[str, str] = Field(default_factory=dict)
 
     @property
@@ -51,7 +51,7 @@ class Player(BaseModel):
 
     def use_ghost_vote(self) -> "Player":
         if self.alive or not self.ghost_vote:
-            raise ValueError(f"{self.name} n'a pas de vote fantôme à utiliser")
+            raise ValueError(f"{self.name} n'a pas de voix d'outre-tombe à utiliser")
         return self.model_copy(update={"ghost_vote": False})
     
     def reset_power(self) -> "Player":

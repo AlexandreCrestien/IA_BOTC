@@ -5,19 +5,19 @@ from backend.models import GameState, Player
 from backend.models.enums import Phase
 from backend.rules import get_role
 
-IMP = get_role("imp")
-PSYCHIC = get_role("psychic")
-VILLAGER = get_role("detective")  # villageois sans action de nuit
+REAPER = get_role("reaper")
+MEDIUM = get_role("medium")
+VILLAGER = get_role("inquisitor")  # villageois sans action de nuit
 
 
 def make_state() -> GameState:
-    """Le joueur humain est la Voyante. Un Diablotin vivant, et un villageois mort."""
+    """Le joueur humain est le Médium. Un Faucheur vivant, et un villageois mort."""
     return GameState(
         turn=2,
         phase=Phase.NIGHT,
         players=(
-            Player(id="h", name="Alex", role=PSYCHIC),
-            Player(id="imp", name="Imp", role=IMP),
+            Player(id="h", name="Alex", role=MEDIUM),
+            Player(id="imp", name="Imp", role=REAPER),
             Player(id="mort", name="Mort", role=VILLAGER, alive=False, ghost_vote=True),
         ),
     )

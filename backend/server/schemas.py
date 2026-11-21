@@ -118,7 +118,7 @@ class FrontPlayer(OutMessage):
     id: str
     name: str
     alive: bool
-    has_vote: bool = Field(..., description="Mort : vote fantôme encore disponible ou non")
+    has_vote: bool = Field(..., description="Mort : voix d'outre-tombe encore disponible ou non")
 
 
 class FrontGameState(OutMessage):
@@ -136,7 +136,8 @@ class Ally(OutMessage):
 class Ballot(OutMessage):
     voter: str
     target: Optional[str] = Field(..., description="None : vote pour personne")
-    ghost: bool = Field(..., description="Le votant était déjà mort : vote fantôme")
+    ghost: bool = Field(..., description="Le votant était déjà mort : voix d'outre-tombe")
+    unavailable: bool = Field(default=False, description="L'IA du votant n'a pas répondu : abstention forcée")
 
 
 class NightHistoryEntry(OutMessage):
@@ -151,6 +152,7 @@ class VoteHistoryEntry(OutMessage):
     voter: str
     target: Optional[str]
     executed: Optional[str]
+    unavailable: bool = False
 
 
 class Connected(OutMessage):
@@ -194,7 +196,7 @@ class AgentWhisperRequest(OutMessage):
 class ChatMessage(OutMessage):
     type: Literal["chat"] = "chat"
     channel_id: str
-    sender: str = Field(..., description="Identifiant du joueur, ou « Grimoire » pour les annonces")
+    sender: str = Field(..., description="Identifiant du joueur, ou « Codex » pour les annonces")
     content: str
 
 

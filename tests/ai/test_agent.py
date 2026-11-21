@@ -26,7 +26,7 @@ def fake_skills_env(tmp_path):
     personalities_dir.mkdir(parents=True)
 
     (skills_dir / "general_rules.md").write_text("Règles générales et consignes de sécurité", encoding="utf-8")
-    (roles_dir / "monk.md").write_text("Description du rôle Monk : protège un joueur.", encoding="utf-8")
+    (roles_dir / "watchman.md").write_text("Description du rôle Watchman : protège un joueur.", encoding="utf-8")
     (personalities_dir / "paranoid.md").write_text("Personnalité Parano : tu te méfies de tout le monde.", encoding="utf-8")
 
     return skills_dir
@@ -46,7 +46,7 @@ def mock_memory():
 @pytest.fixture
 def sample_role():
     """Un rôle valide."""
-    return Role(name_FR="Moine", name_EN="monk", team=Team.TOWNSFOLK, phase=Phase.NIGHT,
+    return Role(name_FR="Veilleur", name_EN="watchman", team=Team.TOWNSFOLK, phase=Phase.NIGHT,
                 description="Un protecteur nocturne.")
 
 @pytest.fixture
@@ -61,7 +61,7 @@ def test_agent_properties(sample_role, mock_memory):
 
     assert agent.player_id == "j1"
     assert agent.name == "mAIsie"
-    assert agent.role_name == "Moine"
+    assert agent.role_name == "Veilleur"
     assert agent.personality_key == "paranoid"
     assert "agent_1" in agent._build_system_prompt()
 
@@ -81,12 +81,12 @@ def test_agent_factory_creates_agent_successfully(fake_skills_env, sample_role, 
 
     assert isinstance(agent, Agent)
     assert agent.name == "IAn"
-    assert agent.role_name == "Moine"
+    assert agent.role_name == "Veilleur"
     assert agent.personality_key == "paranoid"
 
     assert "IAn" in agent.system_prompt
     assert "Règles générales" in agent.system_prompt
-    assert "Description du rôle Monk" in agent.system_prompt
+    assert "Description du rôle Watchman" in agent.system_prompt
     assert "Personnalité Parano" in agent.system_prompt
 
 
@@ -125,19 +125,19 @@ def test_agent_factory_real_integration(mock_memory):
     agent = factory.create_agent(
         agent_id="player_01",
         name="dIAna",
-        role=get_role("monk"),
+        role=get_role("watchman"),
         personality_key="paranoid",
         memory=mock_memory
     )
 
     assert isinstance(agent, Agent)
     assert agent.name == "dIAna"
-    assert agent.role_name == "Moine"
+    assert agent.role_name == "Veilleur"
     assert agent.personality_key == "paranoid"
 
     assert len(agent.system_prompt) > 0
     assert "dIAna" in agent.system_prompt
-    assert "moine" in agent.system_prompt.lower() or "monk" in agent.system_prompt.lower()
+    assert "veilleur" in agent.system_prompt.lower()
 
 # --- Actions de l'agent avec un faux LLM ------------------------------------
 

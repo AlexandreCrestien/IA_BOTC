@@ -8,32 +8,32 @@ def player(id: str, role: str) -> Player:
     return Player(id=id, name=id.capitalize(), role=get_role(role))
 
 
-def test_butler_sets_a_master():
-    p = set_link(player("m1", "butler"), "master", "odette")
+def test_valet_sets_a_master():
+    p = set_link(player("m1", "valet"), "master", "odette")
     assert p.link("master") == "odette"
 
 
 def test_seer_sets_a_false_lead():
-    p = set_link(player("v1", "psychic"), "false_lead", "odette")
+    p = set_link(player("v1", "medium"), "false_lead", "odette")
     assert p.link("false_lead") == "odette"
 
 
 def test_link_key_not_allowed_refused():
     with pytest.raises(ValueError):
-        set_link(player("m1", "butler"), "false_lead", "odette")
+        set_link(player("m1", "valet"), "false_lead", "odette")
 
 
 def test_role_without_links_refuses_everything():
     with pytest.raises(ValueError):
-        set_link(player("m1", "monk"), "master", "odette")
+        set_link(player("m1", "watchman"), "master", "odette")
 
 
 def test_player_cannot_target_self():
     with pytest.raises(ValueError):
-        set_link(player("m1", "butler"), "master", "m1")
+        set_link(player("m1", "valet"), "master", "m1")
 
 
 def test_set_link_returns_new_object():
-    original = player("m1", "butler")
+    original = player("m1", "valet")
     new = set_link(original, "master", "odette")
     assert original.link("master") is None and new.link("master") == "odette"

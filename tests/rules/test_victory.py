@@ -9,12 +9,12 @@ def make_player(id: str, role: str, alive: bool = True) -> Player:
 
 def game(dead: tuple[str, ...] = ()) -> GameState:
     players = (
-        make_player("a", "imp", alive="a" not in dead),
-        make_player("b", "poisoner", alive="b" not in dead),
-        make_player("c", "monk", alive="c" not in dead),
-        make_player("d", "psychic", alive="d" not in dead),
-        make_player("e", "detective", alive="e" not in dead),
-        make_player("f", "butler", alive="f" not in dead),
+        make_player("a", "reaper", alive="a" not in dead),
+        make_player("b", "apothecary", alive="b" not in dead),
+        make_player("c", "watchman", alive="c" not in dead),
+        make_player("d", "medium", alive="d" not in dead),
+        make_player("e", "inquisitor", alive="e" not in dead),
+        make_player("f", "valet", alive="f" not in dead),
     )
     return GameState(turn=2, phase=Phase.VOTE, players=players)
 
@@ -31,8 +31,8 @@ def test_evil_wins_when_no_good_player_alive():
     assert winner(game(dead=("c", "d", "e", "f"))) == Alignment.EVIL
 
 
-def test_minion_alive_does_not_keep_evil_in_game():
-    # Le sbire vivant ne compte pas : seul le bien vivant maintient la partie.
+def test_accomplice_alive_does_not_keep_evil_in_game():
+    # Le complice vivant ne compte pas : seul le bien vivant maintient la partie.
     assert winner(game(dead=("c", "d", "e", "f"))) == Alignment.EVIL
 
 

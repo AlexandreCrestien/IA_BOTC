@@ -14,12 +14,12 @@ def night_game(turn: int = 1) -> GameState:
         turn=turn,
         phase=Phase.NIGHT,
         players=(
-            make_player("a", "imp"),
-            make_player("b", "poisoner"),
-            make_player("c", "monk"),
-            make_player("d", "psychic"),
-            make_player("e", "detective"),
-            make_player("f", "butler"),
+            make_player("a", "reaper"),
+            make_player("b", "apothecary"),
+            make_player("c", "watchman"),
+            make_player("d", "medium"),
+            make_player("e", "inquisitor"),
+            make_player("f", "valet"),
         ),
     )
 

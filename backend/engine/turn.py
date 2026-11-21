@@ -29,7 +29,7 @@ from backend.engine.steps import (
     record_night_choices,
     record_night_deaths,
     record_vote,
-    reveal_psychic_answer,
+    reveal_medium_answer,
 )
 from backend.ai.memory_manager import MemoryManager
 from backend.models import Team, EventType, GameState, Phase
@@ -46,7 +46,9 @@ class HumanPort(Protocol):
     None signifie « rien » : pas de message, pas de salon privé, abstention.
     Les méthodes show_* transmettent l'état courant, pour que le front affiche la bonne phase.
     private_partners : [] si l'humain ne veut pas de salon privé, None s'il n'a rien décidé à temps
-    (un agent vient alors lui proposer un entretien, voir agent_invitation)."""
+    (un agent vient alors lui proposer un entretien, voir agent_invitation).
+    show_agent_unavailable : l'IA d'un agent n'a pas répondu ; step = "night", "public", "private" ou "vote".
+    Le port décide quoi montrer (rien pour la nuit : ce serait révéler que l'agent a un pouvoir)."""
 
     async def night_choice(self, state: GameState, player_id: str) -> tuple[str, ...]: ...
     async def show_night_info(self, state: GameState, turn: int, info: str, allies: Optional[list[dict]]) -> None: ...
@@ -59,6 +61,7 @@ class HumanPort(Protocol):
     async def show_private_replies(self, state: GameState, replies: list[tuple[str, str]]) -> None: ...
     async def show_agent_meeting(self, state: GameState, agent_ids: tuple[str, str]) -> None: ...
     async def vote(self, state: GameState, player_id: str) -> Optional[str]: ...
+    async def show_agent_unavailable(self, state: GameState, agent_id: str, step: str) -> None: ...
 
 
 def _human_must_choose(state: GameState, player_id: str) -> bool:
@@ -66,7 +69,7 @@ def _human_must_choose(state: GameState, player_id: str) -> bool:
 
 
 def _role_infos(memory: MemoryManager, human_id: str, turn: int) -> list[str]:
-    """Infos privées écrites pendant ce tour pour le joueur humain (première nuit, Voyante, Détective)."""
+    """Infos privées écrites pendant ce tour pour le joueur humain (première nuit, Médium, Inquisiteur)."""
     return [
         event.content
         for event in memory.events_for(human_id)
@@ -78,12 +81,12 @@ def _role_infos(memory: MemoryManager, human_id: str, turn: int) -> list[str]:
 
 def _allies(state: GameState, human_id: str) -> Optional[list[dict]]:
     """Camp du mal : les alliés révélés en première nuit. None pour le camp du bien."""
-    if state.player(human_id).role.team not in (Team.DEMON, Team.MINION):
+    if state.player(human_id).role.team not in (Team.DEMON, Team.ACCOMPLICE):
         return None
     return [
         {"id": p.id, "role": p.role.name_FR}
         for p in state.players
-        if p.id != human_id and p.role.team in (Team.DEMON, Team.MINION)
+        if p.id != human_id and p.role.team in (Team.DEMON, Team.ACCOMPLICE)
     ]
 
 
@@ -123,6 +126,11 @@ async def _agent_whisper(
     return asyncio.create_task(write_whisper_summaries(state, memory, pair))
 
 
+async def _report_failures(state: GameState, human: HumanPort, agent_ids, step: str) -> None:
+    for agent_id in agent_ids:
+        await human.show_agent_unavailable(state, agent_id, step)
+
+
 async def _private_channel(
     state: GameState,
     agents: dict,
@@ -146,9 +154,12 @@ async def _private_channel(
         return
 
     participants = {human_id} | {agent.player_id for agent in partners}
-    opening = await start_private_conversation(human_id, partners, memory, agent_speaks_first=invited)
+    failures: list[str] = []
+    opening = await start_private_conversation(human_id, partners, memory, agent_speaks_first=invited,
+                                               failures=failures)
     if opening:
         await human.show_private_replies(state, opening)
+    await _report_failures(state, human, failures, "private")
     whisper = await _agent_whisper(state, agents, memory, human_id, human, rng, participants)
     try:
         for _ in range(MAX_HUMAN_PRIVATE_MESSAGES):
@@ -156,8 +167,10 @@ async def _private_channel(
             if not text:
                 break
             memory.add_private(EventType.PRIVATE_SUMMARY, human_id, text, participants)
-            replies = await private_replies(human_id, partners, memory)
+            failures = []
+            replies = await private_replies(human_id, partners, memory, failures=failures)
             await human.show_private_replies(state, replies)
+            await _report_failures(state, human, failures, "private")
     except BaseException:
         if whisper is not None:
             whisper.cancel()  # partie abandonnée : pas d'appel LLM orphelin
@@ -188,20 +201,22 @@ async def play_turn(
         await human.show_night_info(state, state.turn, info, allies)
         allies = None
 
-    ai_night = await collect_ai_night_choices(state, agents)
+    night_failures: list[str] = []
+    ai_night = await collect_ai_night_choices(state, agents, failures=night_failures)
+    await _report_failures(state, human, night_failures, "night")
     human_night: dict[str, tuple[str, ...]] = {}
     if _human_must_choose(state, human_id):
         human_night[human_id] = await human.night_choice(state, human_id)
     night_answers = {**ai_night, **human_night}
     after_night, night_choices = play_night(state, rng, lambda s, pid: night_answers.get(pid, ()))
     record_night_choices(after_night, night_choices, memory)
-    reveal_psychic_answer(after_night, night_choices, memory, rng)
+    reveal_medium_answer(after_night, night_choices, memory, rng)
 
     night_deaths = deaths_between(state, after_night)
     record_night_deaths(after_night, night_deaths, memory)
     await human.show_night_deaths(after_night, night_deaths)
 
-    # Infos écrites pendant la nuit (réponse de la Voyante), hors celles déjà montrées
+    # Infos écrites pendant la nuit (réponse du Médium), hors celles déjà montrées
     for info in _role_infos(memory, human_id, state.turn)[len(shown):]:
         await human.show_night_info(after_night, state.turn, info, None)
 
@@ -212,19 +227,25 @@ async def play_turn(
     discussion = after_night.next_phase()
     memory.set_moment(discussion.turn, discussion.phase)
     speakers = [agents[p.id] for p in discussion.players if p.id in agents]
-    said = await public_conversation(speakers, memory)
-    for author, text in said:
+    public_failures: list[tuple[int, str]] = []
+    said = await public_conversation(speakers, memory, failures=public_failures)
+    # Messages et silences dans l'ordre où ils se sont produits
+    for position, (author, text) in enumerate(said):
+        await _report_failures(discussion, human, [pid for at, pid in public_failures if at == position], "public")
         await human.show_public_message(discussion, author, text)
+    await _report_failures(discussion, human, [pid for at, pid in public_failures if at >= len(said)], "public")
 
     text = await human.public_message(discussion, human_id)
     if text:
         memory.add_public(EventType.PUBLIC_MESSAGE, human_id, text)
     await _private_channel(discussion, agents, memory, human_id, human, rng)
 
-    # VOTE : IA en parallèle, puis l'humain (un mort vote par vote fantôme)
+    # VOTE : IA en parallèle, puis l'humain (un mort vote par voix d'outre-tombe)
     day_state = discussion.next_phase()
     memory.set_moment(day_state.turn, day_state.phase)
-    ai_votes = await collect_ai_votes(day_state, agents)
+    vote_failures: list[str] = []
+    ai_votes = await collect_ai_votes(day_state, agents, failures=vote_failures)
+    await _report_failures(day_state, human, vote_failures, "vote")
     human_vote: dict[str, Optional[str]] = {}
     if day_state.player(human_id).can_vote:
         human_vote[human_id] = await human.vote(day_state, human_id)
@@ -234,4 +255,5 @@ async def play_turn(
     game_winner = winner(after_day)
     if game_winner is None:
         after_day = after_day.next_phase()
-    return TurnResult(after_day, night_choices, votes, executed, night_deaths, game_winner)
+    return TurnResult(after_day, night_choices, votes, executed, night_deaths, game_winner,
+                      frozenset(vote_failures))

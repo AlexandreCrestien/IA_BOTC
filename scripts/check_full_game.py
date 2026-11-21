@@ -49,8 +49,8 @@ MAX_PRIVATE_MESSAGES = 3
 
 PHASES = {"nuit", "discussion", "vote"}
 KINDS_PHASE = {"nuit": "nuit", "vote": "vote", "discussion": "discussion"}
-ROLES_FR = {"Diablotin", "Empoisonneur", "Voyante", "Moine", "Détective", "Majordome"}
-EVIL_ROLES = {"Diablotin", "Empoisonneur"}
+ROLES_FR = {"Faucheur", "Apothicaire", "Médium", "Veilleur", "Inquisiteur", "Valet"}
+EVIL_ROLES = {"Faucheur", "Apothicaire"}
 WINNERS = {"good", "evil"}
 
 # Champs obligatoires par type de message, d'après connection.js (handleServerMessage)
@@ -373,7 +373,7 @@ class Game:
             if channel == "public":
                 self.echo_seen += 1
             return
-        if sender == "Grimoire":
+        if sender == "Codex":
             if "se sont entretenus en privé" in str(msg.get("content")):
                 self.agent_meetings += 1
             return
@@ -550,10 +550,10 @@ class Game:
                 "alliés révélés si et seulement si camp du mal", f"rôle {self.role}")
         if self.role in EVIL_ROLES:
             r.check(any("Première nuit" in t for t in texts), "camp du mal : information de première nuit")
-        if self.role == "Voyante":
-            r.check(any("Parmi" in t for t in texts), "Voyante : réponse du sondage reçue")
-        if self.role == "Détective":
-            r.check(any("Première nuit : parmi" in t for t in texts), "Détective : information reçue")
+        if self.role == "Médium":
+            r.check(any("Parmi" in t for t in texts), "Médium : réponse du sondage reçue")
+        if self.role == "Inquisiteur":
+            r.check(any("Première nuit : parmi" in t for t in texts), "Inquisiteur : information reçue")
 
         if "out_of_turn" not in self.probes:
             r.note("refus hors demande non testés : aucune demande de nuit pour ce rôle")

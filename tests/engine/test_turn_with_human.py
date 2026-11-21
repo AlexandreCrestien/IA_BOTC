@@ -53,6 +53,7 @@ class FakeHuman:
         self.accept_invitation = accept_invitation
         self.invited_by = None
         self.meetings_seen = []
+        self.unavailable_seen = []
         self.deaths_seen = None
         self.replies_seen = []
         self.night_infos = []
@@ -88,6 +89,9 @@ class FakeHuman:
 
     async def show_agent_meeting(self, state, agent_ids):
         self.meetings_seen.append(agent_ids)
+
+    async def show_agent_unavailable(self, state, agent_id, step):
+        self.unavailable_seen.append((agent_id, step))
 
     async def vote(self, state, player_id):
         return None
@@ -273,3 +277,39 @@ def test_agents_learn_deaths_votes_and_execution():
         "Votes : Alex → personne, Ada → personne, Bob → personne, Cléo → personne, Dan → personne, Eva → personne.",
         "Personne n'est exécuté aujourd'hui.",
     ]
+
+
+# --- IA qui ne répondent pas : signalées au port, qui décide quoi montrer ----------------
+
+class BrokenAgent(FakeAgent):
+    """Agent dont l'IA ne répond jamais."""
+
+    async def night_action(self, options, number_of_targets=1, situation=""):
+        raise RuntimeError("tous les modèles ont échoué")
+
+    async def vote(self, options):
+        raise RuntimeError("tous les modèles ont échoué")
+
+    async def speak_public(self, optional=False):
+        raise RuntimeError("tous les modèles ont échoué")
+
+    async def speak_private(self, partners, opening=False):
+        raise RuntimeError("tous les modèles ont échoué")
+
+
+def test_unavailable_agents_are_reported_at_each_step():
+    state, _, memory, rng = _setup()
+    agents = {p.id: BrokenAgent(p.id) for p in state.players if p.id != HUMAN_ID}
+    partner = next(iter(agents))
+    human = FakeHuman(partners=[partner], messages=["bonjour"])
+
+    result = asyncio.run(play_turn(state, rng, agents, memory, HUMAN_ID, human))
+
+    steps = {step for _, step in human.unavailable_seen}
+    assert steps == {"night", "public", "private", "vote"}
+    assert (partner, "private") in human.unavailable_seen
+    # Une seule annonce par agent pendant la discussion publique
+    public = [pid for pid, step in human.unavailable_seen if step == "public"]
+    assert len(public) == len(set(public)) == len(agents)
+    # Tous les agents qui ont voté sont en échec : marqués pour le bulletin, l'humain non
+    assert result.vote_failures == frozenset(pid for pid in result.votes if pid != HUMAN_ID)
