@@ -158,6 +158,10 @@ async def ask_llm_json[T: BaseModel](profile: str, messages: list[dict], schema:
     if SIMULATE_LLM and context and "options" in context:
         await asyncio.sleep(CALL_PAUSE_SECONDS)
         return _simulated_answer(schema, context)
+    if SIMULATE_LLM and all(field.annotation is str for field in schema.model_fields.values()):
+        # Réponse libre sans options (ex. résumés d'une conversation simulée) : texte fictif
+        await asyncio.sleep(CALL_PAUSE_SECONDS)
+        return schema.model_validate({name: "Réponse simulée." for name in schema.model_fields})
 
     for attempt in range(1, JSON_ATTEMPTS + 1):
         text = await ask_llm(profile, messages, response_format={"type": "json_object"})

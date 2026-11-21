@@ -24,6 +24,11 @@ let deferredActionRequest = null;
 let deferredActionTimer = null;
 const RESULT_MIN_DISPLAY_MS = 12000;
 
+// Discussion : sans choix du joueur pendant ce délai (compté une fois l'encadré affiché,
+// donc après le dernier message de la place publique), un agent vient lui proposer un entretien.
+const INVITATION_DELAY_MS = 10000;
+let invitationTimer = null;
+
 function getActionTexts(action) {
     if (action.kind === "discussion") {
         return {
@@ -49,6 +54,7 @@ function getActionTexts(action) {
 }
 
 function handleActionRequest(data) {
+    clearInvitationTimer();
     // Un résultat est affiché depuis trop peu de temps : on laisse le joueur le lire.
     if (actionResult) {
         const remaining = RESULT_MIN_DISPLAY_MS - (Date.now() - actionResult.shownAt);
@@ -96,6 +102,30 @@ function handleActionRequest(data) {
     };
     actionSelection = [];
     renderActionPanel();
+    if (kind === "discussion") startInvitationTimer(pendingAction);
+}
+
+function startInvitationTimer(action) {
+    clearInvitationTimer();
+    invitationTimer = setTimeout(() => onDiscussionIdle(action), INVITATION_DELAY_MS);
+}
+
+function clearInvitationTimer() {
+    clearTimeout(invitationTimer);
+    invitationTimer = null;
+}
+
+// Le délai est écoulé : si le joueur n'a toujours rien choisi, on prévient le serveur.
+function onDiscussionIdle(action) {
+    invitationTimer = null;
+    if (pendingAction !== action || action.stage !== "choosing" || actionSelection.length) return;
+    // Une modale est ouverte (réveil, rôle…) : le joueur ne voit pas encore l'encadré, on attend.
+    if (document.querySelector('.modal-backdrop:not(.hidden)')) {
+        startInvitationTimer(action);
+        return;
+    }
+    if (sendAction("discussion_timeout")) clearPendingAction();
+    // Connexion perdue : la demande sera renvoyée à la reconnexion, avec un nouveau délai.
 }
 
 function applyDeferredActionRequest() {
@@ -188,6 +218,7 @@ function renderNightResult(result) {
 }
 
 function clearPendingAction() {
+    clearInvitationTimer();
     pendingAction = null;
     actionSelection = [];
     renderActionPanel();
@@ -258,6 +289,7 @@ function renderActionPanel() {
 
 function toggleActionTarget(id) {
     if (!pendingAction) return;
+    clearInvitationTimer(); // le joueur commence à choisir : aucun agent ne viendra le solliciter
     const max = pendingAction.maxTargets;
 
     if (actionSelection.includes(id)) {

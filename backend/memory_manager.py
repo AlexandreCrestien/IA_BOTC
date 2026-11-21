@@ -23,6 +23,8 @@ class MemoryManager:
         # Noms affichés aux IA ; sans dictionnaire, on affiche les identifiants.
         self._names = dict(names) if names is not None else {p: p for p in player_ids}
         self._events: list[Event] = []
+        # Conversations privées annoncées : (tour, participants). Sert à varier les duos d'agents.
+        self._meetings: list[tuple[int, frozenset[str]]] = []
         # Moment courant, fixé par l'orchestrateur via set_moment (il vient de GameState).
         self.turn = 1
         self.phase = Phase.NUIT
@@ -71,6 +73,19 @@ class MemoryManager:
     def add_private(self, type: EventType, author: str, content: str, participants: set[str]) -> Event:
         """Visible par un groupe : résumé de conversation privée, alliés entre démons."""
         return self.add_event(type, author, content, visible_to=participants)
+
+    def add_meeting(self, participants: list[str]) -> Event:
+        """Annonce publique d'une conversation privée (sans son contenu), et trace de ses participants."""
+        unknown = set(participants) - self.player_ids
+        if unknown:
+            raise ValueError(f"Joueurs inconnus dans la conversation : {sorted(unknown)}")
+        self._meetings.append((self.turn, frozenset(participants)))
+        names = ", ".join(self.name_of(p) for p in participants)
+        return self.add_public(EventType.private_meeting, game_master, f"Conversation privée entre {names}.")
+
+    def meetings(self) -> list[tuple[int, frozenset[str]]]:
+        """Conversations privées annoncées depuis le début : (tour, participants), dans l'ordre."""
+        return list(self._meetings)
 
     def add_personal(self, type: EventType, author: str, content: str, player: str) -> Event:
         """Visible par un seul joueur : action de nuit, information de nuit, rôle."""

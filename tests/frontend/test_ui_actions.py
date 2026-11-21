@@ -106,3 +106,56 @@ def test_skip_button_only_for_the_discussion(game, server):
     server.send(type="action_request", kind="vote", candidates=ALL_PLAYERS)
     expect(game.locator("#dynamic-action-panel")).to_contain_text("Sceller mon vote")
     expect(game.locator("#action-skip")).to_have_count(0)
+
+
+# --- Sans choix pendant 10 s, un agent vient proposer un entretien ------------------
+
+INVITATION_DELAY_MS = 10_000
+
+
+def show_discussion(game, server):
+    game.clock.install()  # temps simulé : les 10 s s'écoulent à la demande
+    server.send(type="action_request", kind="discussion", candidates=ALL_PLAYERS, max_targets=2, min_targets=1)
+    expect(game.locator("#action-skip")).to_be_visible()
+
+
+def test_no_choice_during_the_delay_asks_for_an_agent(game, server):
+    show_discussion(game, server)
+
+    game.clock.run_for(INVITATION_DELAY_MS - 1000)
+    assert server.actions("discussion_timeout") == []
+
+    game.clock.run_for(1000)
+    server.wait_for("discussion_timeout")
+    expect(game.locator("#action-zone")).to_be_hidden()
+
+
+def test_starting_to_choose_cancels_the_delay(game, server):
+    show_discussion(game, server)
+    option(game, "Lord Ashcombe").click()
+
+    game.clock.run_for(INVITATION_DELAY_MS * 2)
+    assert server.actions("discussion_timeout") == []
+    expect(game.locator("#action-zone")).to_be_visible()
+
+
+def test_skipping_to_the_vote_cancels_the_delay(game, server):
+    show_discussion(game, server)
+    game.click("#action-skip")
+    server.wait_for("skip_turn")
+
+    game.clock.run_for(INVITATION_DELAY_MS * 2)
+    assert server.actions("discussion_timeout") == []
+
+
+def test_delay_waits_while_a_modal_is_open(game, server):
+    show_discussion(game, server)
+    server.send(type="night_result", turn=2, dead_player=None)
+    expect(game.locator("#modal-night-result")).to_be_visible()
+
+    game.clock.run_for(INVITATION_DELAY_MS * 2)
+    assert server.actions("discussion_timeout") == []
+
+    game.click("[data-action='close-night-result']")
+    game.clock.run_for(INVITATION_DELAY_MS)
+    server.wait_for("discussion_timeout")

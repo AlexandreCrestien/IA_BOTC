@@ -33,7 +33,11 @@ HISTORY_ROOT = Path(__file__).resolve().parent.parent / "historiques"
 
 def _ask_numbers(prompt, options):
     """Lit des numéros séparés par des virgules et renvoie les options correspondantes."""
-    raw = input(prompt)
+    return _pick_numbers(input(prompt), options)
+
+
+def _pick_numbers(raw, options):
+    """Numéros séparés par des virgules -> options correspondantes (les numéros invalides sont ignorés)."""
     picked = []
     for token in raw.split(","):
         token = token.strip()
@@ -81,11 +85,19 @@ class TerminalHuman:
         return text or None
 
     async def private_partners(self, state, player_id):
-        candidates = [p.id for p in state.players if p.alive and p.id != player_id]
-        print("\n[Salon privé] Avec qui veux-tu parler ? (1 ou 2 numéros, vide = personne)")
+        candidates = [p.id for p in state.players if p.id != player_id]  # morts compris
+        print("\n[Salon privé] Avec qui veux-tu parler ? (1 ou 2 numéros, vide = personne,"
+              " 0 = attendre qu'un agent vienne te voir)")
         for i, pid in enumerate(candidates, 1):
             print(f"  {i}. {state.player(pid).name}")
-        return _ask_numbers("Numéros : ", candidates)
+        raw = input("Numéros : ").strip()
+        if raw == "0":
+            return None  # comme le délai écoulé dans le navigateur
+        return _pick_numbers(raw, candidates)
+
+    async def agent_invitation(self, state, player_id, agent_id):
+        answer = input(f"\n[Salon privé] {state.player(agent_id).name} souhaite s'entretenir avec toi. Accepter ? (o/n) : ")
+        return answer.strip().lower().startswith("o")
 
     async def private_message(self, state, player_id):
         print("\n[Salon privé] Ce que tu sais :")
@@ -96,6 +108,10 @@ class TerminalHuman:
     async def show_private_replies(self, state, replies):
         for pid, text in replies:
             print(f"  {self.memory.name_of(pid)} : {text}")
+
+    async def show_agent_meeting(self, state, agent_ids):
+        first, second = (state.player(pid).name for pid in agent_ids)
+        print(f"[Grimoire] {first} et {second} se sont entretenus en privé.")
 
     async def vote(self, state, player_id):
         options = [p.id for p in state.players if p.alive]

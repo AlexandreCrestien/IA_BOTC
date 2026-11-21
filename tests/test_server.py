@@ -17,7 +17,7 @@ from backend.server.schemas import (
     RespondWhisperInvitationAction,
     SubmitNightAction,
     SubmitVoteAction,
-    TriggerVotePhaseAction,
+    DiscussionTimeoutAction,
     SendChatAction,
 )
 
@@ -163,9 +163,9 @@ def test_vote_for_nobody():
     assert parse_action({"action": "submit_vote", "payload": {}}).payload.target_id is None
 
 
-def test_parse_trigger_vote_phase():
-    action = parse_action({"action": "trigger_vote_phase", "payload": {}})
-    assert isinstance(action, TriggerVotePhaseAction)
+def test_parse_discussion_timeout():
+    action = parse_action({"action": "discussion_timeout", "payload": {}})
+    assert isinstance(action, DiscussionTimeoutAction)
 
 
 def test_empty_chat_message_is_rejected():
@@ -378,19 +378,6 @@ def test_websocket_request_whisper(client):
         assert "agent_1" in private_msg["members"]
         assert private_msg["channel_id"].startswith("whisper_")
 
-
-def test_websocket_trigger_vote_phase(client):
-    """Vérifie que déclencher le vote diffuse bien l'information à tout le monde."""
-    with client.websocket_connect("/ws/humain") as ws:
-        ws.receive_json()  # accusé "connected"
-        ws.send_text(json.dumps({
-            "action": "trigger_vote_phase",
-            "payload": {}
-        }))
-        
-        response = ws.receive_json()
-        assert response["type"] == "phase_update"
-        assert response["phase"] == "vote"
 
 def test_websocket_refused_connection_is_closed_with_reason(client, monkeypatch):
     """Pseudo refusé : la connexion est acceptée puis fermée avec le code 4001 et le motif."""

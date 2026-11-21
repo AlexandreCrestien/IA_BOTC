@@ -66,12 +66,18 @@ class Agent:
             return None
         return text
 
-    async def speak_private(self, partners: list[str]) -> str:
-        """Réponse dans une conversation privée. partners : ids des autres participants."""
+    async def speak_private(self, partners: list[str], opening: bool = False) -> str:
+        """Réponse dans une conversation privée. partners : ids des autres participants.
+        opening=True : c'est l'agent qui a proposé l'entretien, il parle en premier."""
         names = ", ".join(self.memory.name_of(p) for p in partners)
-        instruction = (
-            f"Tu es en conversation privée avec {names}. Réponds-leur par un seul message court (2 phrases maximum), sans préfixe ni guillemets."
-        )
+        if opening:
+            instruction = (
+                f"Tu as proposé une conversation privée à {names}, qui a accepté. Ouvre la conversation par un seul message court (2 phrases maximum), sans préfixe ni guillemets."
+            )
+        else:
+            instruction = (
+                f"Tu es en conversation privée avec {names}. Réponds-leur par un seul message court (2 phrases maximum), sans préfixe ni guillemets."
+            )
         return await ask_llm("fast", self._messages(instruction))
 
     async def night_action(self, options: list[str], number_of_targets: int = 1, situation: str = "") -> list[str]:

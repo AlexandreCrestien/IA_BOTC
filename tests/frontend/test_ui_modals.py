@@ -24,14 +24,13 @@ def test_agent_whisper_accept_waits_for_the_server_channel(game, server):
     expect(game.locator("#chat-channels .channel-btn")).to_have_count(0)  # pas de salon inventé côté client
 
 
-def test_agent_whisper_refuse_then_trigger_vote(game, server):
+def test_agent_whisper_refuse_closes_the_modal(game, server):
     server.send(type="agent_whisper_request", agent_id="Mère Grimsby", agent_name="Mère Grimsby")
     game.click("[data-action='refuse-whisper']")
-    assert server.wait_for("respond_whisper_invitation")["accepted"] is False
 
-    game.click("[data-action='whisper-vote']")
-    server.wait_for("trigger_vote_phase")
+    assert server.wait_for("respond_whisper_invitation") == {"target_agent_id": "Mère Grimsby", "accepted": False}
     expect(game.locator("#modal-agent-whisper")).to_be_hidden()
+    expect(game.locator("#chat-messages")).to_contain_text("Vous avez refusé l'entretien avec Mère Grimsby.")
 
 
 def test_execution_modal_only_when_the_player_is_executed(game, server):

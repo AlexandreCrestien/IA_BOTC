@@ -352,3 +352,124 @@ def test_resultat_du_tour_et_fin_de_partie_relayes_depuis_la_file():
         {"type": "game_over", "winner": "Villageois", "details": "Fin."},
     ]
     assert ws.vote_log["h"] == []  # aucun bulletin à retenir ce tour-là
+
+
+# --- Aucun choix de salon privé à temps : un agent propose un entretien ------------
+
+def test_delai_de_discussion_ecoule_repond_none_au_moteur():
+    port = QueueHumanPort()
+    ws.ports["h"] = port
+    ws.pending["h"] = "private_partners"
+
+    with make_client().websocket_connect("/ws/h") as conn:
+        conn.receive_text()  # accusé "connected"
+        conn.send_text(json.dumps({"action": "discussion_timeout", "payload": {}}))
+        conn.send_text(json.dumps({"action": "discussion_timeout", "payload": {}}))  # plus rien n'est attendu
+        reply = json.loads(conn.receive_text())
+
+    assert reply["type"] == "error"
+    assert port.answers.get_nowait() is None
+    assert port.answers.empty()
+
+
+def test_proposition_d_un_agent_envoyee_au_front(monkeypatch):
+    sent = []
+
+    async def fake_send(player_id, message):
+        sent.append(message)
+
+    monkeypatch.setattr(ws.manager, "send_to_player", fake_send)
+
+    async def scenario():
+        port = QueueHumanPort()
+        task = asyncio.create_task(ws._forward_requests("h", port))
+        await port.requests.put({"kind": "agent_invitation", "agent": "imp"})
+        await asyncio.sleep(0.01)
+        task.cancel()
+
+    asyncio.run(scenario())
+    assert ws.pending["h"] == "agent_invitation"
+    assert sent == [{"type": "agent_whisper_request", "agent_id": "imp", "agent_name": "imp"}]
+
+
+def _invited_by(agent_id: str) -> QueueHumanPort:
+    port = QueueHumanPort()
+    ws.ports["h"] = port
+    ws.pending["h"] = "agent_invitation"
+    ws.current_request["h"] = ("agent_invitation", {"kind": "agent_invitation", "agent": agent_id})
+    return port
+
+
+def test_accepter_l_entretien_ouvre_le_salon():
+    port = _invited_by("imp")
+
+    with make_client().websocket_connect("/ws/h") as conn:
+        conn.receive_text()  # accusé "connected"
+        conn.receive_text()  # proposition renvoyée à la connexion
+        conn.send_text(json.dumps({"action": "respond_whisper_invitation",
+                                   "payload": {"target_agent_id": "imp", "accepted": True}}))
+        announce = json.loads(conn.receive_text())
+        opened = json.loads(conn.receive_text())
+
+    assert announce["sender"] == "Grimoire"
+    assert opened["type"] == "private_channel_opened"
+    assert opened["channel_id"] == "whisper_h_imp"
+    assert ws.whispers["h"] == "whisper_h_imp"
+    assert port.answers.get_nowait() is True
+
+
+def test_refuser_l_entretien_passe_au_vote():
+    port = _invited_by("imp")
+
+    with make_client().websocket_connect("/ws/h") as conn:
+        conn.receive_text()  # accusé "connected"
+        conn.receive_text()  # proposition renvoyée à la connexion
+        conn.send_text(json.dumps({"action": "respond_whisper_invitation",
+                                   "payload": {"target_agent_id": "imp", "accepted": False}}))
+        reply = json.loads(conn.receive_text())
+
+    assert reply["type"] == "announcement"
+    assert "h" not in ws.whispers
+    assert port.answers.get_nowait() is False
+
+
+def test_reponse_a_un_autre_agent_ou_sans_proposition_refusee():
+    port = _invited_by("imp")
+
+    with make_client().websocket_connect("/ws/h") as conn:
+        conn.receive_text()  # accusé "connected"
+        conn.receive_text()  # proposition renvoyée à la connexion
+        conn.send_text(json.dumps({"action": "respond_whisper_invitation",
+                                   "payload": {"target_agent_id": "moine", "accepted": True}}))
+        wrong_agent = json.loads(conn.receive_text())
+        ws.pending["h"] = "vote"
+        conn.send_text(json.dumps({"action": "respond_whisper_invitation",
+                                   "payload": {"target_agent_id": "imp", "accepted": True}}))
+        no_invitation = json.loads(conn.receive_text())
+
+    assert wrong_agent["type"] == "error"
+    assert no_invitation["type"] == "error"
+    assert port.answers.empty()
+
+
+def test_entretien_entre_deux_agents_annonce_sur_la_place_publique(monkeypatch):
+    broadcast = []
+
+    async def fake_broadcast(message):
+        broadcast.append(message)
+
+    monkeypatch.setattr(ws.manager, "broadcast", fake_broadcast)
+
+    async def scenario():
+        port = QueueHumanPort()
+        task = asyncio.create_task(ws._forward_requests("h", port))
+        await port.requests.put({"kind": "agent_meeting", "agents": ["imp", "moine"]})
+        await asyncio.sleep(0.01)
+        task.cancel()
+
+    asyncio.run(scenario())
+    message = {"type": "chat", "channel_id": "public", "sender": "Grimoire",
+               "content": "💬 imp et moine se sont entretenus en privé."}
+    assert broadcast == [message]
+    assert ws.chat_log["h"] == [message]  # renvoyé après une reconnexion
+    assert "h" not in ws.pending  # simple annonce : aucune réponse attendue

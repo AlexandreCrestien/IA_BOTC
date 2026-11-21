@@ -72,6 +72,7 @@ REQUIRED = {
     "history": ("nights", "votes"),
     "game_abandoned": (),
     "game_interrupted": ("text",),
+    "agent_whisper_request": ("agent_id", "agent_name"),
 }
 
 
@@ -213,6 +214,9 @@ class Game:
         self.discussions = 0
         self.private_skipped = 0
         self.salons_ended_early = 0
+        self.agent_meetings = 0  # entretiens simulés entre deux agents, annoncés sur la place publique
+        self.channels_opened = 0
+        self.invitations = []  # réponses données aux agents venus proposer un entretien (True/False)
         self.history = None
 
     # ---------- boucle de réception ----------
@@ -351,6 +355,7 @@ class Game:
             return
         self.private_channel = msg["channel_id"]
         self.private_left_seen = []
+        self.channels_opened += 1
         self.report.check(HUMAN in msg["members"], "salon privé : le joueur humain est membre")
         partners = [m for m in msg["members"] if m != HUMAN]
         self.report.check(all(m in self.names.values() for m in partners),
@@ -369,6 +374,8 @@ class Game:
                 self.echo_seen += 1
             return
         if sender == "Grimoire":
+            if "se sont entretenus en privé" in str(msg.get("content")):
+                self.agent_meetings += 1
             return
         self.report.check(sender in self.names.values(), "expéditeur affiché par son nom",
                           f"« {sender} » reçu, le front affichera cet identifiant")
@@ -381,6 +388,19 @@ class Game:
 
     def on_phase_update(self, msg: dict) -> None:
         pass
+
+    def on_agent_whisper_request(self, msg: dict) -> None:
+        """Proposition d'entretien d'un agent : acceptée la première fois, refusée ensuite."""
+        self.report.check(msg["agent_id"] in self.names.values(), "proposition d'entretien : agent désigné par son nom",
+                          str(msg["agent_id"]))
+        accepted = not self.invitations
+        self.invitations.append(accepted)
+        expected = {"private_channel_opened"} if accepted else {"announcement"}
+        reply = self.send_and_wait("respond_whisper_invitation",
+                                   {"target_agent_id": msg["agent_id"], "accepted": accepted}, expected | {"error"})
+        self.report.check(reply.get("type") in expected,
+                          f"proposition d'entretien {'acceptée : salon ouvert' if accepted else 'refusée : place au vote'}",
+                          str(reply))
 
     # ---------- demandes d'action ----------
 
@@ -471,6 +491,12 @@ class Game:
         cands = list(msg.get("candidates", []))
         self.private_channel = None
         self.discussions += 1
+        if self.discussions in (3, 4):
+            # Troisième et quatrième jours : aucun choix à temps, un agent vient proposer un entretien
+            reply = self.send_and_wait("discussion_timeout", {}, {"agent_whisper_request", "error"})
+            self.report.check(reply.get("type") == "agent_whisper_request",
+                              "sans choix à temps, un agent propose un entretien", str(reply))
+            return
         if self.discussions == 2:
             # Deuxième jour : pas de salon privé, « Passer au vote »
             self.private_skipped += 1
@@ -516,6 +542,9 @@ class Game:
                 f"envoyés {self.public_sent}, relayés {self.echo_seen}")
         if self.private_sent:
             r.check(self.ai_private_replies > 0, "réponses des IA dans le salon privé")
+        r.check(self.agent_meetings == self.channels_opened,
+                "un entretien entre deux agents annoncé par salon privé du joueur",
+                f"{self.agent_meetings} entretiens pour {self.channels_opened} salons")
         r.check(len(self.night_results) == len(self.votes), "un night_result et un vote_result par tour",
                 f"{len(self.night_results)} nuits, {len(self.votes)} votes")
         r.check(bool(self.night_results), "au moins une nuit complète reçue")
@@ -541,6 +570,7 @@ class Game:
             r.note("« Passer au vote » non testé : partie trop courte")
         if self.discussions < 3:
             r.note("fin anticipée d'un salon privé non testée : partie trop courte")
+            r.note("proposition d'entretien d'un agent non testée : partie trop courte")
         else:
             r.check(self.salons_ended_early >= 1, "salon privé terminé avant 3 messages")
         if "vote" not in self.probes:

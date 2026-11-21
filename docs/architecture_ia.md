@@ -212,7 +212,7 @@ Une personnalité absente du tableau parle en dernier, sans obligation.
 
 | Fonction | Rôle |
 |---|---|
-| `choose_agent_for_human(agents, human_id, memory)` | Quand l'humain n'a choisi personne : choisit l'agent qui vient lui parler. Priorité à ceux qui n'ont jamais discuté avec lui (`private_partners`), puis la personnalité la plus bavarde. |
+| `choose_agent_for_human(agents, human_id, memory)` | Quand l'humain n'a choisi personne : choisit l'agent qui vient lui parler. Priorité à ceux qui n'ont jamais discuté avec lui (`private_partners`), puis la personnalité la plus bavarde. Les agents morts restent candidats ; le rôle n'est jamais pris en compte (ce serait un indice). |
 | `await start_private_conversation(human_id, partners, memory, agent_speaks_first=False)` | Ouvre la conversation avec 1 ou 2 agents. Annonce en public « Conversation privée entre … », sans le contenu. Avec `agent_speaks_first=True`, l'agent ouvre la conversation. |
 | `await private_message(human_id, text, partners, memory)` | L'humain envoie un message ; chaque agent répond à son tour. Appelé à chaque message de l'humain. |
 
@@ -245,7 +245,7 @@ NUIT        memory.set_moment(tour, NUIT)
             victoire ? → fin
 DISCUSSION  memory.set_moment(tour, DISCUSSION)
             public_conversation(agents)     conversations.py, un agent après l'autre
-            (humain : message public, puis salon privé avec 1 ou 2 agents vivants, 3 messages au plus)
+            (humain : message public, puis salon privé avec 1 ou 2 agents (vivants ou morts), 3 messages au plus)
 VOTE        memory.set_moment(tour, VOTE)
             collect_ai_votes                agent.vote(noms) → id ou None
             (humain : human.vote)
@@ -276,11 +276,38 @@ VOTE        memory.set_moment(tour, VOTE)
 | Chargement des skills | `prompt_loader` |
 | Lien avec le front, choix de l'humain | `server`, `static/` |
 
+### Agent qui vient parler à l'humain
+
+Dans le navigateur, si le joueur ne choisit aucun interlocuteur (ni « Passer au vote ») pendant 10 secondes
+après l'affichage du choix du salon privé, le front envoie `discussion_timeout`. Le délai ne compte pas
+tant qu'une modale est ouverte, et il s'arrête dès que le joueur sélectionne quelqu'un.
+`QueueHumanPort.private_partners` renvoie alors `None` (au lieu de `[]` pour « Passer au vote ») :
+`human_turns` appelle `choose_agent_for_human`, puis `agent_invitation` (modale « … souhaite s'entretenir »).
+Accepté : le salon s'ouvre et l'agent parle en premier (`agent_speaks_first=True`). Refusé : place au vote.
+
+
+### Conversation simulée entre deux agents (`backend/agent_whispers.py`)
+
+Chaque fois que l'humain a un salon privé (ouvert lui-même ou proposé par un agent), deux autres agents
+s'entretiennent en privé. Aucune conversation si l'humain passe son salon privé.
+
+- **Choix du duo** (`choose_whisper_pair`, aucun appel LLM) : tirage au sort pondéré parmi les agents hors
+  du salon de l'humain, vivants ou morts. Poids de base 1 ; duo du mal ×3 (`EVIL_PAIR_WEIGHT`) ; duo avec
+  la Voyante ou le Détective ×1,5 (`INFO_PAIR_WEIGHT`) ; divisé par (1 + rencontres passées du duo)² ;
+  un peu réduit pour les agents déjà souvent en entretien ; duo du tour précédent exclu.
+  Seuls les entretiens entre agents comptent (`MemoryManager.meetings()`, hors salons de l'humain).
+- **Annonce** : « A et B se sont entretenus en privé » sur la place publique (indice pour le joueur) et
+  dans la mémoire publique de tous les agents.
+- **Résumés** (`write_whisper_summaries`) : un seul appel LLM (profil « capable ») qui connaît les rôles et
+  l'historique des deux agents, et renvoie un résumé par agent, de son point de vue (le camp du mal bluffe
+  face au bien et se concerte entre lui). Chaque résumé va dans la seule mémoire personnelle de son agent.
+  L'appel tourne pendant que l'humain discute ; le moteur l'attend avant le vote. En cas d'échec, chacun
+  garde un souvenir neutre.
+
+
 ## 7. Points encore ouverts
 
 - **Morts, votes et exécution absents de la mémoire** : seul l'humain est prévenu des morts de la nuit (`show_night_deaths`). Les agents ne reçoivent ni l'annonce des morts, ni les votes, ni le résultat de l'exécution.
-- **Agent qui vient parler à l'humain** : quand l'humain n'ouvre pas de salon privé, aucun agent ne vient vers lui. `choose_agent_for_human` et `start_private_conversation(..., agent_speaks_first=True)` existent mais ne sont pas encore appelées.
-- **Conversations privées entre agents** : pendant le salon privé de l'humain, les autres agents ne discutent pas entre eux (prévu dans le sujet sous forme d'un échange simulé).
 - **Nom affiché des personnalités** : `assign_players` met le nom anglais aussi comme nom français (`agent.personality` vaut `"agitator"` et non `"Provocateur"`). Les conversations ne sont pas touchées : elles utilisent `personality_key`.
 - **Agent et état du joueur** : `Player` est immuable, donc `agent.player` reste celui de la création (il ne voit pas sa mort). Pour l'état actuel, lire `GameState`.
 

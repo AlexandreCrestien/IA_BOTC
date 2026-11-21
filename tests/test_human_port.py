@@ -59,12 +59,12 @@ def test_vote_ne_propose_que_les_vivants():
     assert request["targets"] == ["h", "imp"]
 
 
-def test_partenaires_privés_excluent_soi_et_les_morts():
+def test_partenaires_privés_excluent_soi_mais_pas_les_morts():
     port = QueueHumanPort()
     state = make_state()
-    result, request = run_with_server(port, ["imp"], lambda: port.private_partners(state, "h"))
-    assert result == ["imp"]
-    assert request["choices"] == ["imp"]
+    result, request = run_with_server(port, ["mort"], lambda: port.private_partners(state, "h"))
+    assert result == ["mort"]
+    assert request["choices"] == ["imp", "mort"]
 
 
 def test_annonce_de_mort_ne_bloque_pas_le_moteur():

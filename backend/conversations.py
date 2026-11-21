@@ -2,7 +2,7 @@
 import logging
 
 from backend.agent_factory import Agent
-from backend.memory_manager import MemoryManager, game_master
+from backend.memory_manager import MemoryManager
 from backend.models import EventType
 
 logger = logging.getLogger(__name__)
@@ -73,6 +73,7 @@ def choose_agent_for_human(agents: list[Agent], human_id: str, memory: MemoryMan
 
     Priorité aux agents qui n'ont jamais discuté en privé avec l'humain ;
     parmi eux, la personnalité la plus bavarde (ordre du tableau).
+    Les agents morts restent candidats. Le rôle n'entre pas en compte : ce serait un indice pour l'humain.
     """
     if not agents:
         raise ValueError("Aucun agent disponible pour une conversation privée")
@@ -88,15 +89,16 @@ def _check_partners(human_id: str, partners: list[Agent]) -> None:
         raise ValueError("L'humain ne peut pas être son propre interlocuteur")
 
 
-async def _replies(human_id: str, partners: list[Agent], memory: MemoryManager) -> list[tuple[str, str]]:
+async def _replies(human_id: str, partners: list[Agent], memory: MemoryManager,
+                   opening: bool = False) -> list[tuple[str, str]]:
     """Chaque agent de la conversation répond à son tour. Chaque réponse est enregistrée tout de suite,
-    pour que le second agent voie la réponse du premier."""
+    pour que le second agent voie la réponse du premier. opening=True : les agents ouvrent la conversation."""
     participants = {human_id} | {agent.player_id for agent in partners}
     said: list[tuple[str, str]] = []
     for agent in partners:
         others = sorted(participants - {agent.player_id})
         try:
-            text = await agent.speak_private(others)
+            text = await (agent.speak_private(others, opening=True) if opening else agent.speak_private(others))
         except Exception:
             # Filet de sécurité : l'agent ne répond pas, la conversation continue.
             logger.exception("%s n'a pas pu répondre en privé", agent.player_id)
@@ -115,10 +117,9 @@ async def start_private_conversation(human_id: str, partners: list[Agent], memor
     Renvoie les messages des agents (id_joueur, texte), vide si l'humain parle en premier.
     """
     _check_partners(human_id, partners)
-    names = ", ".join(memory.name_of(p) for p in [human_id] + [agent.player_id for agent in partners])
-    memory.add_public(EventType.private_meeting, game_master, f"Conversation privée entre {names}.")
+    memory.add_meeting([human_id] + [agent.player_id for agent in partners])
     if agent_speaks_first:
-        return await _replies(human_id, partners, memory)
+        return await _replies(human_id, partners, memory, opening=True)
     return []
 
 

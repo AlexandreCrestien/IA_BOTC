@@ -143,6 +143,22 @@ def test_agent_can_speak_first(memory, fake_llm):
     assert said == [("ana", "message de ana")]
 
 
+def test_agent_who_speaks_first_opens_the_conversation(memory, monkeypatch):
+    instructions = []
+
+    async def fake_ask(profile, messages, **kwargs):
+        instructions.append(messages[-1]["content"])
+        return "Psst, j'ai à te parler."
+
+    monkeypatch.setattr(agent_factory, "ask_llm", fake_ask)
+    agent = make_agents(memory, ["agitator"])
+    asyncio.run(start_private_conversation(HUMAN, agent, memory, agent_speaks_first=True))
+    assert "Ouvre la conversation" in instructions[-1]
+
+    asyncio.run(private_message(HUMAN, "Je t'écoute.", agent, memory))
+    assert "Réponds-leur" in instructions[-1]
+
+
 def test_private_message_gets_replies_from_each_agent(memory, fake_llm):
     agents = make_agents(memory, ["agitator", "clown"])
     said = asyncio.run(private_message(HUMAN, "Qui suspectez-vous ?", agents, memory))

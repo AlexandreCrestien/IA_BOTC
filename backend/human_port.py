@@ -48,10 +48,17 @@ class QueueHumanPort:
         self.state = state
         return await self._ask("public_message")
 
-    async def private_partners(self, state: GameState, player_id: str) -> list[str]:
+    async def private_partners(self, state: GameState, player_id: str) -> Optional[list[str]]:
+        """[] : pas de salon privé. None : le joueur n'a rien décidé à temps (un agent viendra le voir)."""
         self.state = state
-        alive = [p.id for p in state.alive_players() if p.id != player_id]
-        return await self._ask("private_partners", choices=alive)
+        # Morts compris : un joueur mort peut encore parler
+        others = [p.id for p in state.players if p.id != player_id]
+        return await self._ask("private_partners", choices=others)
+
+    async def agent_invitation(self, state: GameState, player_id: str, agent_id: str) -> bool:
+        """Un agent propose un entretien au joueur. True s'il accepte."""
+        self.state = state
+        return bool(await self._ask("agent_invitation", agent=agent_id))
 
     async def private_message(self, state: GameState, player_id: str) -> Optional[str]:
         self.state = state
@@ -60,6 +67,11 @@ class QueueHumanPort:
     async def show_private_replies(self, state: GameState, replies: list[tuple[str, str]]) -> None:
         self.state = state
         await self._tell("private_replies", replies=[{"author": pid, "text": text} for pid, text in replies])
+
+    async def show_agent_meeting(self, state: GameState, agent_ids: tuple[str, str]) -> None:
+        """Deux agents s'entretiennent en privé : annonce publique (un indice pour le joueur)."""
+        self.state = state
+        await self._tell("agent_meeting", agents=list(agent_ids))
 
     async def vote(self, state: GameState, player_id: str) -> Optional[str]:
         self.state = state

@@ -27,60 +27,30 @@ function closeRoleRevealModal() {
 }
 
 // ================= DEMANDE D'ENTRETIEN D'UN AGENT =================
-function setWhisperActions(html) {
-    document.getElementById('agent-whisper-actions').innerHTML = html;
-}
-
+// Le joueur n'a choisi aucun salon privé à temps : un agent lui propose un entretien.
+// Accepter ouvre le salon (l'agent parle en premier) ; refuser passe au vote.
 function showAgentWhisperModal(agentId, agentName, message) {
     currentWhisperAgent = agentId;
     const name = agentName || getPlayerName(agentId);
     document.getElementById('agent-whisper-text').textContent =
         message || `${name} souhaite s'entretenir discrètement avec vous dans l'ombre.`;
-    setWhisperActions(`
-        <button type="button" data-action="accept-whisper" class="btn-seal flex-1">Accepter</button>
-        <button type="button" data-action="refuse-whisper" class="btn-ghost flex-1">Ignorer</button>
-    `);
     openModal('modal-agent-whisper');
 }
 
-function acceptAgentWhisper() {
-    closeModal('modal-agent-whisper');
+function answerAgentWhisper(accepted) {
     const agentId = currentWhisperAgent;
-    currentWhisperAgent = null;
     if (!agentId) return;
-
-    if (sendAction("respond_whisper_invitation", { target_agent_id: agentId, accepted: true })) {
-        // Le salon s'ouvrira à la réception de "private_channel_opened" (même identifiant que le serveur).
-        appendSystemMessage(`Vous avez accepté l'entretien avec ${getPlayerName(agentId)}. Ouverture du salon…`);
-    } else {
+    if (!sendAction("respond_whisper_invitation", { target_agent_id: agentId, accepted })) {
+        // La modale reste ouverte : la proposition sera renvoyée à la reconnexion
         appendSystemMessage("Connexion perdue : votre réponse n'a pas été envoyée.");
+        return;
     }
-}
-
-// Refus : on prévient le serveur, puis on propose de lancer une discussion ou le vote
-function refuseAgentWhisper() {
-    const name = currentWhisperAgent ? getPlayerName(currentWhisperAgent) : "l'agent";
-    document.getElementById('agent-whisper-text').textContent =
-        `Vous avez refusé l'entretien avec ${name}. Que souhaitez-vous faire ?`;
-    setWhisperActions(`
-        <button type="button" data-action="whisper-discuss" class="btn-ghost flex-1">Lancer une discussion</button>
-        <button type="button" data-action="whisper-vote" class="btn-seal btn-blood flex-1">Lancer le vote</button>
-    `);
-
-    if (currentWhisperAgent) {
-        sendAction("respond_whisper_invitation", { target_agent_id: currentWhisperAgent, accepted: false });
-    }
-}
-
-function closeAgentWhisperModalOnly() {
     closeModal('modal-agent-whisper');
     currentWhisperAgent = null;
-}
-
-function triggerVotePhaseFromModal() {
-    closeModal('modal-agent-whisper');
-    sendAction("trigger_vote_phase");
-    currentWhisperAgent = null;
+    // Accepté : le salon s'ouvrira à la réception de "private_channel_opened"
+    appendSystemMessage(accepted
+        ? `Vous avez accepté l'entretien avec ${getPlayerName(agentId)}. Ouverture du salon…`
+        : `Vous avez refusé l'entretien avec ${getPlayerName(agentId)}.`);
 }
 
 // ================= EXÉCUTION DU JOUEUR =================

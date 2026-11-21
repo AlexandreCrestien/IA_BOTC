@@ -35,7 +35,7 @@ night_log: dict[str, list[dict]] = {}             # onglet Nuits : [{turn, type:
 vote_log: dict[str, list[dict]] = {}              # onglet Votes : [{turn, voter, target, executed}] (noms)
 
 # Demandes du moteur auxquelles le joueur doit répondre
-ANSWERABLE = {"night_choice", "vote", "public_message", "private_partners", "private_message"}
+ANSWERABLE = {"night_choice", "vote", "public_message", "private_partners", "private_message", "agent_invitation"}
 # Étapes facultatives que le joueur peut passer, et la réponse « rien » attendue par le moteur
 SKIPPABLE = {"public_message": None, "private_message": None, "private_partners": []}
 PUBLIC_CHANNEL = "public"
@@ -140,6 +140,29 @@ def _id_from_name(port, value):
     return value
 
 
+async def _open_whisper(player_id: str, port, partner_ids: list[str]) -> None:
+    """Ouvre le salon privé du joueur avec ses interlocuteurs (identifiants), annoncé sur la place publique.
+    Le salon est enregistré avant tout envoi : les réponses des agents le trouvent."""
+    channel_id = whisper_channel_id([player_id] + partner_ids)
+    whispers[player_id] = channel_id
+    whisper_left[player_id] = WHISPER_MESSAGES
+    partners = ", ".join(_names(port, partner_ids))
+    members = sorted(_names(port, [player_id] + partner_ids))
+    opened_channels.setdefault(player_id, {})[channel_id] = members
+
+    await _send_chat(
+        player_id, PUBLIC_CHANNEL, "Grimoire",
+        f"💬 {_name(port, player_id)} est entré en discussion privée avec {partners}.",
+        broadcast=True,
+    )
+    await _send(player_id, {
+        "type": "private_channel_opened",
+        "channel_id": channel_id,
+        "members": members,
+        "text": f"Salon privé ouvert avec {partners}",
+    })
+
+
 def _current_request(player_id: str) -> dict | None:
     entry = current_request.get(player_id)
     return entry[1] if entry else None
@@ -205,6 +228,11 @@ async def _send_request(player_id: str, port, kind: str, request: dict) -> None:
             "min_targets": 1,
         })
 
+    elif kind == "agent_invitation":
+        # Le joueur n'a choisi personne à temps : un agent lui propose un entretien (modale)
+        name = _name(port, request["agent"])
+        await _send(player_id, {"type": "agent_whisper_request", "agent_id": name, "agent_name": name})
+
     # Saisie attendue (facultative) : le front affiche un bandeau au-dessus du chat, avec « Passer »
     elif kind == "public_message":
         await _send(player_id, {
@@ -227,6 +255,12 @@ async def _send_request(player_id: str, port, kind: str, request: dict) -> None:
     elif kind == "public_chat":
         # Message public d'un agent IA, pendant la discussion du jour
         await _send_chat(player_id, PUBLIC_CHANNEL, _name(port, request["author"]), request["text"])
+
+    elif kind == "agent_meeting":
+        # Deux agents s'entretiennent en privé pendant le salon du joueur : annonce publique
+        first, second = _names(port, request["agents"])
+        await _send_chat(player_id, PUBLIC_CHANNEL, "Grimoire",
+                         f"💬 {first} et {second} se sont entretenus en privé.", broadcast=True)
 
     elif kind == "night_info":
         # Information privée de nuit (première nuit, Voyante). allies seulement pour le camp du mal.
@@ -413,35 +447,26 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
                     elif not _answer(player_id, "private_partners", targets):
                         await _send(player_id, {"type": "error", "data": "Ce n'est pas le moment de demander une discussion privée."})
                     else:
-                        channel_id = whisper_channel_id([player_id] + targets)
-                        whispers[player_id] = channel_id
-                        whisper_left[player_id] = WHISPER_MESSAGES
-                        partners = ", ".join(_names(port, targets))
-                        members = sorted(_names(port, [player_id] + targets))
-                        opened_channels.setdefault(player_id, {})[channel_id] = members
+                        await _open_whisper(player_id, port, targets)
 
-                        await _send_chat(
-                            player_id, PUBLIC_CHANNEL, "Grimoire",
-                            f"💬 {_name(port, player_id)} est entré en discussion privée avec {partners}.",
-                            broadcast=True,
-                        )
-                        await _send(player_id, {
-                            "type": "private_channel_opened",
-                            "channel_id": channel_id,
-                            "members": members,
-                            "text": f"Salon privé ouvert avec {partners}",
-                        })
+                # 3. AUCUN CHOIX DE SALON PRIVÉ À TEMPS : un agent va proposer un entretien
+                elif action == "discussion_timeout":
+                    if not _answer(player_id, "private_partners", None):
+                        await _send(player_id, {"type": "error", "data": "Ce n'est pas le moment de choisir une discussion privée."})
 
-                # 3. RÉPONSE À UNE INVITATION D'UN AGENT
+                # 4. RÉPONSE À LA PROPOSITION D'ENTRETIEN D'UN AGENT (refus : place au vote)
                 elif action == "respond_whisper_invitation":
-                    # TODO: invitations venant des agents, pas encore branchées au moteur
-                    if payload.accepted:
-                        await _send(player_id, {
-                            "type": "announcement",
-                            "text": f"Canal privé ouvert avec {payload.target_agent_id}.",
-                        })
+                    request = _current_request(player_id) if pending.get(player_id) == "agent_invitation" else None
+                    agent_id = request["agent"] if request else None
+                    if agent_id is None or _id_from_name(port, payload.target_agent_id) != agent_id:
+                        await _send(player_id, {"type": "error", "data": "Aucune proposition d'entretien en attente."})
+                    elif _answer(player_id, "agent_invitation", payload.accepted):
+                        if payload.accepted:
+                            await _open_whisper(player_id, port, [agent_id])
+                        else:
+                            await _send(player_id, {"type": "announcement", "text": "Entretien refusé : place au vote."})
 
-                # 4. VOTE (target_id = null pour « Personne »)
+                # 5. VOTE (target_id = null pour « Personne »)
                 elif action == "submit_vote":
                     target = _id_from_name(port, payload.target_id or None)  # "" ou null : « Personne »
                     error = _check_answer(player_id, "vote", target)
@@ -457,7 +482,7 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
                     else:
                         await _send(player_id, {"type": "error", "data": "Ce n'est pas le moment de voter."})
 
-                # 5. ACTION DE NUIT (noms convertis en identifiants)
+                # 6. ACTION DE NUIT (noms convertis en identifiants)
                 elif action == "submit_night_action":
                     targets = [_id_from_name(port, t) for t in payload.targets]
                     error = _check_answer(player_id, "night_choice", targets)
@@ -471,14 +496,6 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
                         })
                     else:
                         await _send(player_id, {"type": "error", "data": "Ce n'est pas le moment d'agir la nuit."})
-
-                # 6. PASSAGE AU VOTE (pas encore branché au moteur)
-                elif action == "trigger_vote_phase":
-                    await manager.broadcast({
-                        "type": "phase_update",
-                        "phase": "vote",
-                        "announcement": f"Le village (sur l'initiative de {_name(port, player_id)}) passe à la phase de vote.",
-                    })
 
                 # 7. PASSER UNE ÉTAPE FACULTATIVE (message public, salon privé, fin du salon)
                 elif action == "skip_turn":

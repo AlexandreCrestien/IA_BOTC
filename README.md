@@ -27,7 +27,7 @@ Provocateur, Parano, Bouffon, Stratège et Observateur (fichiers dans `skills/pe
 
 - Chaque tour enchaîne trois phases : **nuit → discussion → vote**.
   - **Nuit :** les IA puis l'humain font leur choix de nuit ; les morts de la nuit sont annoncés. La Voyante reçoit la réponse de son sondage.
-  - **Discussion :** les IA parlent dans le salon public (10 messages au plus, dans un ordre fixé par leur personnalité), puis l'humain peut écrire un message public. Il peut ensuite ouvrir un salon privé avec 1 ou 2 agents vivants (3 messages au plus).
+  - **Discussion :** les IA parlent dans le salon public (10 messages au plus, dans un ordre fixé par leur personnalité), puis l'humain peut écrire un message public. Il peut ensuite ouvrir un salon privé avec 1 ou 2 agents, vivants ou morts (3 messages au plus).
   - **Vote :** les IA puis l'humain votent. Chaque étape attend la précédente : l'humain n'écrit jamais pendant qu'une IA répond.
 - La première nuit, personne ne meurt. Le Diablotin et l'Empoisonneur apprennent qui est leur allié, et le Détective reçoit son information.
 - Si un joueur (IA) fait un choix de nuit invalide ou n'en fait pas, un choix légal est tiré au hasard. Un vote pour un joueur mort ou inconnu compte comme une abstention.
@@ -154,7 +154,6 @@ Les tests du frontend (`tests/frontend/`) pilotent un vrai navigateur avec Playw
 
 **À faire :**
 - Enregistrer dans la mémoire des agents les morts de la nuit, les votes et l'exécution (aujourd'hui, seul l'humain est prévenu des morts)
-- Quand l'humain n'ouvre pas de salon privé, faire venir un agent vers lui (`choose_agent_for_human` existe mais n'est pas encore appelée)
 - Relier le moteur au serveur et à l'interface (actions de l'humain reçues par le WebSocket, envoi de l'état). Les types de messages utilisés par l'interface ne sont pas encore ceux de `backend/server/schemas.py` : à aligner
 - Contenu de la route admin (en attente du moteur de jeu)
 

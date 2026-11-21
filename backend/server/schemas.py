@@ -34,7 +34,7 @@ class RequestWhisperAction(BaseAction):
 
 
 class RespondWhisperPayload(StrictInput):
-    target_agent_id: str = Field(..., description="ID de l'agent dont on répond à l'invitation")
+    target_agent_id: str = Field(..., description="Nom de l'agent dont on répond à l'invitation")
     accepted: bool = Field(..., description="Vrai si accepté, Faux si refusé")
 
 class RespondWhisperInvitationAction(BaseAction):
@@ -61,13 +61,13 @@ class SubmitNightAction(BaseAction):
     payload: SubmitNightActionPayload
 
 
-class TriggerVotePhasePayload(StrictInput):
-    pass  # Aucun paramètre requis pour l'instant
+class DiscussionTimeoutPayload(StrictInput):
+    pass
 
-class TriggerVotePhaseAction(BaseAction):
-    """Déclencher le passage à la phase de vote."""
-    action: Literal["trigger_vote_phase"] = "trigger_vote_phase"
-    payload: TriggerVotePhasePayload = Field(default_factory=TriggerVotePhasePayload)
+class DiscussionTimeoutAction(BaseAction):
+    """Le joueur n'a pas choisi de salon privé à temps : un agent va lui proposer un entretien."""
+    action: Literal["discussion_timeout"] = "discussion_timeout"
+    payload: DiscussionTimeoutPayload = Field(default_factory=DiscussionTimeoutPayload)
 
 
 class SkipTurnPayload(StrictInput):
@@ -97,7 +97,7 @@ ClientActionPacket = Annotated[
         RespondWhisperInvitationAction,
         SubmitVoteAction,
         SubmitNightAction,
-        TriggerVotePhaseAction,
+        DiscussionTimeoutAction,
         SkipTurnAction,
         AbandonGameAction,
     ],
