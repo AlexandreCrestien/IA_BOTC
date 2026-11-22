@@ -819,3 +819,96 @@ body {
 #modal-gameover,
 #modal-abandon,
 #modal-disconnected { z-index: 60; }
+#modal-account { z-index: 65; }
+
+/* ==========================================================
+   Comptes : onglets de l'accueil, champs, menu de la partie, succès
+   ========================================================== */
+.welcome-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border: 1px solid color-mix(in oklab, var(--gold-dim) 50%, transparent);
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+.welcome-tab {
+  padding: 0.55rem 0.5rem;
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: 1rem;
+  font-weight: 600;
+  color: color-mix(in oklab, var(--foreground) 70%, transparent);
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.welcome-tab + .welcome-tab { border-left: 1px solid color-mix(in oklab, var(--gold-dim) 40%, transparent); }
+.welcome-tab:hover { color: var(--gold); }
+.welcome-tab.is-active {
+  background-color: color-mix(in oklab, var(--gold) 14%, transparent);
+  color: var(--gold);
+}
+.welcome-input {
+  background-color: oklch(0 0 0 / 40%);
+  border: 1px solid var(--gold);
+  border-radius: 0.75rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  text-align: center;
+  color: oklch(0.9 0.01 85);
+}
+.welcome-input:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 2px oklch(0.76 0.115 80 / 25%); }
+
+/* L'en-tête passe devant le plateau : le menu déroulant s'affiche par-dessus */
+.game-header { position: relative; z-index: 20; }
+.game-menu-wrap { position: relative; }
+.game-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.5rem);
+  z-index: 40;
+  min-width: 13rem;
+  display: flex;
+  flex-direction: column;
+  padding: 0.35rem;
+  border-radius: 0.75rem;
+  background-color: oklch(0.17 0.022 295 / 97%);
+  border-color: color-mix(in oklab, var(--gold-dim) 50%, transparent);
+}
+.game-menu.hidden { display: none; }
+.game-menu-label {
+  padding: 0.35rem 0.75rem 0.5rem;
+  font-size: 0.8rem;
+  opacity: 0.65;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.25rem;
+}
+.game-menu-label:empty { display: none; }
+.game-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--foreground);
+}
+.game-menu-item:hover, .game-menu-item:focus-visible { background-color: color-mix(in oklab, var(--gold) 12%, transparent); color: var(--gold); outline: none; }
+.game-menu-item.hidden { display: none; }
+.game-menu-item.is-danger { color: oklch(0.72 0.17 25); }
+.game-menu-item.is-danger:hover { background-color: color-mix(in oklab, var(--blood) 18%, transparent); }
+
+.achievement-unlocks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.achievement-unlock {
+  border: 1px solid color-mix(in oklab, var(--gold-dim) 55%, transparent);
+  border-radius: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  background-color: color-mix(in oklab, var(--gold) 8%, transparent);
+}
+.achievement-unlock-title { font-family: "IM Fell English SC", Georgia, serif; color: var(--gold); }
+.achievement-unlock-message { font-family: "Cormorant Garamond", Georgia, serif; font-style: italic; opacity: 0.85; }
+/* Les boutons ont leur propre display : .hidden doit toujours les masquer */
+.btn-seal.hidden, .btn-ghost.hidden { display: none; }

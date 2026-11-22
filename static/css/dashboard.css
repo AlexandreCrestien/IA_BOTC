@@ -1,0 +1,244 @@
+/* ==========================================================
+   Lantern Hollow - Tableau de bord du joueur connecté
+   Chargé APRÈS style.css : réutilise ses variables et composants
+   (.panel, .ornament, .btn-seal, .btn-ghost, .modal-kicker, .modal-notice,
+   .welcome-input, .welcome-error, .role-tag…).
+   ========================================================== */
+
+.dashboard-page {
+  background-image: var(--gradient-veil), url('../img/background.jpg');
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+}
+
+.dashboard-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 1rem;
+  background-color: color-mix(in oklab, var(--background) 80%, transparent);
+}
+
+/* Raccourcis vers les sections, au centre de l'en-tête */
+.dash-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.dash-nav-link {
+  position: relative;
+  padding: 0.25rem 0.15rem;
+  font-family: "IM Fell English SC", "Cormorant Garamond", Georgia, serif;
+  font-size: 1.05rem;
+  letter-spacing: 0.04em;
+  color: color-mix(in oklab, var(--foreground) 75%, transparent);
+  transition: color 0.2s ease;
+}
+/* Filet doré qui se déploie sous le raccourci survolé ou de la section affichée */
+.dash-nav-link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -0.1rem;
+  height: 1px;
+  background: var(--gradient-gilt);
+  transform: scaleX(0);
+  transition: transform 0.25s ease;
+}
+.dash-nav-link:hover,
+.dash-nav-link:focus-visible,
+.dash-nav-link.is-active {
+  color: var(--gold);
+  outline: none;
+}
+.dash-nav-link:hover::after,
+.dash-nav-link:focus-visible::after,
+.dash-nav-link.is-active::after {
+  transform: scaleX(1);
+}
+.dash-nav-sep {
+  font-size: 0.8rem;
+  color: var(--gold-dim);
+  opacity: 0.8;
+}
+
+/* Défilement doux vers la section (sauf si le système demande moins d'animations),
+   qui s'arrête sous l'en-tête collant au lieu de passer dessous */
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+}
+.dash-section { scroll-margin-top: 5rem; }
+
+/* Petit écran : le titre et le pseudo s'effacent, les raccourcis et la déconnexion restent */
+@media (max-width: 640px) {
+  .dashboard-header {
+    grid-template-columns: auto auto;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding-inline: 0.75rem;
+  }
+  .dashboard-header > :first-child,
+  #dashboard-pseudo { display: none; }
+  .dash-nav { gap: 0.4rem; }
+  .dash-nav-link { font-size: 0.95rem; }
+  #dashboard-logout { padding: 0.4rem 0.6rem; font-size: 0.9rem; }
+}
+
+.dash-section {
+  border: 1px solid color-mix(in oklab, var(--gold-dim) 45%, transparent);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  background-color: oklch(0.17 0.022 295 / 88%);
+  background-image: radial-gradient(ellipse at 50% 0%, oklch(0.76 0.115 80 / 8%), transparent 60%);
+  box-shadow: var(--shadow-panel), inset 0 0 0 1px oklch(0.76 0.115 80 / 10%);
+  backdrop-filter: blur(8px);
+}
+.dash-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  font-family: "IM Fell English SC", "Cormorant Garamond", Georgia, serif;
+  font-size: 1.25rem;
+  color: var(--gold);
+}
+.dash-section-title::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--gold-dim), transparent);
+}
+
+/* Partie : lancer, reprendre, abandonner */
+.dash-game {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.dash-game-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.btn-seal:disabled,
+.btn-ghost:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  filter: grayscale(0.4);
+}
+
+/* Statistiques */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 1rem;
+}
+.stat-card {
+  border: 1px solid color-mix(in oklab, var(--gold-dim) 55%, transparent);
+  border-radius: 0.75rem;
+  padding: 0.9rem 1rem;
+  background-color: color-mix(in oklab, var(--background) 75%, transparent);
+  box-shadow: 0 0 12px -4px oklch(0.76 0.115 80 / 20%);
+}
+.stat-label {
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--gold-dim);
+}
+.stat-value {
+  font-family: "IM Fell English SC", Georgia, serif;
+  font-size: 1.75rem;
+  line-height: 1.2;
+  background-image: var(--gradient-gilt);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.stat-detail {
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+/* Historique des parties */
+.dash-table-wrap { overflow-x: auto; }
+.dash-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+.dash-table th {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--gold-dim);
+  border-bottom: 1px solid var(--border);
+}
+.dash-table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 50%, transparent);
+  white-space: nowrap;
+}
+.result-won { color: var(--gold); font-weight: 600; }
+.result-lost, .result-abandoned { color: oklch(0.7 0.17 25); }
+.result-interrupted { opacity: 0.6; font-style: italic; }
+
+/* Succès */
+.achievement-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: 0.75rem;
+}
+.achievement {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+  background-color: color-mix(in oklab, var(--secondary) 45%, transparent);
+}
+.achievement-icon {
+  flex-shrink: 0;
+  font-size: 1.4rem;
+  line-height: 1;
+}
+.achievement-title {
+  font-family: "IM Fell English SC", Georgia, serif;
+  font-size: 1.05rem;
+}
+.achievement-description { font-size: 0.85rem; opacity: 0.8; }
+.achievement-message {
+  margin-top: 0.25rem;
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-style: italic;
+  font-size: 0.95rem;
+  color: var(--gold);
+}
+.achievement.is-unlocked {
+  border-color: color-mix(in oklab, var(--gold) 60%, transparent);
+  background-color: color-mix(in oklab, var(--gold) 8%, transparent);
+  box-shadow: 0 0 14px -6px oklch(0.76 0.115 80 / 45%);
+}
+.achievement.is-unlocked .achievement-title { color: var(--gold); }
+.achievement.is-locked { opacity: 0.5; filter: grayscale(1); }
+
+/* Profil */
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1.5rem;
+}
+.form-success { color: oklch(0.75 0.12 150); }
+.form-success.hidden { display: none; }

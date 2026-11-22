@@ -41,18 +41,65 @@
                 </p>
             </div>
 
-            <!-- Formulaire : la touche Entrée rejoint la partie -->
-            <form id="welcome-form" class="w-full space-y-3">
+            <!-- Joueur connecté : connexion automatique à sa partie (lancée depuis le tableau de bord) -->
+            <div id="welcome-account" class="hidden w-full text-center space-y-3">
+                <p id="welcome-account-text" class="font-serif italic text-base"></p>
+                <p id="welcome-account-error" role="alert" class="welcome-error hidden text-sm"></p>
+                <a href="/dashboard.html" class="btn-ghost w-full">Tableau de bord</a>
+            </div>
+
+            <!-- Partie d'invité en cours (onglet fermé) : reprise avec le même pseudo -->
+            <div id="welcome-resume" class="modal-notice notice-night hidden w-full text-center">
+                <p id="welcome-resume-text" class="mb-3"></p>
+                <button type="button" data-action="resume-guest-game" class="btn-seal w-full">Reprendre la partie</button>
+            </div>
+
+            <!-- Trois façons d'entrer : invité, connexion, inscription -->
+            <div class="welcome-tabs w-full" role="tablist">
+                <button type="button" data-action="welcome-tab" data-tab="guest" id="welcome-tab-guest" class="welcome-tab is-active" role="tab" aria-selected="true">Invité</button>
+                <button type="button" data-action="welcome-tab" data-tab="login" id="welcome-tab-login" class="welcome-tab" role="tab" aria-selected="false">Connexion</button>
+                <button type="button" data-action="welcome-tab" data-tab="register" id="welcome-tab-register" class="welcome-tab" role="tab" aria-selected="false">Inscription</button>
+            </div>
+
+            <!-- Invité : la touche Entrée rejoint la partie -->
+            <form id="welcome-form" class="welcome-panel w-full space-y-3" data-panel="guest">
                 <label for="welcome-player-id" class="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Votre pseudo</label>
                 <input type="text" id="welcome-player-id" placeholder="ex : Sasha" autocomplete="nickname" maxlength="20" autofocus
-                    class="w-full bg-black/40 border border-[var(--gold)] rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[var(--gold)] text-center font-mono text-gray-200">
+                    class="welcome-input w-full font-mono">
 
                 <button type="submit" id="welcome-join-btn" class="w-full bg-seal text-white font-display tracking-wider py-3.5 rounded-xl transition shadow-seal uppercase text-sm font-bold disabled:opacity-60 disabled:cursor-progress">
                     Rejoindre la partie
                 </button>
+                <p class="text-xs text-gray-400 text-center">En invité, vos parties ne sont pas enregistrées.</p>
 
                 <!-- Erreur de connexion (serveur injoignable, pseudo vide…) -->
                 <p id="welcome-error" role="alert" class="welcome-error hidden text-sm text-center"></p>
+            </form>
+
+            <!-- Connexion : vers le tableau de bord -->
+            <form id="login-form" class="welcome-panel hidden w-full space-y-3" data-panel="login">
+                <label for="login-pseudo" class="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Pseudo</label>
+                <input type="text" id="login-pseudo" autocomplete="username" maxlength="20" class="welcome-input w-full">
+                <label for="login-password" class="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Mot de passe</label>
+                <input type="password" id="login-password" autocomplete="current-password" class="welcome-input w-full font-mono">
+                <button type="submit" id="login-btn" class="w-full bg-seal text-white font-display tracking-wider py-3.5 rounded-xl transition shadow-seal uppercase text-sm font-bold disabled:opacity-60 disabled:cursor-progress">
+                    Se connecter
+                </button>
+                <p id="login-error" role="alert" class="welcome-error hidden text-sm text-center"></p>
+            </form>
+
+            <!-- Inscription : crée le compte et ouvre le tableau de bord -->
+            <form id="register-form" class="welcome-panel hidden w-full space-y-3" data-panel="register">
+                <label for="register-pseudo" class="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Pseudo</label>
+                <input type="text" id="register-pseudo" autocomplete="username" maxlength="20" class="welcome-input w-full">
+                <label for="register-password" class="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Mot de passe (8 caractères au moins)</label>
+                <input type="password" id="register-password" autocomplete="new-password" class="welcome-input w-full font-mono">
+                <label for="register-password-confirm" class="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Confirmer le mot de passe</label>
+                <input type="password" id="register-password-confirm" autocomplete="new-password" class="welcome-input w-full font-mono">
+                <button type="submit" id="register-btn" class="w-full bg-seal text-white font-display tracking-wider py-3.5 rounded-xl transition shadow-seal uppercase text-sm font-bold disabled:opacity-60 disabled:cursor-progress">
+                    Créer mon compte
+                </button>
+                <p id="register-error" role="alert" class="welcome-error hidden text-sm text-center"></p>
             </form>
         </div>
     </div>
@@ -63,7 +110,7 @@
         <!-- Top bar / Annonces & état du jeu -->
         <!-- Grille 3 colonnes : les côtés gardent leur largeur de contenu, l'annonce au centre
              rétrécit (et se tronque) au lieu de passer par-dessus l'encadré tour/phase. -->
-        <header class="panel border-b px-6 h-16 shrink-0 relative grid grid-cols-[minmax(max-content,1fr)_minmax(0,42rem)_minmax(max-content,1fr)] items-center gap-4 shadow-md z-10">
+        <header class="game-header panel border-b px-6 h-16 shrink-0 relative grid grid-cols-[minmax(max-content,1fr)_minmax(0,42rem)_minmax(max-content,1fr)] items-center gap-4 shadow-md z-10">
             <!-- Gauche : Titre -->
             <div class="flex items-center space-x-2 justify-self-start">
                 <span class="font-display font-bold tracking-wider text-gilt text-base uppercase">Lantern Hollow</span>
@@ -105,14 +152,26 @@
                 </div>
 
                 <!-- Badge de connexion -->
-                <!-- Abandonner la partie (confirmation demandée) : icône seule pour rester compact -->
-                <button type="button" id="abandon-btn" data-action="ask-abandon" class="header-icon-btn"
-                    title="Abandonner et lancer une nouvelle partie" aria-label="Abandonner et lancer une nouvelle partie">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
-                </button>
-
                 <div id="connection-status" class="connection-badge" data-state="online" role="status">
                     Connecté
+                </div>
+
+                <!-- Menu : tableau de bord, déconnexion ou compte (invité), abandon -->
+                <div class="game-menu-wrap">
+                    <button type="button" id="menu-btn" data-action="toggle-menu" class="header-icon-btn"
+                        title="Menu" aria-label="Menu" aria-haspopup="menu" aria-expanded="false" aria-controls="game-menu">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4" aria-hidden="true"><path d="M4 6h16"></path><path d="M4 12h16"></path><path d="M4 18h16"></path></svg>
+                    </button>
+                    <div id="game-menu" class="game-menu panel hidden" role="menu">
+                        <p id="menu-player" class="game-menu-label"></p>
+                        <!-- Joueur connecté -->
+                        <a href="/dashboard.html" target="_blank" rel="noopener" id="menu-dashboard" class="game-menu-item hidden" role="menuitem" data-action="close-menu">Tableau de bord</a>
+                        <button type="button" id="menu-logout" data-action="logout" class="game-menu-item hidden" role="menuitem">Déconnexion</button>
+                        <!-- Invité -->
+                        <button type="button" id="menu-register" data-action="open-account" data-mode="register" class="game-menu-item" role="menuitem">Créer un compte</button>
+                        <button type="button" id="menu-login" data-action="open-account" data-mode="login" class="game-menu-item" role="menuitem">Se connecter</button>
+                        <button type="button" id="abandon-btn" data-action="ask-abandon" class="game-menu-item is-danger" role="menuitem">Abandonner la partie</button>
+                    </div>
                 </div>
             </div>
         </header>
@@ -552,7 +611,53 @@
             <h2 id="gameover-title" class="modal-title text-3xl my-2">Fin de la Partie</h2>
             <p id="gameover-outcome" class="gameover-outcome font-display text-xl hidden"></p>
             <p id="gameover-desc" class="font-serif text-base italic leading-relaxed opacity-90 mt-2">Le village a rendu son verdict.</p>
-            <button type="button" data-action="reload" class="btn-seal mt-6 w-full">Nouvelle partie</button>
+
+            <!-- Succès débloqués par la partie (joueur connecté, ou invité qui vient de s'inscrire) -->
+            <div id="gameover-achievements" class="hidden mt-4 text-left">
+                <p class="modal-kicker mb-2 text-center">Succès débloqués</p>
+                <ul id="gameover-achievements-list" class="achievement-unlocks"></ul>
+            </div>
+
+            <!-- Invité : s'inscrire pour garder la partie et ses succès -->
+            <div id="gameover-register" class="modal-notice notice-night hidden">
+                <p id="gameover-register-text" class="mb-3">Créez un compte pour enregistrer cette partie et débloquer vos succès.</p>
+                <button type="button" data-action="open-account" data-mode="register" class="btn-seal w-full">Créer un compte</button>
+                <button type="button" data-action="open-account" data-mode="login" class="btn-ghost w-full mt-2">J'ai déjà un compte</button>
+            </div>
+
+            <div class="flex gap-2 mt-6">
+                <button type="button" data-action="new-game" class="btn-seal flex-1">Nouvelle partie</button>
+                <a href="/dashboard.html" id="gameover-dashboard" class="btn-ghost flex-1 hidden">Tableau de bord</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Compte depuis la partie (invité) : inscription ou connexion ; la partie est rattachée au compte -->
+    <div id="modal-account" class="modal-backdrop hidden" data-action="close-account" data-backdrop>
+        <div class="modal-card w-[420px]" data-tone="gold" role="dialog" aria-modal="true" aria-labelledby="account-title">
+            <p class="modal-kicker ornament text-center">Rejoindre le registre du village</p>
+            <h3 id="account-title" class="modal-title my-2 text-center">Créer un compte</h3>
+            <p id="account-hint" class="font-serif text-base italic leading-relaxed opacity-90 text-center">
+                Cette partie sera enregistrée dans votre compte.
+            </p>
+            <form id="account-form" class="space-y-3 mt-4">
+                <label for="account-pseudo" class="text-xs font-semibold uppercase tracking-wider block opacity-70">Pseudo</label>
+                <input type="text" id="account-pseudo" autocomplete="username" maxlength="20" class="welcome-input w-full">
+                <label for="account-password" class="text-xs font-semibold uppercase tracking-wider block opacity-70">Mot de passe</label>
+                <input type="password" id="account-password" class="welcome-input w-full font-mono">
+                <div id="account-confirm-row" class="space-y-3">
+                    <label for="account-password-confirm" class="text-xs font-semibold uppercase tracking-wider block opacity-70">Confirmer le mot de passe</label>
+                    <input type="password" id="account-password-confirm" autocomplete="new-password" class="welcome-input w-full font-mono">
+                </div>
+                <p id="account-error" role="alert" class="welcome-error hidden text-sm text-center"></p>
+                <div class="flex gap-2 pt-2">
+                    <button type="button" data-action="close-account" class="btn-ghost flex-1">Annuler</button>
+                    <button type="submit" id="account-submit" class="btn-seal flex-1">Créer mon compte</button>
+                </div>
+                <button type="button" id="account-switch" data-action="switch-account-mode" class="w-full text-sm underline opacity-70 hover:opacity-100">
+                    J'ai déjà un compte
+                </button>
+            </form>
         </div>
     </div>
 
@@ -564,6 +669,7 @@
     <script src="/js/players.js"></script>
     <script src="/js/actions.js"></script>
     <script src="/js/modals.js"></script>
+    <script src="/js/account.js"></script>
     <script src="/js/main.js"></script>
 </body>
 </html>

@@ -105,7 +105,8 @@ function closeNightInfoModal() {
 // winner : camp vainqueur envoyé par le serveur
 const WINNER_TITLES = { good: "Victoire des Villageois", evil: "Victoire des Démons" };
 
-function triggerGameOver(winner, details) {
+// achievements : succès débloqués par la partie (joueur connecté)
+function triggerGameOver(winner, details, achievements = []) {
     gameIsOver = true;
     document.getElementById('gameover-title').textContent = WINNER_TITLES[winner] || "Fin de la partie";
     document.getElementById('gameover-desc').textContent = details;
@@ -121,6 +122,8 @@ function triggerGameOver(winner, details) {
         card.dataset.tone = playerWon ? 'gold' : 'blood';
     }
 
+    showUnlockedAchievements(achievements);
+    offerAccountAfterGame(true); // invité : s'inscrire pour garder la partie
     openModal('modal-gameover');
 }
 
@@ -131,6 +134,8 @@ function showGameInterrupted(text) {
     document.getElementById('gameover-desc').textContent = text || "Une erreur a interrompu la partie.";
     document.getElementById('gameover-outcome').classList.add('hidden');
     document.getElementById('gameover-card').dataset.tone = 'blood';
+    showUnlockedAchievements([]);
+    offerAccountAfterGame(false); // une partie interrompue n'est jamais enregistrée
     openModal('modal-gameover');
 }
 
@@ -148,10 +153,11 @@ function confirmAbandon() {
     setTimeout(leaveGame, ABANDON_FALLBACK_MS);
 }
 
-// Retour à l'accueil (page rechargée : le front repart d'un état vierge)
+// Retour à l'accueil (page rechargée : le front repart d'un état vierge).
+// Joueur connecté : l'accueil le renvoie vers son tableau de bord.
 function leaveGame() {
     gameIsOver = true; // pas de fenêtre « Connexion perdue » pendant le rechargement
-    location.reload();
+    location.href = '/';
 }
 
 // ================= CONNEXION PERDUE =================

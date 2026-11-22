@@ -105,6 +105,7 @@ def test_codex_tabs_backdrop_and_escape(game):
 
 
 def test_abandon_asks_for_confirmation_and_can_be_cancelled(game, server):
+    game.click("#menu-btn")
     game.click("#abandon-btn")
     expect(game.locator("#modal-abandon")).to_be_visible()
 
@@ -114,6 +115,7 @@ def test_abandon_asks_for_confirmation_and_can_be_cancelled(game, server):
 
 
 def test_abandon_returns_to_welcome_for_a_new_game(game, server):
+    game.click("#menu-btn")
     game.click("#abandon-btn")
     game.click("button[data-action='confirm-abandon']")
     server.wait_for("abandon_game")
@@ -126,7 +128,7 @@ def test_abandon_returns_to_welcome_for_a_new_game(game, server):
 
 def test_abandon_after_game_over_goes_straight_to_welcome(game, server):
     server.send(type="game_over", winner="good", details="Fin.")
-    game.click("#modal-gameover [data-action='reload']")  # bouton « Nouvelle partie » de la fin de partie
+    game.click("#modal-gameover [data-action='new-game']")  # bouton « Nouvelle partie » de la fin de partie
     expect(game.locator("#screen-welcome")).to_be_visible()
     assert server.actions("abandon_game") == []
 
@@ -153,5 +155,5 @@ def test_role_reveal_is_read_before_the_dawn_modal(game, server):
 def test_game_over_is_above_other_modals(game, server):
     server.send(type="night_result", turn=3, dead_player=ID["Révérend Hale"])
     server.send(type="game_over", winner="good", details="Fin.")
-    game.click("#modal-gameover [data-action='reload']")  # cliquable : la fin de partie est au-dessus
+    game.click("#modal-gameover [data-action='new-game']")  # cliquable : la fin de partie est au-dessus
     expect(game.locator("#screen-welcome")).to_be_visible()

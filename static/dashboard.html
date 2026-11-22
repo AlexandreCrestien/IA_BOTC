@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="fr" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lantern Hollow - Tableau de bord</title>
+
+    <!-- Mêmes polices que l'interface de jeu -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Alegreya+Sans:ital,wght@0,400;0,500;0,700;1,400&family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=IM+Fell+English+SC&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS v3 CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/js/tailwind.config.js"></script>
+
+    <!-- Design system du jeu, puis styles du tableau de bord -->
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/dashboard.css">
+</head>
+<body class="dashboard-page min-h-screen font-sans">
+
+    <!-- EN-TÊTE -->
+    <!-- 3 colonnes : titre | raccourcis vers les sections | joueur -->
+    <header class="dashboard-header panel border-b px-6 h-16">
+        <div class="min-w-0 justify-self-start truncate">
+            <span class="font-display font-bold tracking-wider text-gilt text-base uppercase">Lantern Hollow</span>
+            <span class="font-serif italic opacity-70 ml-2 hidden lg:inline">Tableau de bord</span>
+        </div>
+
+        <!-- Raccourcis : défilement doux vers la section (css/dashboard.css), section visible mise en valeur -->
+        <nav id="dashboard-nav" class="dash-nav" aria-label="Sections du tableau de bord">
+            <a href="#section-stats" class="dash-nav-link" data-section="section-stats">Statistiques</a>
+            <span class="dash-nav-sep" aria-hidden="true">✠</span>
+            <a href="#section-achievements" class="dash-nav-link" data-section="section-achievements">Succès</a>
+            <span class="dash-nav-sep" aria-hidden="true">✠</span>
+            <a href="#section-profile" class="dash-nav-link" data-section="section-profile">Profil</a>
+        </nav>
+
+        <div class="flex items-center gap-3 justify-self-end shrink-0">
+            <span id="dashboard-pseudo" class="font-serif text-base text-gold"></span>
+            <button type="button" id="dashboard-logout" class="btn-ghost">Déconnexion</button>
+        </div>
+    </header>
+
+    <main id="dashboard-main" class="hidden max-w-6xl mx-auto w-full p-6 space-y-6">
+
+        <!-- PARTIE : commencer, ou reprendre / abandonner celle en cours -->
+        <section class="dash-section">
+            <div class="dash-game">
+                <div>
+                    <p class="modal-kicker">La table vous attend</p>
+                    <p id="game-status" class="font-serif text-lg italic">Aucune partie en cours.</p>
+                </div>
+                <div class="dash-game-actions">
+                    <button type="button" id="start-game-btn" class="btn-seal">Commencer une partie</button>
+                    <button type="button" id="resume-game-btn" class="btn-seal hidden">Reprendre la partie</button>
+                    <button type="button" id="abandon-game-btn" class="btn-ghost hidden">Abandonner</button>
+                </div>
+            </div>
+            <p id="game-error" role="alert" class="welcome-error hidden text-sm mt-3"></p>
+        </section>
+
+        <!-- STATISTIQUES (et historique, juste en dessous) -->
+        <section id="section-stats" class="dash-section">
+            <h2 class="dash-section-title">Statistiques</h2>
+            <div class="stat-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Parties jouées</div>
+                    <div id="stat-played" class="stat-value">—</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Victoires</div>
+                    <div id="stat-win-rate" class="stat-value">—</div>
+                    <div id="stat-wins" class="stat-detail"></div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Côté villageois</div>
+                    <div id="stat-good-rate" class="stat-value">—</div>
+                    <div id="stat-good-wins" class="stat-detail"></div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Côté démons</div>
+                    <div id="stat-evil-rate" class="stat-value">—</div>
+                    <div id="stat-evil-wins" class="stat-detail"></div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Tours par partie</div>
+                    <div id="stat-turns" class="stat-value">—</div>
+                    <div class="stat-detail">en moyenne</div>
+                </div>
+            </div>
+            <p class="text-xs opacity-60 mt-3">Un abandon compte comme une défaite. Les parties interrompues par le serveur ne comptent pas.</p>
+        </section>
+
+        <!-- HISTORIQUE -->
+        <section class="dash-section">
+            <h2 class="dash-section-title">Parties jouées</h2>
+            <div id="history-container" class="dash-table-wrap">
+                <span class="italic opacity-60">Aucune partie jouée pour l'instant.</span>
+            </div>
+        </section>
+
+        <!-- SUCCÈS -->
+        <section id="section-achievements" class="dash-section">
+            <h2 class="dash-section-title">Succès <span id="achievements-count" class="font-serif text-base opacity-70"></span></h2>
+            <div id="achievements-container" class="achievement-grid"></div>
+        </section>
+
+        <!-- PROFIL -->
+        <section id="section-profile" class="dash-section">
+            <h2 class="dash-section-title">Profil</h2>
+            <div class="profile-grid">
+                <form id="pseudo-form" class="space-y-3">
+                    <p class="modal-kicker">Changer de pseudo</p>
+                    <label for="new-pseudo" class="text-xs font-semibold uppercase tracking-wider block opacity-70">Nouveau pseudo</label>
+                    <input type="text" id="new-pseudo" maxlength="20" autocomplete="username" class="welcome-input w-full">
+                    <label for="pseudo-current-password" class="text-xs font-semibold uppercase tracking-wider block opacity-70">Mot de passe actuel</label>
+                    <input type="password" id="pseudo-current-password" autocomplete="current-password" class="welcome-input w-full font-mono">
+                    <button type="submit" id="pseudo-submit" class="btn-seal w-full">Changer de pseudo</button>
+                    <p id="pseudo-error" role="alert" class="welcome-error hidden text-sm text-center"></p>
+                    <p id="pseudo-success" role="status" class="form-success hidden text-sm text-center"></p>
+                </form>
+
+                <form id="password-form" class="space-y-3">
+                    <p class="modal-kicker">Changer de mot de passe</p>
+                    <label for="password-current" class="text-xs font-semibold uppercase tracking-wider block opacity-70">Mot de passe actuel</label>
+                    <input type="password" id="password-current" autocomplete="current-password" class="welcome-input w-full font-mono">
+                    <label for="password-new" class="text-xs font-semibold uppercase tracking-wider block opacity-70">Nouveau mot de passe (8 caractères au moins)</label>
+                    <input type="password" id="password-new" autocomplete="new-password" class="welcome-input w-full font-mono">
+                    <label for="password-confirm" class="text-xs font-semibold uppercase tracking-wider block opacity-70">Confirmer le nouveau mot de passe</label>
+                    <input type="password" id="password-confirm" autocomplete="new-password" class="welcome-input w-full font-mono">
+                    <button type="submit" id="password-submit" class="btn-seal w-full">Changer de mot de passe</button>
+                    <p id="password-error" role="alert" class="welcome-error hidden text-sm text-center"></p>
+                    <p id="password-success" role="status" class="form-success hidden text-sm text-center"></p>
+                </form>
+            </div>
+        </section>
+    </main>
+
+    <!-- Confirmation d'abandon -->
+    <div id="modal-abandon" class="modal-backdrop hidden">
+        <div class="modal-card w-[420px] text-center" data-tone="blood" role="alertdialog" aria-modal="true" aria-labelledby="abandon-title">
+            <p class="modal-kicker ornament">Quitter la table</p>
+            <h3 id="abandon-title" class="modal-title my-2">Abandonner la partie ?</h3>
+            <p class="font-serif text-base italic leading-relaxed opacity-90">
+                La partie comptera comme une défaite.
+            </p>
+            <div class="flex gap-2 mt-5">
+                <button type="button" id="abandon-cancel" class="btn-ghost flex-1">Continuer la partie</button>
+                <button type="button" id="abandon-confirm" class="btn-seal btn-blood flex-1">Abandonner</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/dashboard.js"></script>
+</body>
+</html>

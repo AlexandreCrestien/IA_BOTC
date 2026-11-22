@@ -10,13 +10,14 @@ const CLOSE_REFUSED = 4001;
 const PSEUDO_PATTERN = /^[\p{L}\p{N}_'’-]{1,20}$/u;
 
 // ================= CONNEXION =================
-function joinGame() {
+// pseudo : imposé (joueur connecté, reprise d'une partie) ; sinon, celui saisi sur l'accueil (invité)
+function joinGame(pseudo = null) {
     // Une connexion est déjà en cours ou ouverte : on ignore le double clic
     if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) return;
 
     const input = document.getElementById('welcome-player-id');
     // NFC : un « é » saisi en deux caractères (e + accent) devient un seul, comme le serveur l'attend
-    playerId = input.value.trim().normalize('NFC');
+    playerId = (pseudo ?? input.value).trim().normalize('NFC');
     if (!playerId) {
         showWelcomeError("Veuillez entrer un pseudo.");
         input.focus();
@@ -89,9 +90,11 @@ function enterGameScreen() {
     appendSystemMessage("Connexion établie avec le serveur.", 'public');
 }
 
-// Message d'erreur sous le bouton de l'écran d'accueil (null pour l'effacer)
+// Message d'erreur de l'écran d'accueil (null pour l'effacer) : sous le formulaire invité,
+// ou dans l'encadré du joueur connecté qui rejoint sa partie
 function showWelcomeError(text) {
-    const el = document.getElementById('welcome-error');
+    const accountBox = document.getElementById('welcome-account');
+    const el = document.getElementById(accountBox.classList.contains('hidden') ? 'welcome-error' : 'welcome-account-error');
     el.textContent = text || '';
     el.classList.toggle('hidden', !text);
 }
@@ -175,7 +178,7 @@ function handleServerMessage(data) {
             showNightResultInPanel(data.text || "Le Maître du Jeu a bien reçu votre choix.");
             break;
         case "game_over":
-            triggerGameOver(data.winner, data.details);
+            triggerGameOver(data.winner, data.details, data.achievements || []);
             break;
         case "game_abandoned":
             leaveGame(); // retour à l'accueil, où le joueur peut lancer une nouvelle partie

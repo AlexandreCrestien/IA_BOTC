@@ -16,6 +16,8 @@ let ws = null;
 let playerId = "";
 // Partie d'invité : jeton à présenter à l'inscription ou à la connexion pour rattacher la partie au compte
 let guestToken = null;
+// Compte connecté ({ id, pseudo, is_admin }), null pour un invité (account.js)
+let currentUser = null;
 let gameState = {
     day: 1,
     phase: "discussion", // "discussion" | "nuit" | "vote" (valeurs envoyées par le serveur)
