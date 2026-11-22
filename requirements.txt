@@ -12,6 +12,9 @@ litellm==1.108.0          # appels aux LLM des agents
 
 # --- Tests ---
 pytest==9.2.0
-httpx==0.28.1             # requis par le TestClient de FastAPI (tests/test_server.py)
+httpx==0.28.1             # requis par le TestClient de FastAPI (tests du serveur)
 pytest-playwright==0.10.0 # tests du frontend (tests/frontend/)
 playwright==1.65.1        # après installation : python -m playwright install chromium
+
+# --- Qualité du code ---
+ruff==0.17.6              # linter : ruff check . (configuration dans pyproject.toml)

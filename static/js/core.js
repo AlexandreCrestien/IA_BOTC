@@ -8,7 +8,8 @@
 'use strict';
 
 // ================= CONFIGURATION =================
-const SERVER_WS_URL = "ws://127.0.0.1:8000/ws";
+// Même serveur que la page (le front est servi par FastAPI) : marche quels que soient l'adresse et le port.
+const SERVER_WS_URL = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`;
 
 // ================= ÉTAT GLOBAL =================
 let ws = null;
@@ -52,14 +53,14 @@ const PHASES = {
 // ================= RÔLES =================
 // Textes de la nuit selon le rôle (clé = name_EN du catalogue backend)
 const NIGHT_ROLE_TEXTS = {
-    imp:       { label: "Diablotin",    prompt: "Qui sera votre victime cette nuit ?" },
-    poisoner:  { label: "Empoisonneur", prompt: "Qui empoisonnerez-vous jusqu'à la fin de la prochaine journée ?" },
-    monk:      { label: "Moine",        prompt: "Qui protégerez-vous des griffes du Diablotin cette nuit ?" },
-    psychic:   { label: "Voyante",      prompt: "Quels sont les deux joueurs que vous souhaitez sonder ?" },
-    butler:    { label: "Majordome",    prompt: "Qui choisissez-vous comme Maître ? Vous ne pourrez voter que s'il vote aussi." }
+    reaper:     { label: "Faucheur",    prompt: "Qui sera votre victime cette nuit ?" },
+    apothecary: { label: "Apothicaire", prompt: "Qui empoisonnerez-vous jusqu'à la fin de la prochaine journée ?" },
+    watchman:   { label: "Veilleur",    prompt: "Qui protégerez-vous des griffes du Faucheur cette nuit ?" },
+    medium:     { label: "Médium",      prompt: "Quels sont les deux joueurs que vous souhaitez sonder ?" },
+    valet:      { label: "Valet",       prompt: "Qui choisissez-vous comme Maître ? Vous ne pourrez voter que s'il vote aussi." }
 };
 
-// Accepte indifféremment "imp", "Diablotin", "diablotin"…
+// Accepte indifféremment "reaper", "Faucheur", "faucheur"…
 function resolveRoleKey(role) {
     if (!role) return null;
     const wanted = normalizeText(role);
@@ -68,9 +69,9 @@ function resolveRoleKey(role) {
     ) || null;
 }
 
-// Rôle maléfique du joueur humain (Diablotin ou Empoisonneur)
+// Rôle maléfique du joueur humain (Faucheur ou Apothicaire)
 function isEvilRole() {
-    return ["imp", "poisoner"].includes(resolveRoleKey(gameState.roleInfo?.name));
+    return ["reaper", "apothecary"].includes(resolveRoleKey(gameState.roleInfo?.name));
 }
 
 // ================= UTILITAIRES =================
@@ -110,16 +111,22 @@ function sendAction(action, payload = {}) {
     return true;
 }
 
-// Ajoute une entrée dans l'historique de l'onglet "Nuits" (type : "role_info" | "result")
-function addNightHistory(turn, type, info) {
-    gameState.night_info_history.push({ turn: turn ?? gameState.day, type, info });
+// Ajoute une entrée dans l'historique de l'onglet "Nuits", au format envoyé par le serveur :
+// { turn, type: "role_info", info } ou { turn, type: "result", dead_player: id | null }
+function addNightHistory(entry) {
+    gameState.night_info_history.push({ ...entry, turn: entry.turn ?? gameState.day });
     renderNightInfoHistory();
+}
+
+// Texte des morts de la nuit (onglet Nuits) : écrit seulement ici, le serveur envoie l'identifiant
+function nightDeathText(deadPlayerId) {
+    return deadPlayerId ? `${getPlayerName(deadPlayerId)} est mort·e cette nuit.` : "Personne n'est mort cette nuit.";
 }
 
 // Ajoute les bulletins d'un vote dans l'historique de l'onglet "Votes"
 function addVoteHistory(turn, executed, votes) {
     (votes || []).forEach(v => {
-        gameState.vote_history.push({ turn, voter: v.voter, target: v.target, executed });
+        gameState.vote_history.push({ turn, voter: v.voter, target: v.target, executed, unavailable: !!v.unavailable });
     });
     renderVoteHistory();
 }

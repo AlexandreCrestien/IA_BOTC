@@ -15,6 +15,13 @@ ADMIN_DATA = {
         "Lord Ashcombe": [{"role": "system", "content": "Tu es Lord Ashcombe."}],
         "L'Ombre": [{"role": "assistant", "content": "Je me cache."}],
     },
+    "players": [
+        {"name": "Alex", "is_human": True, "role": "Médium", "team": "Villageois", "personality": None, "alive": True, "has_vote": True},
+        {"name": "Lord Ashcombe", "is_human": False, "role": "Faucheur", "team": "Démon", "personality": "Stratège", "alive": False, "has_vote": True},
+    ],
+    "night_actions": [{"turn": 1, "player": "Lord Ashcombe", "content": "Nuit 1 : tu as choisi Alex."}],
+    "night_history": [{"turn": 2, "type": "result", "info": "Mère Grimsby est mort·e cette nuit."}],
+    "vote_history": [{"turn": 2, "voter": "Alex", "target": "Lord Ashcombe", "executed": "Lord Ashcombe"}],
 }
 
 
@@ -56,15 +63,14 @@ def test_rejected_token_returns_to_login(page, static_url):
 
     expect(page.locator("#login-error")).to_have_text("Jeton administrateur invalide.")
     expect(page.locator("#dashboard-section")).to_be_hidden()
-    assert page.evaluate("localStorage.getItem('botc_admin_token')") is None
+    assert page.evaluate("localStorage.getItem('Lantern_hollow_admin_token')") is None
 
 
-def test_empty_api_response_shows_notice(page, static_url):
-    # La route renvoie aujourd'hui null (TODO côté serveur)
+def test_unexpected_api_response_shows_notice(page, static_url):
     mock_api(page, body=None)
     login(page, static_url)
 
-    expect(page.locator("#no-data-notice")).to_contain_text("ne renvoie pas encore de données")
+    expect(page.locator("#no-data-notice")).to_have_text("Réponse inattendue du serveur.")
     expect(page.locator("#stat-turn-phase")).to_have_text("—")
 
 
@@ -83,4 +89,34 @@ def test_logout_clears_the_token(page, static_url):
     page.click("#logout-btn")
 
     expect(page.locator("#login-section")).to_be_visible()
-    assert page.evaluate("localStorage.getItem('botc_admin_token')") is None
+    assert page.evaluate("localStorage.getItem('Lantern_hollow_admin_token')") is None
+
+
+def test_players_roles_and_night_actions_are_shown(page, static_url):
+    mock_api(page)
+    login(page, static_url)
+
+    players = page.locator("#players-container")
+    expect(players).to_contain_text("Alex (humain)")
+    expect(players.locator("tr", has_text="Lord Ashcombe")).to_contain_text("Faucheur")
+    expect(players.locator("tr", has_text="Lord Ashcombe")).to_contain_text("Stratège")
+    expect(players.locator("tr", has_text="Lord Ashcombe")).to_contain_text("Mort")
+    expect(page.locator("#night-actions-container")).to_contain_text("Nuit 1 : tu as choisi Alex.")
+
+
+def test_player_night_and_vote_histories_are_shown(page, static_url):
+    mock_api(page)
+    login(page, static_url)
+
+    expect(page.locator("#night-history-container")).to_contain_text("Mère Grimsby est mort·e cette nuit.")
+    votes = page.locator("#vote-history-container")
+    expect(votes).to_contain_text("Tour 2 — Lord Ashcombe exécuté·e")
+    expect(votes).to_contain_text("Alex")
+
+
+def test_no_game_message_from_server(page, static_url):
+    mock_api(page, body={"game_in_progress": False, "message": "Aucune partie n'a encore été lancée."})
+    login(page, static_url)
+
+    expect(page.locator("#no-data-notice")).to_have_text("Aucune partie n'a encore été lancée.")
+    expect(page.locator("#players-container")).to_contain_text("Aucune partie en cours.")

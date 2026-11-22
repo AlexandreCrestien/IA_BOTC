@@ -13,12 +13,12 @@ const SUSPICION_OPTIONS = {
         { value: "Demon",     label: "Démon (méchant)" }
     ],
     roles: [
-        { value: "diablotin",    label: "Diablotin (Démon)",                 role: "Diablotin",    evil: true },
-        { value: "empoisonneur", label: "Empoisonneur (Démon - Sbire)",      role: "Empoisonneur", evil: true },
-        { value: "voyante",      label: "Voyante (Villageois)",              role: "Voyante" },
-        { value: "moine",        label: "Moine (Villageois)",                role: "Moine" },
-        { value: "detective",    label: "Détective (Villageois)",            role: "Détective" },
-        { value: "majordome",    label: "Majordome (Villageois - Outsider)", role: "Majordome" }
+        { value: "reaper",     label: "Faucheur (Démon)",               role: "Faucheur",    evil: true },
+        { value: "apothecary", label: "Apothicaire (Démon - Complice)", role: "Apothicaire", evil: true },
+        { value: "medium",     label: "Médium (Villageois)",            role: "Médium" },
+        { value: "watchman",   label: "Veilleur (Villageois)",          role: "Veilleur" },
+        { value: "inquisitor", label: "Inquisiteur (Villageois)",       role: "Inquisiteur" },
+        { value: "valet",      label: "Valet (Villageois - Paria)",     role: "Valet" }
     ]
 };
 

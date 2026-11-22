@@ -3,10 +3,12 @@ import logging
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
 
-from backend.server.websockets import router as ws_router
+from backend.server.websocket_endpoint import router as ws_router
 from backend.server.admin import router as admin_router
+# Chargé dès le démarrage (moteur de jeu, LiteLLM : quelques secondes) plutôt qu'à la première
+# connexion d'un joueur, qui attendrait sinon devant l'écran d'accueil.
+import backend.server.game_runner  # noqa: E402,F401
 
 # Configuration des logs pour avoir un suivi propre dans la console
 logging.basicConfig(
@@ -17,18 +19,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="Blood on the AI Clocktower - Backend API",
+    title="Lantern Hollow - Backend API",
     description="API en temps réel (websockets) pour lier le moteur de jeu Python et le frontend.",
     version="1.0.0"
-)
-
-# Configuration CORS (nécessaire si le frontend tourne sur un autre port)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
 )
 
 app.include_router(ws_router)
@@ -42,7 +35,7 @@ def serve_admin_page():
 @app.get("/health", tags=["Health Check"])
 def health_check():
     """Route de santé pour vérifier rapidement si le serveur tourne."""
-    return {"status": "online", "message": "Le serveur Blood on the AI Clocktower tourne à merveille !"}
+    return {"status": "online", "message": "Le serveur Lantern Hollow tourne à merveille !"}
 
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")

@@ -2,10 +2,10 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from backend.models.enums import Alignement, Equipe, Phase, TypeEffet
+from backend.models.enums import Alignment, Team, Phase, RoleKey
 
-# Camps du côté du bien. L'outsider est villageois, donc du côté du bien.
-GOOD_TEAMS = {Equipe.VILLAGEOIS, Equipe.OUTSIDER}
+# Camps du côté du bien. Le Paria (Valet) est du côté des villageois.
+GOOD_TEAMS = {Team.TOWNSFOLK, Team.OUTCAST}
 
 
 class Role(BaseModel):
@@ -16,17 +16,18 @@ class Role(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     name_FR: str = Field(min_length=1)
-    name_EN: str = Field(min_length=1)
-    team: Equipe
+    name_EN: RoleKey
+    team: Team
     # None = le rôle n'agit à aucun moment précis.
     phase: Optional[Phase] = None
-    # Types d'effets que ce rôle peut produire sur un joueur.
-    effects: tuple[TypeEffet, ...] = ()
+    # Action de nuit : nombre de cibles à choisir, et si le joueur peut se choisir lui-même.
+    night_targets: int = Field(default=1, ge=1)
+    can_target_self: bool = False
     # Clés de lien que ce rôle a le droit de poser sur un joueur.
     allowed_links: tuple[str, ...] = ()
     # Texte affiché au joueur et repris par le skill de l'agent.
     description: str = ""
 
     @property
-    def alignment(self) -> Alignement:
-        return Alignement.BON if self.team in GOOD_TEAMS else Alignement.MAUVAIS
+    def alignment(self) -> Alignment:
+        return Alignment.GOOD if self.team in GOOD_TEAMS else Alignment.EVIL

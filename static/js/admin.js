@@ -1,7 +1,7 @@
 'use strict';
 
 const ADMIN_API_URL = "/admin/debug/all-states";
-const TOKEN_STORAGE_KEY = 'botc_admin_token';
+const TOKEN_STORAGE_KEY = 'Lantern_hollow_admin_token';
 
 // Données gardées en mémoire pour changer d'agent sans refaire de requête
 let currentAdminData = null;
@@ -120,27 +120,134 @@ function showNotice(text) {
 }
 
 // ================= RENDU DU TABLEAU DE BORD =================
-// Les noms de champs acceptés couvrent les variantes prévues côté serveur.
+// Champs envoyés par la route /admin/debug/all-states (backend/server/admin.py)
 function renderDashboard(data) {
     if (!data || typeof data !== 'object') {
-        // La route existe mais ne renvoie encore rien (TODO côté serveur)
-        showNotice("Le serveur ne renvoie pas encore de données : la route /admin/debug/all-states n'est pas encore branchée sur le moteur de jeu.");
+        showNotice("Réponse inattendue du serveur.");
         data = {};
     } else {
-        showNotice(null);
+        // Aucune partie lancée depuis le démarrage du serveur : message du serveur
+        showNotice(data.game_in_progress === false && !data.players ? data.message : null);
     }
     currentAdminData = data;
 
     // Champ absent → "—" (inconnu), plutôt que 0 qui laisserait croire à une partie vide
-    const agents = data.agents || data.players;
-    const channels = data.channels || data.private_channels;
-    document.getElementById('stat-agents-count').textContent = Array.isArray(agents) ? agents.length : '—';
+    document.getElementById('stat-agents-count').textContent = Array.isArray(data.agents) ? data.agents.length : '—';
     document.getElementById('stat-turn-phase').textContent =
-        data.turn != null ? `Tour ${data.turn}${data.phase ? ` · ${data.phase}` : ''}` : '—';
-    document.getElementById('stat-channels-count').textContent = Array.isArray(channels) ? channels.length : '—';
+        data.turn != null ? `Tour ${data.turn}${data.phase ? ` · ${data.phase}` : ''}${data.status === 'terminée' ? ' (terminée)' : ''}` : '—';
+    document.getElementById('stat-channels-count').textContent = Array.isArray(data.channels) ? data.channels.length : '—';
 
-    renderPublicHistory(data.public_history || data.public_chat_history || data.history || []);
+    renderPlayers(data.players || []);
+    renderPublicHistory(data.public_history || []);
     renderAgents();
+    renderNightActions(data.night_actions || []);
+    renderAgentFailures(data.agent_failures || []);
+    renderNightHistory(data.night_history || []);
+    renderVoteHistory(data.vote_history || []);
+}
+
+function emptyLine(text) {
+    return `<span class="italic opacity-60">${escapeHtml(text)}</span>`;
+}
+
+function renderPlayers(players) {
+    const container = document.getElementById('players-container');
+    if (!players.length) {
+        container.innerHTML = emptyLine("Aucune partie en cours.");
+        return;
+    }
+    container.innerHTML = `
+        <table class="admin-table w-full">
+            <thead>
+                <tr><th>Joueur</th><th>Rôle</th><th>Camp</th><th>Personnalité</th><th>Statut</th></tr>
+            </thead>
+            <tbody>
+                ${players.map(p => `
+                    <tr>
+                        <td class="font-semibold">${escapeHtml(p.name)}${p.is_human ? ' <span class="opacity-60 font-normal">(humain)</span>' : ''}</td>
+                        <td class="text-gold">${escapeHtml(p.role)}</td>
+                        <td><span class="role-tag ${teamTagClass(p.team)}">${escapeHtml(p.team)}</span></td>
+                        <td>${p.personality ? escapeHtml(p.personality) : '<span class="opacity-50">—</span>'}</td>
+                        <td>${p.alive
+                            ? '<span class="status-alive">Vivant</span>'
+                            : `<span class="status-dead">Mort</span> <span class="opacity-60">· vote ${p.has_vote ? 'dispo' : 'utilisé'}</span>`}</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
+// Mêmes couleurs d'étiquette que le Codex du jeu
+function teamTagClass(team) {
+    return { "Démon": "tag-demon", "Complice": "tag-accomplice", "Paria": "tag-outcast" }[team] || "tag-good";
+}
+
+function renderNightActions(actions) {
+    const container = document.getElementById('night-actions-container');
+    container.innerHTML = actions.length
+        ? actions.map(a => `
+            <div class="history-line">
+                <span class="memory-role mr-2">Nuit ${escapeHtml(a.turn)}</span>
+                <span class="font-semibold text-gold">${escapeHtml(a.player)}</span>
+                <span class="opacity-50 mx-1">·</span>
+                <span class="memory-content">${escapeHtml(a.content)}</span>
+            </div>
+        `).join('')
+        : emptyLine("Aucune action de nuit pour l'instant.");
+}
+
+// IA dont le modèle n'a pas répondu : moment, agent, et ce qu'elle devait faire
+function renderAgentFailures(failures) {
+    const container = document.getElementById('agent-failures-container');
+    container.innerHTML = failures.length
+        ? failures.map(f => `
+            <div class="history-line">
+                <span class="memory-role mr-2">${escapeHtml(f.moment)}</span>
+                <span class="font-semibold text-gold">${escapeHtml(f.agent)}</span>
+                <span class="opacity-50 mx-1">·</span>
+                <span class="memory-content">${escapeHtml(f.step)}</span>
+            </div>
+        `).join('')
+        : emptyLine("Aucune IA indisponible pour l'instant.");
+}
+
+function renderNightHistory(history) {
+    const container = document.getElementById('night-history-container');
+    container.innerHTML = history.length
+        ? history.map(item => `
+            <div class="history-line ${item.type === 'result' ? 'is-death' : ''}">
+                <span class="memory-role mr-2">Tour ${escapeHtml(item.turn)}</span>
+                <span class="memory-content">${escapeHtml(item.info)}</span>
+            </div>
+        `).join('')
+        : emptyLine("Aucun événement nocturne pour l'instant.");
+}
+
+function renderVoteHistory(votes) {
+    const container = document.getElementById('vote-history-container');
+    if (!votes.length) {
+        container.innerHTML = emptyLine("Aucun vote pour l'instant.");
+        return;
+    }
+    // Regroupement par tour, du plus récent au plus ancien
+    const turns = {};
+    votes.forEach(v => {
+        if (!turns[v.turn]) turns[v.turn] = { executed: v.executed, ballots: [] };
+        turns[v.turn].ballots.push(v);
+    });
+    container.innerHTML = Object.keys(turns).sort((a, b) => b - a).map(turn => `
+        <div class="flex flex-col gap-1">
+            <div class="memory-role">Tour ${escapeHtml(turn)} — ${turns[turn].executed ? `${escapeHtml(turns[turn].executed)} exécuté·e` : 'aucune exécution'}</div>
+            ${turns[turn].ballots.map(b => `
+                <div class="history-line">
+                    <span class="font-semibold">${escapeHtml(b.voter)}</span>
+                    <span class="opacity-50 mx-1">→</span>
+                    <span class="${b.target ? 'text-gold' : 'italic opacity-60'}">${b.target ? escapeHtml(b.target) : 'Personne'}</span>
+                </div>
+            `).join('')}
+        </div>
+    `).join('');
 }
 
 function renderPublicHistory(history) {
@@ -151,6 +258,7 @@ function renderPublicHistory(history) {
     }
     container.innerHTML = history.map(item => `
         <div class="history-line">
+            ${item.moment ? `<span class="memory-role mr-2">${escapeHtml(item.moment)}</span>` : ''}
             <span class="font-semibold text-gold">${escapeHtml(item.sender || 'Système')}</span>
             <span class="opacity-50 mx-1">·</span>
             <span class="memory-content">${escapeHtml(contentToText(item.content ?? item))}</span>
@@ -160,8 +268,7 @@ function renderPublicHistory(history) {
 }
 
 function getAgentHistories() {
-    const d = currentAdminData || {};
-    return d.agent_histories || d.llm_memories || d.agents_private_logs || {};
+    return currentAdminData?.agent_histories || {};
 }
 
 // Liste des agents + mémoire de l'agent sélectionné

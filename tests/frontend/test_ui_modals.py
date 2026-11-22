@@ -1,41 +1,40 @@
-"""Modales : rôle, entretien, exécution, réveil, fin de partie, connexion perdue, Grimoire."""
+"""Modales : rôle, entretien, exécution, réveil, fin de partie, connexion perdue, Codex."""
 from playwright.sync_api import expect
 
-from conftest import PLAYER
+from conftest import ID, PLAYER
 
 
 def test_role_reveal_fills_the_role_bar(game, server):
-    server.send(type="role_assigned", role_name="Moine", description="Protégez un joueur chaque nuit.")
+    server.send(type="role_assigned", role_name="Veilleur", description="Protégez un joueur chaque nuit.")
     expect(game.locator("#modal-role-reveal")).to_be_visible()
-    expect(game.locator("#modal-role-title")).to_have_text("Moine")
+    expect(game.locator("#modal-role-title")).to_have_text("Veilleur")
 
     game.click("[data-action='close-role-reveal']")
     expect(game.locator("#modal-role-reveal")).to_be_hidden()
-    expect(game.locator("#player-role-name")).to_have_text("Moine")
+    expect(game.locator("#player-role-name")).to_have_text("Veilleur")
 
 
 def test_agent_whisper_accept_waits_for_the_server_channel(game, server):
-    server.send(type="agent_whisper_request", agent_id="Mère Grimsby", agent_name="Mère Grimsby")
+    server.send(type="agent_whisper_request", agent_id=ID["Mère Grimsby"])
     expect(game.locator("#agent-whisper-text")).to_contain_text("Mère Grimsby souhaite s'entretenir")
 
     game.click("[data-action='accept-whisper']")
-    assert server.wait_for("respond_whisper_invitation") == {"target_agent_id": "Mère Grimsby", "accepted": True}
+    assert server.wait_for("respond_whisper_invitation") == {"target_agent_id": ID["Mère Grimsby"], "accepted": True}
     expect(game.locator("#modal-agent-whisper")).to_be_hidden()
     expect(game.locator("#chat-channels .channel-btn")).to_have_count(0)  # pas de salon inventé côté client
 
 
-def test_agent_whisper_refuse_then_trigger_vote(game, server):
-    server.send(type="agent_whisper_request", agent_id="Mère Grimsby", agent_name="Mère Grimsby")
+def test_agent_whisper_refuse_closes_the_modal(game, server):
+    server.send(type="agent_whisper_request", agent_id=ID["Mère Grimsby"])
     game.click("[data-action='refuse-whisper']")
-    assert server.wait_for("respond_whisper_invitation")["accepted"] is False
 
-    game.click("[data-action='whisper-vote']")
-    server.wait_for("trigger_vote_phase")
+    assert server.wait_for("respond_whisper_invitation") == {"target_agent_id": ID["Mère Grimsby"], "accepted": False}
     expect(game.locator("#modal-agent-whisper")).to_be_hidden()
+    expect(game.locator("#chat-messages")).to_contain_text("Vous avez refusé l'entretien avec Mère Grimsby.")
 
 
 def test_execution_modal_only_when_the_player_is_executed(game, server):
-    server.send(type="vote_result", turn=2, executed="Mère Grimsby", votes=[])
+    server.send(type="vote_result", turn=2, executed=ID["Mère Grimsby"], votes=[])
     expect(game.locator("#modal-vote-result")).to_be_hidden()
 
     server.send(type="vote_result", turn=3, executed=PLAYER, votes=[])
@@ -44,7 +43,7 @@ def test_execution_modal_only_when_the_player_is_executed(game, server):
 
 
 def test_dawn_modal_announces_the_night_victim(game, server):
-    server.send(type="night_result", turn=3, dead_player="Révérend Hale")
+    server.send(type="night_result", turn=3, dead_player=ID["Révérend Hale"])
     expect(game.locator("#night-result-message")).to_contain_text("Révérend Hale est mort·e cette nuit.")
     expect(game.locator("#night-death-notice")).to_be_hidden()
 
@@ -54,12 +53,21 @@ def test_dawn_modal_announces_the_night_victim(game, server):
 
 
 def test_game_over_tells_if_the_player_won(game, server):
-    server.send(type="role_assigned", role_name="Diablotin", description="…")
+    server.send(type="role_assigned", role_name="Faucheur", description="…")
     game.click("[data-action='close-role-reveal']")
-    server.send(type="game_over", winner="Villageois", details="Le Diablotin a été exécuté.")
+    server.send(type="game_over", winner="good", details="Le Faucheur a été exécuté.")
 
     expect(game.locator("#gameover-title")).to_have_text("Victoire des Villageois")
     expect(game.locator("#gameover-outcome")).to_have_text("Votre camp a perdu…")
+
+
+def test_game_over_for_the_evil_team(game, server):
+    server.send(type="role_assigned", role_name="Faucheur", description="…")
+    game.click("[data-action='close-role-reveal']")
+    server.send(type="game_over", winner="evil", details="Le mal l'emporte.")
+
+    expect(game.locator("#gameover-title")).to_have_text("Victoire des Démons")
+    expect(game.locator("#gameover-outcome")).to_have_text("Votre camp l'emporte !")
 
 
 def test_disconnection_shows_modal(game, server):
@@ -71,20 +79,79 @@ def test_disconnection_shows_modal(game, server):
     expect(game.locator("#modal-disconnected")).to_be_hidden()
 
 
-def test_grimoire_tabs_backdrop_and_escape(game):
-    game.click("[data-action='open-grimoire']")
-    grimoire = game.locator("#modal-grimoire")
-    expect(grimoire).to_be_visible()
+def test_codex_tabs_backdrop_and_escape(game):
+    game.click("[data-action='open-codex']")
+    codex = game.locator("#modal-codex")
+    expect(codex).to_be_visible()
 
-    game.click("#grimoire-tab-btn-rules")
-    expect(game.locator("#grimoire-tab-rules")).to_be_visible()
-    expect(game.locator("#grimoire-tab-roles")).to_be_hidden()
+    game.click("#codex-tab-btn-rules")
+    expect(game.locator("#codex-tab-rules")).to_be_visible()
+    expect(game.locator("#codex-tab-roles")).to_be_hidden()
 
-    game.locator("#modal-grimoire .modal-card").click()  # un clic sur la carte ne ferme pas
-    expect(grimoire).to_be_visible()
-    grimoire.click(position={"x": 5, "y": 5})  # un clic sur le voile ferme
-    expect(grimoire).to_be_hidden()
+    game.click("#codex-tab-btn-data")
+    expect(game.locator("#codex-tab-data")).to_be_visible()
+    expect(game.locator("#codex-tab-data")).to_contain_text("Vous jouez contre des IA")
+    expect(game.locator("#codex-tab-rules")).to_be_hidden()
+    expect(game.locator("#codex-tab-btn-data")).to_have_class("codex-tab is-active")
 
-    game.click("[data-action='open-grimoire']")
+    game.locator("#modal-codex .modal-card").click()  # un clic sur la carte ne ferme pas
+    expect(codex).to_be_visible()
+    codex.click(position={"x": 5, "y": 5})  # un clic sur le voile ferme
+    expect(codex).to_be_hidden()
+
+    game.click("[data-action='open-codex']")
     game.keyboard.press("Escape")
-    expect(grimoire).to_be_hidden()
+    expect(codex).to_be_hidden()
+
+
+def test_abandon_asks_for_confirmation_and_can_be_cancelled(game, server):
+    game.click("#abandon-btn")
+    expect(game.locator("#modal-abandon")).to_be_visible()
+
+    game.click("button[data-action='cancel-abandon']")
+    expect(game.locator("#modal-abandon")).to_be_hidden()
+    assert server.actions("abandon_game") == []
+
+
+def test_abandon_returns_to_welcome_for_a_new_game(game, server):
+    game.click("#abandon-btn")
+    game.click("button[data-action='confirm-abandon']")
+    server.wait_for("abandon_game")
+
+    server.send(type="game_abandoned")
+    expect(game.locator("#screen-welcome")).to_be_visible()  # page rechargée : accueil vierge
+    expect(game.locator("#welcome-player-id")).to_have_value("")
+    expect(game.locator("#modal-disconnected")).to_be_hidden()
+
+
+def test_abandon_after_game_over_goes_straight_to_welcome(game, server):
+    server.send(type="game_over", winner="good", details="Fin.")
+    game.click("#modal-gameover [data-action='reload']")  # bouton « Nouvelle partie » de la fin de partie
+    expect(game.locator("#screen-welcome")).to_be_visible()
+    assert server.actions("abandon_game") == []
+
+
+def test_server_crash_offers_a_new_game(game, server):
+    server.send(type="game_interrupted", text="Une erreur a interrompu la partie.")
+    expect(game.locator("#gameover-title")).to_have_text("Partie interrompue")
+    expect(game.locator("#gameover-desc")).to_have_text("Une erreur a interrompu la partie.")
+    expect(game.locator("#gameover-outcome")).to_be_hidden()
+
+
+def test_role_reveal_is_read_before_the_dawn_modal(game, server):
+    """Au démarrage, le réveil du village peut arriver en même temps que le rôle : le rôle passe devant."""
+    server.send(type="role_assigned", role_name="Veilleur", description="Protégez un joueur.")
+    server.send(type="night_result", turn=1, dead_player=None)
+    expect(game.locator("#modal-night-result")).to_be_visible()
+
+    game.click("[data-action='close-role-reveal']")  # cliquable : la modale du rôle est au-dessus
+    expect(game.locator("#modal-role-reveal")).to_be_hidden()
+    game.click("[data-action='close-night-result']")
+    expect(game.locator("#modal-night-result")).to_be_hidden()
+
+
+def test_game_over_is_above_other_modals(game, server):
+    server.send(type="night_result", turn=3, dead_player=ID["Révérend Hale"])
+    server.send(type="game_over", winner="good", details="Fin.")
+    game.click("#modal-gameover [data-action='reload']")  # cliquable : la fin de partie est au-dessus
+    expect(game.locator("#screen-welcome")).to_be_visible()

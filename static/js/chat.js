@@ -40,7 +40,43 @@ function sendChatMessage() {
     if (!content) return;
     if (sendAction("send_chat", { channel_id: gameState.currentChannel, content })) {
         input.value = "";
+        // Réponse donnée dans le canal attendu : le bandeau de saisie disparaît
+        if (turnPrompt && turnPrompt.channelId === gameState.currentChannel) hideTurnPrompt();
     }
+}
+
+// ================= SAISIE ATTENDUE PAR LE MOTEUR (bandeau au-dessus du chat) =================
+// Message public ou message privé : facultatifs, le joueur peut passer.
+let turnPrompt = null; // { kind, channelId } ou null
+
+const TURN_PROMPT_SKIP_LABELS = {
+    public_message: "Passer",
+    private_message: "Terminer la discussion"
+};
+
+function showTurnPrompt(request) {
+    turnPrompt = { kind: request.kind, channelId: request.channel_id || 'public' };
+    setAnnouncement(request.text);
+
+    // On amène le joueur là où il doit écrire
+    switchLeftTab('chat');
+    if (channelTitles[turnPrompt.channelId]) switchChannel(turnPrompt.channelId);
+
+    document.getElementById('turn-prompt-text').textContent = request.text;
+    document.getElementById('turn-prompt-skip').textContent = TURN_PROMPT_SKIP_LABELS[request.kind] || "Passer";
+    document.getElementById('turn-prompt').classList.remove('hidden');
+    document.getElementById('chat-input').focus();
+}
+
+function hideTurnPrompt() {
+    turnPrompt = null;
+    document.getElementById('turn-prompt').classList.add('hidden');
+}
+
+function skipTurnPrompt() {
+    if (!turnPrompt) return;
+    sendAction("skip_turn", { kind: turnPrompt.kind });
+    hideTurnPrompt();
 }
 
 function receiveChatMessage(channelId, sender, content) {
@@ -75,7 +111,7 @@ function renderChatMessage(m) {
     return `
         <div class="flex animate-rise flex-col items-start my-3">
             <div class="mb-0.5 flex items-baseline gap-2 px-1 text-[11px]">
-                <span class="font-semibold opacity-80">${escapeHtml(m.sender)}</span>
+                <span class="font-semibold opacity-80">${escapeHtml(getPlayerName(m.sender))}</span>
                 ${m.time ? `<span class="opacity-50">${m.time}</span>` : ''}
             </div>
             <p class="chat-bubble break-words rounded-lg rounded-tl-sm px-3 py-2 text-sm leading-relaxed">${escapeHtml(m.content)}</p>
@@ -102,12 +138,12 @@ function renderChatMessages() {
 }
 
 // ================= CANAUX =================
-function handlePrivateChannelOpened(channelId, text, members = []) {
+function handlePrivateChannelOpened(channelId, text, members = [], focus = true) {
     if (!gameState.messages[channelId]) gameState.messages[channelId] = [];
     if (text) appendSystemMessage(text, channelId);
 
     if (!channelTitles[channelId]) {
-        channelTitles[channelId] = members.length ? members.join(', ') : 'Privé';
+        channelTitles[channelId] = members.length ? members.map(getPlayerName).join(', ') : 'Privé';
 
         const item = document.createElement('li');
         const button = document.createElement('button');
@@ -120,7 +156,7 @@ function handlePrivateChannelOpened(channelId, text, members = []) {
         document.getElementById('chat-channels').appendChild(item);
     }
 
-    switchChannel(channelId);
+    if (focus) switchChannel(channelId);
 }
 
 function switchChannel(channelId) {
@@ -138,6 +174,14 @@ function switchChannel(channelId) {
 }
 
 // ================= HISTORIQUES (onglets Votes et Nuits) =================
+// Reconnexion : le serveur renvoie les deux historiques complets (sans rouvrir de modale)
+function restoreHistories(nights, votes) {
+    gameState.night_info_history = Array.isArray(nights) ? nights : [];
+    gameState.vote_history = Array.isArray(votes) ? votes : [];
+    renderNightInfoHistory();
+    renderVoteHistory();
+}
+
 function renderVoteHistory() {
     const container = document.getElementById('tab-content-votes');
     const history = gameState.vote_history;
@@ -166,6 +210,7 @@ function renderVoteHistory() {
                             <span class="font-semibold">${escapeHtml(getPlayerName(v.voter))}</span>
                             <span class="ml-1.5 opacity-70">a voté pour</span>
                             <span class="font-semibold text-gold ml-1">${v.target ? escapeHtml(getPlayerName(v.target)) : "Personne"}</span>
+                            ${v.unavailable ? '<span class="ml-1 opacity-60">(IA indisponible)</span>' : ''}
                         </div>
                     `).join('')}
                 </div>
@@ -188,7 +233,7 @@ function renderNightInfoHistory() {
         return `
             <div class="panel night-history-item ${isResult ? 'is-result' : ''} rounded-lg p-3 text-sm">
                 <div class="night-history-turn font-serif font-bold italic mb-1">Tour ${escapeHtml(item.turn)}</div>
-                <p class="font-sans leading-relaxed">${escapeHtml(item.info || '')}</p>
+                <p class="font-sans leading-relaxed">${escapeHtml(isResult ? nightDeathText(item.dead_player) : (item.info || ''))}</p>
             </div>
         `;
     }).join('') + '</div>';

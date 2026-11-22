@@ -5,7 +5,7 @@
    Le serveur envoie ce qu'il faut afficher via un message "action_request" :
      { type: "action_request", kind: "discussion" | "vote" | "nuit",
        candidates: [playerId, ...], max_targets: 1 | 2,
-       min_targets?: n, role?: "imp" | "Diablotin" | ... }
+       min_targets?: n, role?: "reaper" | "Faucheur" | ... }
    Seul le texte (titre, consigne, bouton) est défini côté client, selon la phase et le rôle.
    ========================================================== */
 'use strict';
@@ -23,6 +23,11 @@ let actionResult = null;    // { kind: "vote" | "nuit", shownAt, ...données }
 let deferredActionRequest = null;
 let deferredActionTimer = null;
 const RESULT_MIN_DISPLAY_MS = 12000;
+
+// Discussion : sans choix du joueur pendant ce délai (compté une fois l'encadré affiché,
+// donc après le dernier message de la place publique), un agent vient lui proposer un entretien.
+const INVITATION_DELAY_MS = 10000;
+let invitationTimer = null;
 
 function getActionTexts(action) {
     if (action.kind === "discussion") {
@@ -49,6 +54,7 @@ function getActionTexts(action) {
 }
 
 function handleActionRequest(data) {
+    clearInvitationTimer();
     // Un résultat est affiché depuis trop peu de temps : on laisse le joueur le lire.
     if (actionResult) {
         const remaining = RESULT_MIN_DISPLAY_MS - (Date.now() - actionResult.shownAt);
@@ -96,6 +102,30 @@ function handleActionRequest(data) {
     };
     actionSelection = [];
     renderActionPanel();
+    if (kind === "discussion") startInvitationTimer(pendingAction);
+}
+
+function startInvitationTimer(action) {
+    clearInvitationTimer();
+    invitationTimer = setTimeout(() => onDiscussionIdle(action), INVITATION_DELAY_MS);
+}
+
+function clearInvitationTimer() {
+    clearTimeout(invitationTimer);
+    invitationTimer = null;
+}
+
+// Le délai est écoulé : si le joueur n'a toujours rien choisi, on prévient le serveur.
+function onDiscussionIdle(action) {
+    invitationTimer = null;
+    if (pendingAction !== action || action.stage !== "choosing" || actionSelection.length) return;
+    // Une modale est ouverte (réveil, rôle…) : le joueur ne voit pas encore l'encadré, on attend.
+    if (document.querySelector('.modal-backdrop:not(.hidden)')) {
+        startInvitationTimer(action);
+        return;
+    }
+    if (sendAction("discussion_timeout")) clearPendingAction();
+    // Connexion perdue : la demande sera renvoyée à la reconnexion, avec un nouveau délai.
 }
 
 function applyDeferredActionRequest() {
@@ -136,7 +166,6 @@ const RESULT_CLOSE_BUTTON = `
     </button>`;
 
 function renderVoteResult(result) {
-    const isDead = id => (gameState.players || []).find(p => p.id === id)?.alive === false;
 
     // Verdict : seul le total de voix de la personne exécutée est indiqué.
     let verdict;
@@ -151,14 +180,14 @@ function renderVoteResult(result) {
     }
 
     // Un bulletin par votant : "votant → cible" (ou "Personne").
-    // Un votant déjà mort a utilisé son vote fantôme : on le signale.
+    // Mentions : voix d'outre-tombe utilisée, IA qui n'a pas répondu.
     const ballots = result.votes.map(v => {
         const target = v.target
             ? `<span class="font-semibold ${v.target === result.executedId ? 'text-blood-bright' : 'text-gold'}">${escapeHtml(getPlayerName(v.target))}</span>`
             : `<span class="italic opacity-60">Personne</span>`;
         return `
             <li class="ballot flex items-center gap-2 rounded-md px-3 py-1.5 text-sm">
-                <span class="truncate">${escapeHtml(getPlayerName(v.voter))}${isDead(v.voter) ? ' <span class="text-xs opacity-60">(vote fantôme)</span>' : ''}</span>
+                <span class="truncate">${escapeHtml(getPlayerName(v.voter))}${v.ghost ? ' <span class="text-xs opacity-60">(outre-tombe)</span>' : ''}${v.unavailable ? ' <span class="text-xs opacity-60">(IA indisponible)</span>' : ''}</span>
                 <span class="truncate ml-auto text-right">${target}</span>
             </li>
         `;
@@ -189,6 +218,7 @@ function renderNightResult(result) {
 }
 
 function clearPendingAction() {
+    clearInvitationTimer();
     pendingAction = null;
     actionSelection = [];
     renderActionPanel();
@@ -246,6 +276,11 @@ function renderActionPanel() {
                 ? `<span class="action-spinner" aria-hidden="true"></span><span class="sr-only">En attente de la réponse du serveur…</span>`
                 : escapeHtml(texts.submit)}
         </button>
+        ${kind === "discussion" ? `
+        <button type="button" id="action-skip" data-action="skip-private"
+            class="action-skip mt-2 w-full shrink-0 rounded-md py-1.5 font-serif text-sm">
+            Passer au vote
+        </button>` : ''}
     `;
 
     zone.classList.remove('hidden');
@@ -254,6 +289,7 @@ function renderActionPanel() {
 
 function toggleActionTarget(id) {
     if (!pendingAction) return;
+    clearInvitationTimer(); // le joueur commence à choisir : aucun agent ne viendra le solliciter
     const max = pendingAction.maxTargets;
 
     if (actionSelection.includes(id)) {
@@ -290,6 +326,16 @@ function refreshActionSelection() {
         submit.disabled = waiting || actionSelection.length < minTargets || !isWsOpen();
         submit.classList.toggle('is-waiting', waiting);
     }
+}
+
+// Discussion : le joueur ne veut pas de salon privé, la partie passe au vote
+function skipPrivateDiscussion() {
+    if (!pendingAction || pendingAction.kind !== "discussion" || pendingAction.stage !== "choosing") return;
+    if (!sendAction("skip_turn", { kind: "private_partners" })) {
+        appendSystemMessage("Connexion perdue : votre choix n'a pas été envoyé.");
+        return;
+    }
+    clearPendingAction();
 }
 
 function submitPendingAction() {

@@ -13,18 +13,21 @@ const CLICK_ACTIONS = {
     'toggle-target':     el => toggleActionTarget(el.dataset.id),
     'submit-action':     () => submitPendingAction(),
     'close-result':      () => closeActionResult(),
-    'open-grimoire':     () => openGrimoireModal(),
-    'close-grimoire':    () => closeGrimoireModal(),
-    'grimoire-tab':      el => switchGrimoireTab(el.dataset.tab),
+    'open-codex':     () => openCodexModal(),
+    'close-codex':    () => closeCodexModal(),
+    'codex-tab':      el => switchCodexTab(el.dataset.tab),
     'close-role-reveal': () => closeRoleRevealModal(),
-    'accept-whisper':    () => acceptAgentWhisper(),
-    'refuse-whisper':    () => refuseAgentWhisper(),
-    'whisper-discuss':   () => closeAgentWhisperModalOnly(),
-    'whisper-vote':      () => triggerVotePhaseFromModal(),
+    'accept-whisper':    () => answerAgentWhisper(true),
+    'refuse-whisper':    () => answerAgentWhisper(false),
     'close-vote-result': () => closeVoteResultModal(),
     'close-night-result':() => closeNightResultModal(),
     'close-night-info':  () => closeNightInfoModal(),
     'close-disconnected':() => closeDisconnectedModal(),
+    'ask-abandon':       () => openModal('modal-abandon'),
+    'cancel-abandon':    () => closeModal('modal-abandon'),
+    'confirm-abandon':   () => confirmAbandon(),
+    'skip-turn':         () => skipTurnPrompt(),
+    'skip-private':      () => skipPrivateDiscussion(),
     'reload':            () => location.reload()
 };
 
@@ -63,7 +66,10 @@ document.getElementById('chat-input').addEventListener('keydown', (event) => {
     }
 });
 
-// Échap ferme le Grimoire
+// Échap ferme le Codex et la confirmation d'abandon
 document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') closeGrimoireModal();
+    if (event.key === 'Escape') {
+        closeCodexModal();
+        closeModal('modal-abandon');
+    }
 });

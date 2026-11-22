@@ -1,7 +1,7 @@
 """Partie avec toi comme joueur humain, dans le terminal.
 Lancement : python scripts/play_with_human.py
 Les IA font de vrais appels (coût et lenteur). Tu tapes tes choix quand on te les demande.
-Après chaque tour, l'historique de chaque joueur est sauvegardé dans historiques/."""
+Après chaque tour, l'historique de chaque joueur est sauvegardé dans histories/."""
 import asyncio
 import logging
 import os
@@ -15,25 +15,32 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import litellm  # noqa: E402
 
-from backend.game_engine import setup_game  # noqa: E402
-from backend.human_turns import play_turn_with_human  # noqa: E402
+from backend.engine.config import AI_NAMES, PERSONALITY_NAMES  # noqa: E402
+from backend.engine.setup import setup_game  # noqa: E402
+from backend.engine.turn import play_turn  # noqa: E402
+from backend.models import Alignment  # noqa: E402
 from backend.rules import legal_actions  # noqa: E402
-from historique import RecordingAgent, save_histories  # noqa: E402
+from recording import RecordingAgent, save_histories  # noqa: E402
 
 litellm.suppress_debug_info = True
 
-NAMES = {"h": "alex", "p1": "marIA", "p2": "tobIAs", "p3": "mAIsie", "p4": "adrIAn", "p5": "dIAne"}
+NAMES = {"h": "alex", **AI_NAMES}
 HUMAN_ID = "h"
-PERSONALITIES = ["agitator", "clown", "observer", "paranoid", "strategist"]
+PERSONALITIES = PERSONALITY_NAMES
 MAX_TURNS = 5
+WINNER_LABELS = {Alignment.GOOD: "des Villageois", Alignment.EVIL: "des Démons"}
 # Les logs de télémétrie LiteLLM sont coupés : seules nos erreurs et nos réponses comptent.
 LITELLM_LOGGERS = ("LiteLLM", "LiteLLM Router", "LiteLLM Proxy")
-HISTORY_ROOT = Path(__file__).resolve().parent.parent / "historiques"
+HISTORY_ROOT = Path(__file__).resolve().parent.parent / "histories"
 
 
 def _ask_numbers(prompt, options):
     """Lit des numéros séparés par des virgules et renvoie les options correspondantes."""
-    raw = input(prompt)
+    return _pick_numbers(input(prompt), options)
+
+
+def _pick_numbers(raw, options):
+    """Numéros séparés par des virgules -> options correspondantes (les numéros invalides sont ignorés)."""
     picked = []
     for token in raw.split(","):
         token = token.strip()
@@ -43,7 +50,7 @@ def _ask_numbers(prompt, options):
 
 
 class TerminalHuman:
-    """Implémentation de HumanPort dans le terminal."""
+    """Implémentation de HumanPort dans le terminal (mêmes méthodes que backend/engine/human_port.py)."""
 
     def __init__(self, memory):
         self.memory = memory
@@ -51,7 +58,7 @@ class TerminalHuman:
     async def night_choice(self, state, player_id):
         legal = legal_actions(state, player_id)
         options = list(legal.targets)
-        print(f"\n[Nuit] Ce que tu sais :")
+        print("\n[Nuit] Ce que tu sais :")
         print(self.memory.context_for(player_id))
         print(f"[Nuit] Ton pouvoir ({state.player(player_id).role.name_FR}) : choisis {legal.count} cible(s).")
         for i, pid in enumerate(options, 1):
@@ -61,9 +68,18 @@ class TerminalHuman:
             print("Choix incomplet : un choix aléatoire sera fait.")
         return tuple(picked)
 
+    async def show_night_info(self, state, turn, info, allies):
+        print(f"\n[Nuit {turn}] Information : {info}")
+        if allies:
+            names = ", ".join(f"{state.player(a['id']).name} ({a['role']})" for a in allies)
+            print(f"[Nuit {turn}] Tes alliés : {names}")
+
     async def show_night_deaths(self, state, deaths):
         names = ", ".join(state.player(pid).name for pid in deaths) or "personne"
         print(f"\n-- Morts de la nuit : {names}")
+
+    async def show_public_message(self, state, author, text):
+        print(f"  [Public] {self.memory.name_of(author)} : {text}")
 
     async def public_message(self, state, player_id):
         print("\n[Discussion] Ce que tu sais :")
@@ -72,11 +88,19 @@ class TerminalHuman:
         return text or None
 
     async def private_partners(self, state, player_id):
-        candidates = [p.id for p in state.players if p.alive and p.id != player_id]
-        print("\n[Salon privé] Avec qui veux-tu parler ? (1 ou 2 numéros, vide = personne)")
+        candidates = [p.id for p in state.players if p.id != player_id]  # morts compris
+        print("\n[Salon privé] Avec qui veux-tu parler ? (1 ou 2 numéros, vide = personne,"
+              " 0 = attendre qu'un agent vienne te voir)")
         for i, pid in enumerate(candidates, 1):
             print(f"  {i}. {state.player(pid).name}")
-        return _ask_numbers("Numéros : ", candidates)
+        raw = input("Numéros : ").strip()
+        if raw == "0":
+            return None  # comme le délai écoulé dans le navigateur
+        return _pick_numbers(raw, candidates)
+
+    async def agent_invitation(self, state, player_id, agent_id):
+        answer = input(f"\n[Salon privé] {state.player(agent_id).name} souhaite s'entretenir avec toi. Accepter ? (o/n) : ")
+        return answer.strip().lower().startswith("o")
 
     async def private_message(self, state, player_id):
         print("\n[Salon privé] Ce que tu sais :")
@@ -84,9 +108,20 @@ class TerminalHuman:
         text = input("Ton message privé (vide = fin) : ").strip()
         return text or None
 
-    async def show_private_replies(self, replies):
+    async def show_private_replies(self, state, replies):
         for pid, text in replies:
             print(f"  {self.memory.name_of(pid)} : {text}")
+
+    async def show_agent_meeting(self, state, agent_ids):
+        first, second = (state.player(pid).name for pid in agent_ids)
+        print(f"[Codex] {first} et {second} se sont entretenus en privé.")
+
+    async def show_valet_blocked(self, state, master_id):
+        print(f"[Valet] Ton maître, {state.player(master_id).name}, n'a pas voté : tu ne peux pas voter aujourd'hui.")
+
+    async def show_agent_unavailable(self, state, agent_id, step):
+        if step != "night":  # la nuit, l'annoncer révélerait que l'agent a un pouvoir
+            print(f"[Codex] {state.player(agent_id).name} n'a pas répondu (IA indisponible).")
 
     async def vote(self, state, player_id):
         options = [p.id for p in state.players if p.alive]
@@ -118,7 +153,7 @@ async def main():
 
     for turn_number in range(1, MAX_TURNS + 1):
         print(f"\n=== Tour {state.turn} ===")
-        result = await play_turn_with_human(state, rng, agents, memory, HUMAN_ID, human)
+        result = await play_turn(state, rng, agents, memory, HUMAN_ID, human)
         print("-- Votes --")
         for voter, target in result.votes.items():
             cible = state.player(target).name if target else "personne"
@@ -127,7 +162,7 @@ async def main():
         state = result.state
         save_histories(memory, state, run_dir / f"tour_{turn_number}")
         if result.game_winner is not None:
-            print(f"\n=== Fin de partie : victoire {result.game_winner.value} ===")
+            print(f"\n=== Fin de partie : victoire {WINNER_LABELS[result.game_winner]} ===")
             return
     print("\n=== Arrêt après le nombre maximum de tours ===")
 

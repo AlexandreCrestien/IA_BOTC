@@ -1,114 +1,142 @@
-"""Lance la partie dans le même processus que le serveur, à la première connexion du joueur humain."""
+"""Lance la partie dans le même processus que le serveur, à la première connexion du joueur humain.
+Une seule partie à la fois : la session courante (backend/server/session.py)."""
 import asyncio
 import logging
 import random
+import re
 from typing import Optional
 
-from backend.game_engine import setup_game
-from backend.human_port import QueueHumanPort
-from backend.human_turns import play_turn_with_human
-from backend.models import Alignement
-from backend.server.websockets import register_human, send_game_over, send_vote_result
+from backend.engine.config import AI_NAMES, PERSONALITY_NAMES
+from backend.engine.setup import setup_game
+from backend.models import Alignment
+from backend.server.protocol import CODEX, forward_requests, send_game_interrupted
+from backend.server.session import GameSession, current_session, set_current_session
+from backend.engine.turn import play_turn
 
 logger = logging.getLogger(__name__)
 
-# Noms des 5 agents IA (identifiant -> nom affiché)
-AI_NAMES = {
-    "p1": "marIA",
-    "p2": "tobIAs",
-    "p3": "mAIsie",
-    "p4": "adrIAn",
-    "p5": "dIAne",
-}
-
 # Configuration de la partie. Le joueur humain prend le pseudo qu'il choisit à la connexion.
 GAME_CONFIG = {
-    "personality_names": ["agitator", "clown", "observer", "paranoid", "strategist"],
+    "personality_names": PERSONALITY_NAMES,
     "seed": None,  # tests : fixer une graine pour rejouer la même partie
 }
 
-# Libellés affichés par le front (il reconnaît le camp du joueur au mot « Démon »)
-WINNER_LABELS = {
-    Alignement.BON: "Villageois",
-    Alignement.MAUVAIS: "Démons",
-}
+# Camp vainqueur, tel qu'envoyé au front (qui écrit le titre et compare au camp du joueur)
+WINNER_TEAMS = {Alignment.GOOD: "good", Alignment.EVIL: "evil"}
 
-_current: Optional[asyncio.Task] = None
-
-
-def _winner_label(winner) -> str:
-    return WINNER_LABELS.get(winner, str(winner))
-
-
-def _all_players(state):
-    players = state.players
-    return players.values() if isinstance(players, dict) else players
+# Motifs de refus envoyés au front (affichés sur l'écran d'accueil)
+REFUSED_PSEUDO = ("Pseudo invalide : 1 à 20 caractères parmi lettres, chiffres, tirets, « _ » et apostrophes, "
+                  "et différent du nom d'un personnage.")
+# Pseudo autorisé : lettres (accents compris), chiffres, - _ ' ’ ; 20 caractères au plus.
+# Même règle côté front (static/js/connection.js, PSEUDO_PATTERN).
+PSEUDO_PATTERN = re.compile(r"[\w'’-]{1,20}")
+REFUSED_BUSY = "Une partie est déjà en cours avec un autre joueur."
 
 
-async def run_game(names: dict[str, str], human_id: str, personality_names: list[str], seed=None):
+def front_ballots(result) -> list[dict]:
+    """Bulletins du tour pour le front, depuis ceux du moteur (mention outre-tombe),
+    plus les agents dont l'IA n'a pas répondu (abstention signalée)."""
+    return [
+        {"voter": b.voter, "target": b.target, "ghost": b.ghost, "unavailable": b.voter in result.vote_failures}
+        for b in result.ballots
+    ]
+
+
+async def run_game(session: GameSession, names: dict[str, str], personality_names: list[str], seed=None):
     rng = random.Random(seed)
-    state, agents, memory = setup_game(names, human_id, personality_names, rng)
-    port = QueueHumanPort()
-    port.memory = memory
-    port.state = state
-    register_human(human_id, port)
+    state, agents, memory = setup_game(names, session.human_id, personality_names, rng)
+    session.state, session.memory, session.agents = state, memory, agents
+    port = session.port
 
     while True:
         turn = state.turn
-        result = await play_turn_with_human(state, rng, agents, memory, human_id, port)
+        result = await play_turn(state, rng, agents, memory, session.human_id, port)
         state = result.state
-        port.state = state
-        port.votes_history.append({"turn": turn, "votes": result.votes, "executed": result.executed})
-
-        # Le front reçoit des noms, jamais des identifiants internes
-        label = {p.id: p.name for p in _all_players(state)}
-        votes = [
-            {"voter": label.get(voter, voter), "target": label.get(target, target) if target else None}
-            for voter, target in result.votes.items()
-        ]
-        executed = label.get(result.executed, result.executed) if result.executed else None
-        await send_vote_result(human_id, turn, executed, votes)
+        # Même file que les messages du moteur : le front reçoit tout dans l'ordre
+        # (sinon la fin de partie pourrait arriver avant les morts de la dernière nuit).
+        await port.show_turn_result(state, turn, front_ballots(result), result.executed)
 
         if result.game_winner is not None:
             logger.info("Partie terminée, vainqueur : %s", result.game_winner)
-            await send_game_over(
-                human_id,
-                _winner_label(result.game_winner),
-                "Le village a rendu son dernier verdict.",
-            )
+            await port.show_game_over(state, WINNER_TEAMS[result.game_winner],
+                                      "Le village a rendu son dernier verdict.")
             return state
 
 
-def _log_end(task: asyncio.Task) -> None:
+def _on_game_end(session: GameSession, task: asyncio.Task) -> None:
+    """Fin de la tâche de partie. Si elle a planté, le joueur est prévenu (sinon son écran resterait figé)."""
     if task.cancelled():
-        return
+        return  # abandon : le joueur a déjà été prévenu
     error = task.exception()
     if error is not None:
         logger.error("Partie interrompue", exc_info=error)
+        asyncio.ensure_future(send_game_interrupted(session.human_id))
 
 
-def start_game(names, human_id, personality_names, seed=None) -> asyncio.Task:
-    """Lance la partie si aucune n'est en cours. Doit être appelée depuis une coroutine."""
-    global _current
-    if _current is not None and not _current.done():
-        return _current
-    _current = asyncio.create_task(run_game(names, human_id, personality_names, seed))
-    _current.add_done_callback(_log_end)
-    return _current
+def start_game(human_id: str, names: dict[str, str], personality_names: list[str], seed=None) -> GameSession:
+    """Crée la session et lance la partie, avec le relais de ses demandes vers le front.
+    Doit être appelée depuis une coroutine."""
+    session = GameSession(human_id=human_id)
+    set_current_session(session)
+    session.forward_task = asyncio.create_task(forward_requests(session))
+    session.game_task = asyncio.create_task(run_game(session, names, personality_names, seed))
+    session.game_task.add_done_callback(lambda task: _on_game_end(session, task))
+    return session
+
+
+def _game_running() -> bool:
+    session = current_session()
+    return session is not None and session.running
 
 
 def _pseudo_is_valid(pseudo: str) -> bool:
-    """Refuse un pseudo vide, réservé, ou déjà pris par un agent (sans tenir compte de la casse)."""
-    taken = {k.casefold() for k in AI_NAMES} | {v.casefold() for v in AI_NAMES.values()} | {"game_master"}
-    return pseudo.strip() != "" and pseudo.casefold() not in taken
+    """Refuse un pseudo hors format (PSEUDO_PATTERN), réservé, ou déjà pris par un agent (sans tenir compte de la casse)."""
+    taken = {k.casefold() for k in AI_NAMES} | {v.casefold() for v in AI_NAMES.values()}
+    taken |= {"game_master", CODEX.casefold()}
+    return PSEUDO_PATTERN.fullmatch(pseudo) is not None and pseudo.casefold() not in taken
 
 
-def ensure_started(player_id: str) -> None:
-    """Lance la partie au premier joueur humain qui se connecte, avec son pseudo comme nom."""
-    if _current is not None:
-        return
+def can_join(player_id: str) -> Optional[str]:
+    """Le joueur peut-il entrer ? None si oui, sinon le motif du refus. Ne lance rien."""
     if not _pseudo_is_valid(player_id):
-        logger.warning("Pseudo refusé pour la partie : %r", player_id)
-        return
+        return REFUSED_PSEUDO
+    if _game_running() and player_id != current_session().human_id:
+        return REFUSED_BUSY
+    return None
+
+
+def ensure_started(player_id: str) -> Optional[str]:
+    """Appelée à chaque connexion. Renvoie None si le joueur peut jouer, sinon le motif du refus.
+
+    - partie en cours avec ce pseudo : reprise (le serveur renvoie l'état et la demande en attente) ;
+    - partie en cours avec un autre pseudo : refus ;
+    - aucune partie en cours (jamais lancée, terminée, plantée ou abandonnée) : nouvelle partie,
+      qui remplace la session précédente.
+    """
+    refusal = can_join(player_id)
+    if refusal is not None:
+        logger.warning("Connexion refusée pour %r : %s", player_id, refusal)
+        return refusal
+    if _game_running():
+        return None  # reprise de sa propre partie
+
+    previous = current_session()
+    if previous is not None:
+        previous.stop()  # le relais de la partie précédente tourne encore
     names = {player_id: player_id, **AI_NAMES}
-    start_game(names, player_id, GAME_CONFIG["personality_names"], GAME_CONFIG["seed"])
+    start_game(player_id, names, GAME_CONFIG["personality_names"], GAME_CONFIG["seed"])
+    return None
+
+
+def abandon_game(player_id: str) -> bool:
+    """Arrête la partie en cours de ce joueur. Renvoie False s'il n'a pas de partie en cours.
+
+    L'annulation interrompt le moteur où qu'il soit (attente du joueur, appel à un LLM).
+    """
+    session = current_session()
+    if session is None or not session.running or session.human_id != player_id:
+        return False
+    session.stop()
+    set_current_session(None)
+    logger.info("Partie abandonnée par %s", player_id)
+    return True

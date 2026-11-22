@@ -34,7 +34,7 @@ class RequestWhisperAction(BaseAction):
 
 
 class RespondWhisperPayload(StrictInput):
-    target_agent_id: str = Field(..., description="ID de l'agent dont on répond à l'invitation")
+    target_agent_id: str = Field(..., description="Nom de l'agent dont on répond à l'invitation")
     accepted: bool = Field(..., description="Vrai si accepté, Faux si refusé")
 
 class RespondWhisperInvitationAction(BaseAction):
@@ -61,13 +61,32 @@ class SubmitNightAction(BaseAction):
     payload: SubmitNightActionPayload
 
 
-class TriggerVotePhasePayload(StrictInput):
-    pass  # Aucun paramètre requis pour l'instant
+class DiscussionTimeoutPayload(StrictInput):
+    pass
 
-class TriggerVotePhaseAction(BaseAction):
-    """Déclencher le passage à la phase de vote."""
-    action: Literal["trigger_vote_phase"] = "trigger_vote_phase"
-    payload: TriggerVotePhasePayload = Field(default_factory=TriggerVotePhasePayload)
+class DiscussionTimeoutAction(BaseAction):
+    """Le joueur n'a pas choisi de salon privé à temps : un agent va lui proposer un entretien."""
+    action: Literal["discussion_timeout"] = "discussion_timeout"
+    payload: DiscussionTimeoutPayload = Field(default_factory=DiscussionTimeoutPayload)
+
+
+class SkipTurnPayload(StrictInput):
+    kind: Literal["public_message", "private_message", "private_partners"] = Field(
+        ..., description="Étape facultative à passer : message public, message privé (fin du salon), salon privé")
+
+class SkipTurnAction(BaseAction):
+    """Passer une étape facultative attendue par le moteur."""
+    action: Literal["skip_turn"] = "skip_turn"
+    payload: SkipTurnPayload
+
+
+class AbandonGamePayload(StrictInput):
+    pass
+
+class AbandonGameAction(BaseAction):
+    """Abandonner la partie en cours (le joueur revient à l'accueil)."""
+    action: Literal["abandon_game"] = "abandon_game"
+    payload: AbandonGamePayload = Field(default_factory=AbandonGamePayload)
 
 
 # Le type d'action est choisi uniquement d'après le champ "action" (obligatoire dans le paquet reçu).
@@ -78,70 +97,168 @@ ClientActionPacket = Annotated[
         RespondWhisperInvitationAction,
         SubmitVoteAction,
         SubmitNightAction,
-        TriggerVotePhaseAction,  # <--- AJOUTÉ ICI
+        DiscussionTimeoutAction,
+        SkipTurnAction,
+        AbandonGameAction,
     ],
     Field(discriminator="action"),
 ]
 
 
-# OUTPUTS / DTO (DATA TRANSFER OBJECT)
+# OUTPUTS : messages envoyés au front (static/js/connection.js, handleServerMessage)
+# Les joueurs sont toujours désignés par leur identifiant ; le front affiche leur nom
+# grâce à la liste des joueurs de game_state.
 
-class PlayerPublicDTO(BaseModel):
-    """Informations publiques visibles par tout le monde sur la table de jeu."""
+class OutMessage(BaseModel):
+    """Base des messages envoyés au front : un champ inconnu est une erreur de programmation."""
+    model_config = ConfigDict(extra="forbid")
+
+
+class FrontPlayer(OutMessage):
     id: str
     name: str
     alive: bool
-    has_vote: bool = Field(..., description="Vrai si le joueur a encore son vote (gère le dernier vote des joueurs morts)")
+    has_vote: bool = Field(..., description="Mort : voix d'outre-tombe encore disponible ou non")
 
 
-class HumanRoleDTO(BaseModel):
-    """Informations strictement privées sur le rôle de l'humain."""
-    name_fr: str
-    power_description: str
-    team: str
-    alignment: str
+class FrontGameState(OutMessage):
+    day: int
+    phase: Literal["nuit", "discussion", "vote"]
+    aliveCount: int
+    players: List[FrontPlayer]
 
 
-class ChannelDTO(BaseModel):
+class Ally(OutMessage):
     id: str
-    name: str
-    public: bool
-    members: List[str]
-    open: bool
+    role: str = Field(..., description="Nom français du rôle")
 
 
-class NightLogDTO(BaseModel):
-    """Représente une information reçue lors d'une nuit spécifique."""
-    night_number: int
+class Ballot(OutMessage):
+    voter: str
+    target: Optional[str] = Field(..., description="None : vote pour personne")
+    ghost: bool = Field(..., description="Votant déjà mort qui a voté : voix d'outre-tombe utilisée")
+    unavailable: bool = Field(default=False, description="L'IA du votant n'a pas répondu : abstention forcée")
+
+
+class NightHistoryEntry(OutMessage):
+    turn: int
+    type: Literal["role_info", "result"]
+    info: Optional[str] = Field(default=None, description="role_info : texte de l'information")
+    dead_player: Optional[str] = Field(default=None, description="result : mort de la nuit (None : personne)")
+
+
+class VoteHistoryEntry(OutMessage):
+    turn: int
+    voter: str
+    target: Optional[str]
+    executed: Optional[str]
+    unavailable: bool = False
+
+
+class Connected(OutMessage):
+    type: Literal["connected"] = "connected"
+
+
+class RoleAssigned(OutMessage):
+    type: Literal["role_assigned"] = "role_assigned"
+    role_name: str
+    description: str
+    allies: Optional[List[Ally]] = Field(default=None, description="Reconnexion d'un joueur du mal après la révélation")
+
+
+class GameStateMessage(OutMessage):
+    type: Literal["game_state"] = "game_state"
+    state: FrontGameState
+
+
+class ActionRequest(OutMessage):
+    type: Literal["action_request"] = "action_request"
+    kind: Literal["nuit", "vote", "discussion"]
+    candidates: List[str]
+    max_targets: Optional[int] = None
+    min_targets: Optional[int] = None
+    role: Optional[str] = Field(default=None, description="Nuit : nom anglais du rôle (textes du front)")
+
+
+class InputRequest(OutMessage):
+    type: Literal["input_request"] = "input_request"
+    kind: Literal["public_message", "private_message"]
+    channel_id: Optional[str]
+    text: str
+    left: Optional[int] = Field(default=None, description="Messages privés restants")
+
+
+class AgentWhisperRequest(OutMessage):
+    type: Literal["agent_whisper_request"] = "agent_whisper_request"
+    agent_id: str
+
+
+class ChatMessage(OutMessage):
+    type: Literal["chat"] = "chat"
+    channel_id: str
+    sender: str = Field(..., description="Identifiant du joueur, ou « Codex » pour les annonces")
     content: str
 
 
-class VoteRecordDTO(BaseModel):
-    """Représente un vote enregistré lors de la phase de jugement."""
+class PrivateChannelOpened(OutMessage):
+    type: Literal["private_channel_opened"] = "private_channel_opened"
+    channel_id: str
+    members: List[str]
+    text: str
+    focus: bool = Field(default=True, description="False : salon rouvert à la reconnexion, sans s'y placer")
+
+
+class History(OutMessage):
+    type: Literal["history"] = "history"
+    nights: List[NightHistoryEntry]
+    votes: List[VoteHistoryEntry]
+
+
+class NightInfo(OutMessage):
+    type: Literal["night_info"] = "night_info"
     turn: int
-    voter: str
-    target: Optional[str] = Field(default=None, description="Nom/ID du joueur visé ou None si vote blanc")
-    executed: Optional[str] = Field(default=None, description="Nom du joueur exécuté ce jour-là, s'il y en a un")
-  
+    info: str
+    allies: Optional[List[Ally]] = Field(default=None, description="Première nuit, camp du mal uniquement")
 
-class GameStateDTO(BaseModel):
-    """L'état global de la partie, envoyé à un joueur spécifique."""
+
+class NightResult(OutMessage):
+    type: Literal["night_result"] = "night_result"
     turn: int
-    phase: str 
-    players: List[PlayerPublicDTO]
-    channels: List[ChannelDTO]
-    my_role: Optional[HumanRoleDTO] = None
-    night_history: List[NightLogDTO] = Field(
-        default_factory=list, 
-        description="Historique de toutes les révélations nocturnes reçues depuis le début de la partie"
-    )
-    vote_history: List[VoteRecordDTO] = Field(
-        default_factory=list,
-        description="Historique complet des votes passés"
-    )
+    dead_player: Optional[str]
 
 
-class ServerMessage(BaseModel):
-    """Format standard des messages envoyés par le serveur vers le client via WebSocket."""
-    type: Literal["state_update", "chat_message", "night_request", "vote_request", "error"]
-    data: Union[GameStateDTO, dict, str]
+class NightActionAck(OutMessage):
+    type: Literal["night_action_ack"] = "night_action_ack"
+    text: str
+
+
+class VoteResult(OutMessage):
+    type: Literal["vote_result"] = "vote_result"
+    turn: int
+    executed: Optional[str]
+    votes: List[Ballot]
+
+
+class Announcement(OutMessage):
+    type: Literal["announcement"] = "announcement"
+    text: str
+
+
+class Error(OutMessage):
+    type: Literal["error"] = "error"
+    data: str
+
+
+class GameOver(OutMessage):
+    type: Literal["game_over"] = "game_over"
+    winner: Literal["good", "evil"]
+    details: str
+
+
+class GameAbandoned(OutMessage):
+    type: Literal["game_abandoned"] = "game_abandoned"
+
+
+class GameInterrupted(OutMessage):
+    type: Literal["game_interrupted"] = "game_interrupted"
+    text: str
