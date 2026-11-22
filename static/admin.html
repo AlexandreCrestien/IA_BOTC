@@ -191,6 +191,25 @@
         </main>
     </div>
 
+    <!-- Confirmation de suppression d'un compte (évite un clic malheureux) -->
+    <div id="modal-delete-account" class="modal-backdrop hidden">
+        <div class="modal-card w-[440px] text-center" data-tone="blood" role="alertdialog" aria-modal="true" aria-labelledby="delete-account-title">
+            <p class="modal-kicker ornament">Effacer du registre</p>
+            <h3 id="delete-account-title" class="modal-title my-2">Supprimer le compte ?</h3>
+            <p id="delete-account-text" class="font-serif text-base italic leading-relaxed opacity-90"></p>
+            <div class="modal-notice notice-blood text-left">
+                Le compte (pseudo, mot de passe) et ses succès seront <strong>définitivement</strong> supprimés.
+                Ses parties restent dans les statistiques, de façon anonyme (détachées du compte, datées au jour près).
+                Si le joueur a une partie en cours, elle sera arrêtée.
+            </div>
+            <p id="delete-account-error" role="alert" class="welcome-error hidden text-sm mt-3"></p>
+            <div class="flex gap-2 mt-5">
+                <button type="button" id="delete-account-cancel" class="btn-ghost flex-1">Annuler</button>
+                <button type="button" id="delete-account-confirm" class="btn-seal btn-blood flex-1">Supprimer définitivement</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Script JS -->
     <script src="/js/admin.js"></script>
 </body>

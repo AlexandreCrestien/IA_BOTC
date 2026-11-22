@@ -126,3 +126,62 @@ def test_admin_account_is_created_at_startup(monkeypatch, clean_server):
     monkeypatch.setenv("ADMIN_PASSWORD", "mot-de-passe-admin")
     with TestClient(app) as client:
         assert login(client, "Gardien", "mot-de-passe-admin").json()["is_admin"] is True
+
+
+# --- Suppression du compte par le joueur, comptes inactifs ----------------------------------
+
+def delete_me(client, password="mot-de-passe"):
+    return client.request("DELETE", "/api/account", json={"current_password": password})
+
+
+def test_player_deletes_his_account(client):
+    register(client)
+    other_device = TestClient(app)
+    login(other_device)
+
+    assert delete_me(client, "mauvais").status_code == 403  # mot de passe demandé
+    response = delete_me(client)
+    assert response.status_code == 204
+    assert f'{COOKIE_NAME}=""' in response.headers["set-cookie"]  # déconnecté
+    assert client.get("/api/auth/me").status_code == 401
+    assert other_device.get("/api/auth/me").status_code == 401   # partout
+    assert login(client).status_code == 401
+    assert register(client).status_code == 201                  # pseudo de nouveau libre
+
+
+def test_delete_account_requires_a_login(client):
+    assert delete_me(client).status_code == 401
+
+
+def test_admin_cannot_delete_his_own_account(monkeypatch, clean_server):
+    monkeypatch.setenv("ADMIN_PSEUDO", "Gardien")
+    monkeypatch.setenv("ADMIN_PASSWORD", "mot-de-passe-admin")
+    with TestClient(app) as client:
+        login(client, "Gardien", "mot-de-passe-admin")
+        response = delete_me(client, "mot-de-passe-admin")
+        assert response.status_code == 400
+        assert client.get("/api/auth/me").status_code == 200
+
+
+def test_inactive_accounts_are_purged_except_the_one_playing(clean_server, monkeypatch):
+    from datetime import timedelta
+    from backend.accounts import service
+    from backend.db import get_session
+    from backend.db.models import utcnow
+    from backend.server.account_removal import purge_inactive_accounts
+    from backend.server.session import GameSession, set_current_session
+
+    with TestClient(app) as client:
+        register(client, "Dormeur")
+        register(TestClient(app), "Joueur")
+        with get_session() as db:
+            for pseudo in ("Dormeur", "Joueur"):
+                service.find_by_pseudo(db, pseudo).last_seen_at = utcnow() - timedelta(days=400)
+            db.commit()
+            playing_id = service.find_by_pseudo(db, "Joueur").id
+        monkeypatch.setattr(GameSession, "running", property(lambda self: True))  # partie en cours
+        set_current_session(GameSession(human_id="Joueur", user_id=playing_id))
+
+        assert purge_inactive_accounts() == ["Dormeur"]
+        with get_session() as db:
+            assert service.find_by_pseudo(db, "Joueur") is not None

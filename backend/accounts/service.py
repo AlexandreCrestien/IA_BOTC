@@ -1,19 +1,27 @@
-"""Opérations sur les comptes : inscription, connexion, modification, réinitialisation, compte admin."""
+"""Opérations sur les comptes : inscription, connexion, modification, réinitialisation, suppression,
+comptes inactifs, compte admin."""
 import logging
 import os
 import secrets
-from typing import Optional
+from datetime import datetime, timedelta, timezone
+from typing import Iterable, Optional
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.accounts.passwords import hash_password, password_error, spend_verification_time, verify_password
 from backend.accounts.pseudo import INVALID_PSEUDO, normalize_pseudo, pseudo_is_valid
 from backend.accounts.tokens import read_token
-from backend.db import User, pseudo_key
+from backend.db import GameRecord, UnlockedAchievement, User, pseudo_key
+from backend.db.models import utcnow
 
 logger = logging.getLogger(__name__)
+
+# Compte supprimé automatiquement sans connexion pendant cette durée (minimisation des données, RGPD)
+INACTIVITY_LIMIT = timedelta(days=365)
+# Dernière activité enregistrée au plus une fois par jour (évite une écriture à chaque requête)
+ACTIVITY_PRECISION = timedelta(days=1)
 
 PSEUDO_TAKEN = "Ce pseudo est déjà pris."
 WRONG_PASSWORD = "Mot de passe actuel incorrect."
@@ -60,7 +68,7 @@ def _commit(db: Session) -> None:
 def register(db: Session, pseudo: str, password: str) -> User:
     pseudo = _check_pseudo(db, pseudo)
     _check_password(password)
-    user = User(pseudo=pseudo, password_hash=hash_password(password))
+    user = User(pseudo=pseudo, password_hash=hash_password(password), last_seen_at=utcnow())
     db.add(user)
     _commit(db)
     logger.info("Compte créé : %s", pseudo)
@@ -73,7 +81,23 @@ def authenticate(db: Session, pseudo: str, password: str) -> Optional[User]:
     if user is None:
         spend_verification_time(password)
         return None
-    return user if verify_password(password, user.password_hash) else None
+    if not verify_password(password, user.password_hash):
+        return None
+    mark_active(db, user, force=True)
+    return user
+
+
+def _as_utc(moment: datetime) -> datetime:
+    """SQLite rend les dates sans fuseau : elles sont toujours enregistrées en UTC."""
+    return moment if moment.tzinfo is not None else moment.replace(tzinfo=timezone.utc)
+
+
+def mark_active(db: Session, user: User, force: bool = False) -> None:
+    """Note l'activité du compte (connexion, visite connectée), au plus une fois par jour sauf force."""
+    now = utcnow()
+    if force or user.last_seen_at is None or now - _as_utc(user.last_seen_at) >= ACTIVITY_PRECISION:
+        user.last_seen_at = now
+        db.commit()
 
 
 def user_from_token(db: Session, token: str) -> Optional[User]:
@@ -84,6 +108,7 @@ def user_from_token(db: Session, token: str) -> Optional[User]:
     user = db.get(User, claims.user_id)
     if user is None or user.token_version != claims.version:
         return None
+    mark_active(db, user)
     return user
 
 
@@ -119,6 +144,45 @@ def reset_password(db: Session, user: User) -> str:
     _commit(db)
     logger.info("Mot de passe réinitialisé par l'admin pour %s", user.pseudo)
     return temporary
+
+
+def delete_account(db: Session, user: User, reason: str = "à sa demande") -> None:
+    """Suppression d'un compte, la même par le joueur, par l'admin ou pour inactivité :
+    - supprimés : le compte (pseudo, mot de passe) et ses succès ;
+    - gardées, anonymisées : ses parties, détachées du compte et datées au jour près (sans l'heure), pour les
+      statistiques du jeu. Elles ne permettent plus de retrouver le joueur.
+    Le compte admin ne peut pas être supprimé. L'appelant arrête d'abord la partie en cours du compte."""
+    if user.is_admin:
+        raise AccountError("Le compte administrateur ne peut pas être supprimé.")
+    pseudo = user.pseudo
+    db.execute(delete(UnlockedAchievement).where(UnlockedAchievement.user_id == user.id))
+    for game in db.scalars(select(GameRecord).where(GameRecord.user_id == user.id)):
+        game.user_id = None
+        game.started_at = _as_utc(game.started_at).replace(hour=0, minute=0, second=0, microsecond=0)
+        game.ended_at = None
+    db.flush()
+    db.delete(user)
+    db.commit()
+    logger.info("Compte supprimé (%s) : %s", reason, pseudo)
+
+
+def inactive_accounts(db: Session, now: Optional[datetime] = None) -> list[User]:
+    """Comptes joueurs sans activité depuis INACTIVITY_LIMIT (jamais le compte admin)."""
+    limit = (now or utcnow()) - INACTIVITY_LIMIT
+    return list(db.scalars(select(User).where(User.is_admin.is_(False), User.last_seen_at < limit)))
+
+
+def delete_inactive_accounts(db: Session, keep: Iterable[int] = (), now: Optional[datetime] = None) -> list[str]:
+    """Supprime les comptes inactifs depuis un an, sauf ceux de `keep` (partie en cours).
+    Renvoie les pseudos supprimés."""
+    keep = set(keep)
+    deleted = []
+    for user in inactive_accounts(db, now):
+        if user.id in keep:
+            continue
+        deleted.append(user.pseudo)
+        delete_account(db, user, reason="inactif depuis un an")
+    return deleted
 
 
 def ensure_admin(db: Session, pseudo: Optional[str] = None, password: Optional[str] = None) -> Optional[User]:

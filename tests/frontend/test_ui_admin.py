@@ -45,6 +45,8 @@ class FakeAdminServer:
         page.route(API, self._admin_data)
         page.route("**/admin/users", lambda route: fulfill(route, body=USERS))
         page.route("**/admin/users/*/reset-password", self._reset)
+        page.route("**/admin/users/*", self._delete)
+        self.delete_status = 204
         page.route("**/api/auth/login", self._login)
         page.route("**/api/auth/logout", self._logout)
 
@@ -64,6 +66,15 @@ class FakeAdminServer:
         self.calls.append(("logout", None))
         self.logged_in = False
         route.fulfill(status=204)
+
+    def _delete(self, route):
+        if route.request.method != "DELETE":
+            return route.fallback()
+        self.calls.append(("delete", route.request.url))
+        if self.delete_status == 204:
+            route.fulfill(status=204)
+        else:
+            fulfill(route, self.delete_status, {"detail": "Le compte administrateur ne peut pas être supprimé."})
 
     def _reset(self, route):
         self.calls.append(("reset", route.request.url))
@@ -232,3 +243,45 @@ def test_no_game_message_from_server(page, static_url):
 
     expect(page.locator("#no-data-notice")).to_have_text("Aucune partie n'a encore été lancée.")
     expect(page.locator("#players-container")).to_contain_text("Aucune partie en cours.")
+
+
+def test_delete_account_asks_for_confirmation(page, static_url):
+    server = mock_api(page)
+    login(page, static_url)
+    page.locator("#accounts-container tr", has_text="Vesper").locator(".delete-account-btn").click()
+
+    modal = page.locator("#modal-delete-account")
+    expect(modal).to_be_visible()
+    expect(modal).to_contain_text("Compte : Vesper")
+    expect(page.locator("#delete-account-cancel")).to_be_focused()  # Entrée par réflexe : annule
+    page.click("#delete-account-cancel")
+    expect(modal).to_be_hidden()
+    assert not any(call[0] == "delete" for call in server.calls)
+
+
+def test_delete_account_once_confirmed(page, static_url):
+    server = mock_api(page)
+    login(page, static_url)
+    page.locator("#accounts-container tr", has_text="Vesper").locator(".delete-account-btn").click()
+    page.click("#delete-account-confirm")
+
+    expect(page.locator("#modal-delete-account")).to_be_hidden()
+    expect(page.locator("#reset-result")).to_have_text("Le compte Vesper a été supprimé.")
+    assert any(call[0] == "delete" and call[1].endswith("/admin/users/2") for call in server.calls)
+
+
+def test_delete_account_error_stays_in_the_modal(page, static_url):
+    server = mock_api(page)
+    server.delete_status = 400
+    login(page, static_url)
+    page.locator("#accounts-container tr", has_text="Vesper").locator(".delete-account-btn").click()
+    page.click("#delete-account-confirm")
+    expect(page.locator("#delete-account-error")).to_have_text("Le compte administrateur ne peut pas être supprimé.")
+    page.keyboard.press("Escape")
+    expect(page.locator("#modal-delete-account")).to_be_hidden()
+
+
+def test_admin_account_has_no_delete_button(page, static_url):
+    mock_api(page)
+    login(page, static_url)
+    expect(page.locator("#accounts-container tr", has_text="Gardien").locator(".delete-account-btn")).to_have_count(0)

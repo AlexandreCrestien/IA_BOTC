@@ -18,6 +18,11 @@ window.addEventListener('DOMContentLoaded', () => {
         login();
     });
     document.getElementById('refresh-btn').addEventListener('click', fetchAdminData);
+    document.getElementById('delete-account-cancel').addEventListener('click', closeDeleteModal);
+    document.getElementById('delete-account-confirm').addEventListener('click', confirmDeleteAccount);
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') closeDeleteModal();
+    });
     document.getElementById('logout-btn').addEventListener('click', logout);
 
     // Déjà connecté (cookie) : panneau directement ; sinon l'écran de connexion reste affiché, sans erreur
@@ -180,10 +185,16 @@ function renderAccounts(users) {
                         <td class="font-semibold">${escapeHtml(u.pseudo)}${u.is_admin ? ' <span class="opacity-60 font-normal">(admin)</span>' : ''}</td>
                         <td>${escapeHtml(formatDate(u.created_at))}</td>
                         <td>${u.is_admin ? '<span class="opacity-50">—</span>' : `
-                            <button type="button" class="btn-ghost admin-btn reset-password-btn"
-                                data-user-id="${escapeHtml(u.id)}" data-pseudo="${escapeHtml(u.pseudo)}">
-                                Réinitialiser le mot de passe
-                            </button>`}</td>
+                            <div class="flex flex-wrap gap-2">
+                                <button type="button" class="btn-ghost admin-btn reset-password-btn"
+                                    data-user-id="${escapeHtml(u.id)}" data-pseudo="${escapeHtml(u.pseudo)}">
+                                    Réinitialiser le mot de passe
+                                </button>
+                                <button type="button" class="btn-ghost admin-btn admin-btn-danger delete-account-btn"
+                                    data-user-id="${escapeHtml(u.id)}" data-pseudo="${escapeHtml(u.pseudo)}">
+                                    Supprimer le compte
+                                </button>
+                            </div>`}</td>
                     </tr>
                 `).join('')}
             </tbody>
@@ -192,6 +203,55 @@ function renderAccounts(users) {
     container.querySelectorAll('.reset-password-btn').forEach(btn => {
         btn.addEventListener('click', () => resetPassword(btn.dataset.userId, btn.dataset.pseudo));
     });
+    container.querySelectorAll('.delete-account-btn').forEach(btn => {
+        btn.addEventListener('click', () => openDeleteModal(btn.dataset.userId, btn.dataset.pseudo));
+    });
+}
+
+// ================= SUPPRESSION D'UN COMPTE (confirmation en modale) =================
+let accountToDelete = null; // { id, pseudo }
+
+function openDeleteModal(userId, pseudo) {
+    accountToDelete = { id: userId, pseudo };
+    document.getElementById('delete-account-text').textContent = `Compte : ${pseudo}`;
+    setDeleteError(null);
+    document.getElementById('modal-delete-account').classList.remove('hidden');
+    document.getElementById('delete-account-cancel').focus(); // Entrée par réflexe : annule
+}
+
+function closeDeleteModal() {
+    accountToDelete = null;
+    document.getElementById('modal-delete-account').classList.add('hidden');
+}
+
+function setDeleteError(text) {
+    const el = document.getElementById('delete-account-error');
+    el.textContent = text || '';
+    el.classList.toggle('hidden', !text);
+}
+
+async function confirmDeleteAccount() {
+    if (!accountToDelete) return;
+    const { id, pseudo } = accountToDelete;
+    const button = document.getElementById('delete-account-confirm');
+    button.disabled = true;
+    let response;
+    try {
+        response = await fetch(`${USERS_API_URL}/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    } catch (err) {
+        console.error(err);
+        button.disabled = false;
+        return setDeleteError("Impossible de joindre le serveur.");
+    }
+    button.disabled = false;
+    if (response.status === 401) {
+        closeDeleteModal();
+        return showLoginScreen("Votre session a expiré. Reconnectez-vous.");
+    }
+    if (!response.ok) return setDeleteError(await errorDetail(response, "La suppression a échoué."));
+    closeDeleteModal();
+    showResetResult(`Le compte ${pseudo} a été supprimé.`);
+    await fetchAccounts();
 }
 
 async function resetPassword(userId, pseudo) {

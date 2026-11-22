@@ -242,3 +242,23 @@
 }
 .form-success { color: oklch(0.75 0.12 150); }
 .form-success.hidden { display: none; }
+
+/* Suppression du compte, en bas du profil */
+.danger-zone {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid color-mix(in oklab, var(--blood) 35%, transparent);
+}
+.btn-danger {
+  color: oklch(0.72 0.17 25);
+  border-color: color-mix(in oklab, var(--blood) 55%, transparent);
+}
+.btn-danger:hover {
+  background-color: color-mix(in oklab, var(--blood) 18%, transparent);
+  color: oklch(0.8 0.15 25);
+}

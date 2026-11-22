@@ -95,7 +95,14 @@ function switchWelcomeTab(tab) {
 // Au chargement : joueur connecté → tableau de bord (ou sa partie avec /?play) ;
 // invité → accueil, avec la reprise de sa partie si l'onglet avait été fermé
 async function initWelcome() {
-    const wantsToPlay = new URLSearchParams(location.search).has(PLAY_PARAM);
+    const params = new URLSearchParams(location.search);
+    const wantsToPlay = params.has(PLAY_PARAM);
+    if (params.has('deleted')) {
+        // Compte supprimé depuis le tableau de bord
+        document.getElementById('welcome-notice').textContent = "Votre compte a été supprimé.";
+        document.getElementById('welcome-notice').classList.remove('hidden');
+        history.replaceState(null, '', '/');
+    }
     const [user, game] = await Promise.all([fetchCurrentUser(), fetchCurrentGame()]);
     currentUser = user;
     refreshGameMenu();

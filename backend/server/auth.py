@@ -14,10 +14,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from backend.accounts import service
+from backend.accounts.passwords import verify_password
 from backend.accounts.pseudo import normalize_pseudo
 from backend.accounts.service import AccountError
 from backend.accounts.tokens import COOKIE_NAME, TOKEN_LIFETIME, create_token
 from backend.db import User, get_session, pseudo_key
+from backend.server.account_removal import remove_account
 from backend.server.game_records import claim_guest_game
 from backend.server.session import current_session
 
@@ -107,6 +109,10 @@ class PseudoChange(BaseModel):
 class PasswordChange(BaseModel):
     current_password: str = Field(max_length=200)
     new_password: str = Field(max_length=200)
+
+
+class AccountDeletion(BaseModel):
+    current_password: str = Field(max_length=200)
 
 
 class UserOut(BaseModel):
@@ -208,3 +214,18 @@ def change_password(body: PasswordChange, response: Response, user: User = Depen
         _refuse(error)
     set_login_cookie(response, user)
     return user_out(user)
+
+
+@router.delete("/account", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_my_account(body: AccountDeletion, response: Response, user: User = Depends(current_user),
+                            db: Session = Depends(db_session)) -> None:
+    """Le joueur supprime son compte (mot de passe actuel demandé) : compte et succès effacés, parties gardées
+    anonymement. Sa partie en cours est arrêtée, et il est déconnecté."""
+    if not verify_password(body.current_password, user.password_hash):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, service.WRONG_PASSWORD)
+    try:
+        await remove_account(db, user, reason="à sa demande")
+    except AccountError as error:
+        _refuse(error)
+    response.delete_cookie(COOKIE_NAME, path="/", httponly=True, samesite="lax")
+

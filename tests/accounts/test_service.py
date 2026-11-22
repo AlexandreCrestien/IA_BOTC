@@ -107,3 +107,72 @@ def test_ensure_admin_reads_the_environment(db, monkeypatch):
     monkeypatch.setenv("ADMIN_PSEUDO", "Gardien")
     monkeypatch.setenv("ADMIN_PASSWORD", "mot-de-passe-admin")
     assert service.ensure_admin(db).pseudo == "Gardien"
+
+
+def test_delete_account_keeps_anonymous_games(db):
+    """Compte et succès supprimés ; parties détachées du compte, datées au jour près, gardées pour les statistiques."""
+    from datetime import datetime, timezone
+    from backend.db import GameRecord, UnlockedAchievement
+    from backend.models import Alignment, RoleKey
+    user, other = account(db, "Vesper"), account(db, "Ombre")
+    played = datetime(2026, 11, 21, 20, 47, 13, tzinfo=timezone.utc)
+    for owner in (user, other):
+        db.add_all([GameRecord(user=owner, role=RoleKey.VALET, alignment=Alignment.GOOD, started_at=played,
+                               ended_at=played, turns=4),
+                    UnlockedAchievement(user=owner, code="win_valet")])
+    db.commit()
+
+    service.delete_account(db, user)
+    assert service.find_by_pseudo(db, "Vesper") is None
+    assert {a.user_id for a in db.query(UnlockedAchievement)} == {other.id}
+    anonymous = db.query(GameRecord).filter(GameRecord.user_id.is_(None)).one()
+    assert (anonymous.role, anonymous.turns, anonymous.ended_at) == (RoleKey.VALET, 4, None)
+    assert anonymous.started_at.replace(tzinfo=None) == datetime(2026, 11, 21)  # jour seulement, sans l'heure
+    assert db.query(GameRecord).filter(GameRecord.user_id == other.id).one().started_at.hour == 20  # intacte
+    assert account(db, "Vesper").id is not None  # le pseudo est de nouveau libre
+
+
+def test_admin_account_cannot_be_deleted(db):
+    admin = service.ensure_admin(db, "Gardien", "mot-de-passe-admin")
+    assert refusal(lambda: service.delete_account(db, admin)).status == 400
+    assert service.find_by_pseudo(db, "Gardien") is admin
+
+
+
+# --- Activité et comptes inactifs ------------------------------------------------------------
+
+def test_activity_is_recorded_at_login_and_at_most_daily(db):
+    from datetime import timedelta
+    from backend.db.models import utcnow
+    user = account(db)
+    long_ago = utcnow() - timedelta(days=30)
+    user.last_seen_at = long_ago
+    db.commit()
+    service.authenticate(db, "Vesper", "mot-de-passe")
+    assert user.last_seen_at > long_ago                       # connexion : toujours notée
+
+    recent = utcnow() - timedelta(hours=2)
+    user.last_seen_at = recent
+    db.commit()
+    service.user_from_token(db, create_token(user.id, user.token_version))
+    assert user.last_seen_at == recent                        # visite dans la journée : pas de nouvelle écriture
+    user.last_seen_at = utcnow() - timedelta(days=2)
+    db.commit()
+    service.user_from_token(db, create_token(user.id, user.token_version))
+    assert utcnow() - service._as_utc(user.last_seen_at) < timedelta(minutes=1)
+
+
+def test_inactive_accounts_are_deleted_after_a_year(db):
+    from datetime import timedelta
+    from backend.db.models import utcnow
+    admin = service.ensure_admin(db, "Gardien", "mot-de-passe-admin")
+    sleeper, playing, active = account(db, "Dormeur"), account(db, "Joueur"), account(db, "Actif")
+    for user in (admin, sleeper, playing):
+        user.last_seen_at = utcnow() - timedelta(days=400)
+    active.last_seen_at = utcnow() - timedelta(days=364)
+    db.commit()
+
+    deleted = service.delete_inactive_accounts(db, keep=[playing.id])
+    assert deleted == ["Dormeur"]
+    remaining = {u.pseudo for u in db.query(User)}
+    assert remaining == {"Gardien", "Joueur", "Actif"}  # admin jamais supprimé ; partie en cours épargnée

@@ -93,6 +93,7 @@ Réponses en JSON. Une erreur renvoie `{"detail": "<message en français>"}`, af
 | `GET /api/auth/me` | — | Compte connecté : `id`, `pseudo`, `is_admin` |
 | `PATCH /api/account/pseudo` | `current_password`, `pseudo` | 409 pendant une partie en cours du compte |
 | `PATCH /api/account/password` | `current_password`, `new_password` | Les autres appareils sont déconnectés ; celui-ci reçoit un nouveau cookie |
+| `DELETE /api/account` | `current_password` | 204 : compte et succès supprimés, parties gardées anonymement, partie en cours arrêtée, cookie effacé. 403 si le mot de passe est faux, 400 pour le compte admin |
 
 `guest_token` : la partie de l'invité (en cours, ou gagnée ou perdue et encore affichée) est rattachée au compte (`game_claimed`). Si elle était terminée, `achievements` contient les succès qu'elle débloque.
 
@@ -113,6 +114,7 @@ Réponses en JSON. Une erreur renvoie `{"detail": "<message en français>"}`, af
 | `GET /admin/debug/all-states` | État complet de la partie présente sur le serveur (rien n'est caché) |
 | `GET /admin/users` | Comptes : `id`, `pseudo`, `is_admin`, `created_at` |
 | `POST /admin/users/{id}/reset-password` | `pseudo`, `temporary_password` (affiché une seule fois). Refusé pour le compte admin |
+| `DELETE /admin/users/{id}` | 204 : même suppression que `DELETE /api/account` ; sa partie en cours est arrêtée (l'écran de jeu reçoit `game_abandoned`). Refusé pour le compte admin |
 
 ### Adresse inconnue
 

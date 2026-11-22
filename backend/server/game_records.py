@@ -83,6 +83,8 @@ def close_record(session: GameSession, status: GameStatus, turns: Optional[int] 
     try:
         with get_session() as db:
             record = db.get(GameRecord, session.record_id)
+            if record is None:  # compte supprimé entre-temps
+                return
             record.status, record.turns, record.ended_at = status, turns, session.ended_at
             _unlock_achievements(db, session, record)
             db.commit()

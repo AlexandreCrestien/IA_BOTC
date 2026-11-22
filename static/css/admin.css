@@ -163,3 +163,13 @@
   border-color: rgb(239 68 68 / 30%);
   background-color: rgb(69 10 10 / 15%);
 }
+
+/* Action irréversible (suppression d'un compte) */
+.admin-btn-danger {
+  color: oklch(0.72 0.17 25);
+  border-color: color-mix(in oklab, var(--blood) 55%, transparent);
+}
+.admin-btn-danger:hover {
+  background-color: color-mix(in oklab, var(--blood) 18%, transparent);
+  color: oklch(0.8 0.15 25);
+}

@@ -206,3 +206,42 @@ def test_no_shortcut_highlighted_at_the_top_of_a_short_page(page, static_url):
     open_dashboard(page, static_url)
     page.wait_for_timeout(200)
     expect(page.locator(".dash-nav-link.is-active")).to_have_count(0)
+
+
+def test_delete_account_modal_explains_what_is_deleted(page, static_url):
+    api = open_dashboard(page, static_url)
+    page.click("#delete-account-btn")
+    modal = page.locator("#modal-delete-account")
+    expect(modal).to_be_visible()
+    expect(modal).to_contain_text("vos succès")
+    expect(modal).to_contain_text("Gardés de façon anonyme")
+    expect(page.locator("#delete-account-password")).to_be_focused()
+
+    page.click("#delete-account-confirm")  # sans mot de passe : rien n'est envoyé
+    expect(page.locator("#delete-account-error")).to_contain_text("mot de passe")
+    page.click("#delete-account-cancel")
+    expect(modal).to_be_hidden()
+    assert api.sent("DELETE", "/api/account") == []
+
+
+def test_delete_account_wrong_password(page, static_url):
+    api = open_dashboard(page, static_url)
+    api.set("DELETE", "/api/account", 403, {"detail": "Mot de passe actuel incorrect."})
+    page.click("#delete-account-btn")
+    page.fill("#delete-account-password", "mauvais")
+    page.press("#delete-account-password", "Enter")
+    expect(page.locator("#delete-account-error")).to_have_text("Mot de passe actuel incorrect.")
+    expect(page.locator("#modal-delete-account")).to_be_visible()
+
+
+def test_delete_account_then_welcome_confirms(page, static_url):
+    api = open_dashboard(page, static_url)
+    api.set("DELETE", "/api/account", 204, None)
+    page.click("#delete-account-btn")
+    page.fill("#delete-account-password", "mot-de-passe")
+    api.set("GET", "/api/auth/me", 401, {"detail": "Vous n'êtes pas connecté."})
+    page.click("#delete-account-confirm")
+
+    expect(page.locator("#welcome-notice")).to_have_text("Votre compte a été supprimé.")
+    assert api.sent("DELETE", "/api/account") == [{"current_password": "mot-de-passe"}]
+    assert not page.url.endswith("deleted")  # l'adresse est nettoyée

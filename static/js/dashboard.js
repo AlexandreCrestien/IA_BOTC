@@ -113,8 +113,17 @@ function bindEvents() {
         event.preventDefault();
         changePassword();
     });
+    document.getElementById('delete-account-btn').addEventListener('click', openDeleteModal);
+    document.getElementById('delete-account-cancel').addEventListener('click', closeDeleteModal);
+    document.getElementById('delete-account-form').addEventListener('submit', (event) => {
+        event.preventDefault();
+        deleteAccount();
+    });
     document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape') toggleAbandonModal(false);
+        if (event.key === 'Escape') {
+            toggleAbandonModal(false);
+            closeDeleteModal();
+        }
     });
 }
 
@@ -271,6 +280,35 @@ async function changePassword() {
     if (!result.ok) return setFormMessages('password', errorText(result, "Le changement de mot de passe a échoué."));
     document.getElementById('password-form').reset();
     setFormMessages('password', null, "Mot de passe modifié. Vos autres appareils ont été déconnectés.");
+}
+
+// ================= SUPPRESSION DU COMPTE =================
+function openDeleteModal() {
+    document.getElementById('delete-account-form').reset();
+    setDeleteError(null);
+    document.getElementById('modal-delete-account').classList.remove('hidden');
+    document.getElementById('delete-account-password').focus();
+}
+
+function closeDeleteModal() {
+    document.getElementById('modal-delete-account').classList.add('hidden');
+}
+
+function setDeleteError(text) {
+    const el = document.getElementById('delete-account-error');
+    el.textContent = text || '';
+    el.classList.toggle('hidden', !text);
+}
+
+async function deleteAccount() {
+    const password = document.getElementById('delete-account-password').value;
+    if (!password) return setDeleteError("Entrez votre mot de passe actuel pour confirmer.");
+    const button = document.getElementById('delete-account-confirm');
+    button.disabled = true;
+    const result = await api('/api/account', { method: 'DELETE', data: { current_password: password } });
+    button.disabled = false;
+    if (!result.ok) return setDeleteError(errorText(result, "La suppression a échoué."));
+    location.replace('/?deleted'); // l'accueil confirme la suppression
 }
 
 // ================= UTILITAIRES =================

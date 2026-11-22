@@ -9,13 +9,13 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from sqlalchemy import Engine, create_engine, event
+from sqlalchemy import Engine, MetaData, create_engine, event, inspect
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from backend.db.games import interrupt_unfinished_games
-from backend.db.models import Base
+from backend.db.models import Base, GameRecord, User
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +56,7 @@ def init_db(url: Optional[str] = None) -> Engine:
         _engine.dispose()
     _engine = _create_engine(url)
     Base.metadata.create_all(_engine)
+    _upgrade_schema(_engine)
     _sessions.configure(bind=_engine)
 
     with get_session() as db:
@@ -65,6 +66,43 @@ def init_db(url: Optional[str] = None) -> Engine:
         logger.info("%d partie(s) restée(s) en cours marquée(s) comme interrompue(s)", interrupted)
     logger.info("Base de données prête : %s", make_url(url).render_as_string(hide_password=True))
     return _engine
+
+
+def _upgrade_schema(engine: Engine) -> None:
+    """Met à niveau une base créée par une version précédente (create_all ne modifie pas les tables existantes).
+    Mise à niveau provisoire, à remplacer par des migrations Alembic (axe d'amélioration) :
+    - users.last_seen_at : ajoutée, remplie avec la date de création ;
+    - games.user_id : devient facultatif (parties anonymisées). SQLite ne sait pas modifier une colonne :
+      la table est recréée et ses lignes recopiées."""
+    columns = {c["name"] for c in inspect(engine).get_columns("users")}
+    if "last_seen_at" not in columns:
+        with engine.begin() as conn:
+            conn.exec_driver_sql("ALTER TABLE users ADD COLUMN last_seen_at DATETIME")
+            conn.exec_driver_sql("UPDATE users SET last_seen_at = created_at")
+        logger.info("Base mise à niveau : users.last_seen_at")
+
+    user_id = next(c for c in inspect(engine).get_columns("games") if c["name"] == "user_id")
+    if user_id["nullable"] or engine.dialect.name != "sqlite":
+        return
+    metadata = MetaData()
+    User.__table__.to_metadata(metadata)  # cible de la clé étrangère
+    new_games = GameRecord.__table__.to_metadata(metadata, name="games_new")
+    new_games.indexes.clear()  # recréés après le renommage (mêmes noms que ceux de l'ancienne table)
+    names = ", ".join(column.name for column in new_games.columns)
+    with engine.connect() as conn:
+        # Clés étrangères suspendues pendant la recopie (sans effet si une transaction est ouverte : commit avant)
+        conn.exec_driver_sql("PRAGMA foreign_keys=OFF")
+        conn.commit()
+        with conn.begin():
+            new_games.create(conn)
+            conn.exec_driver_sql(f"INSERT INTO games_new ({names}) SELECT {names} FROM games")
+            conn.exec_driver_sql("DROP TABLE games")
+            conn.exec_driver_sql("ALTER TABLE games_new RENAME TO games")
+            for index in GameRecord.__table__.indexes:
+                index.create(conn)
+        conn.exec_driver_sql("PRAGMA foreign_keys=ON")
+        conn.commit()
+    logger.info("Base mise à niveau : games.user_id facultatif (parties anonymisées)")
 
 
 def get_session() -> Session:

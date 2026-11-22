@@ -60,6 +60,9 @@ class User(Base):
     # Incrémenté pour invalider les jetons déjà émis (changement de mot de passe, réinitialisation)
     token_version: Mapped[int] = mapped_column(default=0)
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    # Dernière activité (connexion, visite connectée, au plus une mise à jour par jour) :
+    # un compte inactif depuis un an est supprimé automatiquement (backend/server/maintenance.py)
+    last_seen_at: Mapped[datetime] = mapped_column(default=utcnow)
 
     games: Mapped[list["GameRecord"]] = relationship(back_populates="user")
     achievements: Mapped[list["UnlockedAchievement"]] = relationship(back_populates="user")
@@ -77,11 +80,14 @@ def pseudo_key(pseudo: str) -> str:
 
 class GameRecord(Base):
     """Une partie jouée par un compte. Les parties des invités ne sont pas enregistrées, sauf s'ils s'inscrivent
-    pendant la partie ou sur l'écran de fin : elle est alors enregistrée à ce moment-là, pour le nouveau compte."""
+    pendant la partie ou sur l'écran de fin : elle est alors enregistrée à ce moment-là, pour le nouveau compte.
+
+    user_id vide : partie anonymisée, après la suppression de son compte. Elle ne garde que le résumé
+    (jour, rôle, camp, issue, tours), sans lien avec personne, pour les statistiques du jeu."""
     __tablename__ = "games"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), index=True)
     started_at: Mapped[datetime] = mapped_column(default=utcnow)
     ended_at: Mapped[Optional[datetime]]
     role: Mapped[RoleKey] = mapped_column(_enum(RoleKey))
@@ -89,7 +95,7 @@ class GameRecord(Base):
     turns: Mapped[int] = mapped_column(default=0)
     status: Mapped[GameStatus] = mapped_column(_enum(GameStatus), default=GameStatus.IN_PROGRESS, index=True)
 
-    user: Mapped[User] = relationship(back_populates="games")
+    user: Mapped[Optional[User]] = relationship(back_populates="games")
 
 
 class UnlockedAchievement(Base):

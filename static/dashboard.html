@@ -135,6 +135,15 @@
                     <p id="password-success" role="status" class="form-success hidden text-sm text-center"></p>
                 </form>
             </div>
+
+            <!-- Suppression du compte : confirmation en modale -->
+            <div class="danger-zone">
+                <div>
+                    <p class="modal-kicker">Supprimer mon compte</p>
+                    <p class="text-sm opacity-75">Votre compte et vos succès sont effacés définitivement. Vos parties restent dans les statistiques du jeu, de façon anonyme.</p>
+                </div>
+                <button type="button" id="delete-account-btn" class="btn-ghost btn-danger shrink-0">Supprimer mon compte</button>
+            </div>
         </section>
     </main>
 
@@ -150,6 +159,33 @@
                 <button type="button" id="abandon-cancel" class="btn-ghost flex-1">Continuer la partie</button>
                 <button type="button" id="abandon-confirm" class="btn-seal btn-blood flex-1">Abandonner</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Confirmation de la suppression du compte -->
+    <div id="modal-delete-account" class="modal-backdrop hidden">
+        <div class="modal-card w-[460px]" data-tone="blood" role="alertdialog" aria-modal="true" aria-labelledby="delete-account-title">
+            <p class="modal-kicker ornament text-center">Quitter Lantern Hollow</p>
+            <h3 id="delete-account-title" class="modal-title my-2 text-center">Supprimer votre compte ?</h3>
+            <div class="modal-notice notice-blood">
+                <strong class="block mb-1">Supprimés définitivement :</strong>
+                <ul class="list-disc pl-5 space-y-0.5">
+                    <li>votre compte : pseudo et mot de passe ;</li>
+                    <li>vos succès.</li>
+                </ul>
+                <strong class="block mt-2 mb-1">Gardés de façon anonyme :</strong>
+                <p>le résumé de vos parties (jour, rôle, camp, résultat, nombre de tours), détaché de votre compte : il ne permet plus de vous retrouver et sert uniquement aux statistiques du jeu.</p>
+                <p class="mt-2">Si une partie est en cours, elle sera arrêtée. Cette action ne peut pas être annulée.</p>
+            </div>
+            <form id="delete-account-form" class="space-y-3 mt-4">
+                <label for="delete-account-password" class="text-xs font-semibold uppercase tracking-wider block opacity-70">Mot de passe actuel</label>
+                <input type="password" id="delete-account-password" autocomplete="current-password" class="welcome-input w-full font-mono">
+                <p id="delete-account-error" role="alert" class="welcome-error hidden text-sm text-center"></p>
+                <div class="flex gap-2 pt-1">
+                    <button type="button" id="delete-account-cancel" class="btn-ghost flex-1">Annuler</button>
+                    <button type="submit" id="delete-account-confirm" class="btn-seal btn-blood flex-1">Supprimer définitivement</button>
+                </div>
+            </form>
         </div>
     </div>
 

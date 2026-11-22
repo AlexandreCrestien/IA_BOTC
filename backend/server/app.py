@@ -1,3 +1,4 @@
+import asyncio
 import os
 import logging
 from contextlib import asynccontextmanager
@@ -10,6 +11,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from backend.accounts.service import ensure_admin
 from backend.db import get_session, init_db
+from backend.server.account_removal import purge_periodically
 from backend.server.auth import router as auth_router
 from backend.server.game_routes import router as game_router
 from backend.server.stats_routes import router as stats_router
@@ -31,11 +33,14 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     """Au démarrage : ouverture de la base (création des tables, parties restées en cours interrompues),
-    puis création du compte admin s'il n'existe pas (ADMIN_PSEUDO / ADMIN_PASSWORD du .env)."""
+    création du compte admin s'il n'existe pas (ADMIN_PSEUDO / ADMIN_PASSWORD du .env), puis suppression
+    des comptes inactifs depuis un an (maintenant, puis une fois par jour)."""
     init_db()
     with get_session() as db:
         ensure_admin(db)
+    purge = asyncio.create_task(purge_periodically())
     yield
+    purge.cancel()
 
 
 app = FastAPI(

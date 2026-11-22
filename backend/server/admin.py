@@ -10,6 +10,7 @@ from backend.accounts import service
 from backend.accounts.service import AccountError
 from backend.db import User, iso_utc
 from backend.server.auth import admin_user, db_session
+from backend.server.account_removal import remove_account
 from backend.server.session import current_session
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,19 @@ def reset_user_password(user_id: int, db: Session = Depends(db_session)) -> dict
     except AccountError as error:
         raise HTTPException(error.status, error.message)
     return {"pseudo": user.pseudo, "temporary_password": temporary}
+
+
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user(user_id: int, db: Session = Depends(db_session)) -> None:
+    """Suppression d'un compte à la demande du joueur (même suppression que depuis son tableau de bord) :
+    compte et succès effacés, parties gardées anonymement. Sa partie en cours est arrêtée d'abord."""
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Compte introuvable.")
+    try:
+        await remove_account(db, user, reason="par l'admin")
+    except AccountError as error:
+        raise HTTPException(error.status, error.message)
 
 
 @router.get("/debug/all-states")

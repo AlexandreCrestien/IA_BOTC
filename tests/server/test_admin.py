@@ -11,7 +11,9 @@ from backend.server import admin
 from backend.server.app import app
 from backend.server.schemas import NightHistoryEntry, VoteHistoryEntry
 from backend.server.session import GameSession, set_current_session
-from backend.accounts.service import ensure_admin, register
+from backend.accounts.service import ensure_admin, find_by_pseudo, register
+from backend.db import GameRecord
+from backend.server import game_records
 from backend.accounts.tokens import COOKIE_NAME
 from backend.db import get_session
 
@@ -179,3 +181,52 @@ def test_unavailable_agents_listed_with_names(session):
     view = admin.build_debug_state()
     assert view["agent_failures"] == [
         {"moment": "Nuit 2", "agent": "marIA", "step": "action de nuit (choix tiré au hasard)"}]
+
+
+# --- Suppression d'un compte ----------------------------------------------------------
+
+def test_delete_account_requires_admin(client):
+    vesper_id = _user_id("Vesper")
+    assert client.delete(f"/admin/users/{vesper_id}").status_code == 401
+    log_in(client, "Vesper", "mot-de-passe-joueur")
+    assert client.delete(f"/admin/users/{vesper_id}").status_code == 403
+
+
+def test_admin_deletes_a_player_account(client):
+    player = TestClient(app)
+    log_in(player, "Vesper", "mot-de-passe-joueur")
+    log_in(client, "Gardien", "mot-de-passe-admin")
+    vesper_id = _user_id("Vesper")
+
+    assert client.delete(f"/admin/users/{vesper_id}").status_code == 204
+    assert [u["pseudo"] for u in client.get("/admin/users").json()] == ["Gardien"]
+    assert player.get("/api/auth/me").status_code == 401  # son cookie ne vaut plus rien
+    assert client.delete(f"/admin/users/{vesper_id}").status_code == 404
+
+
+def test_admin_account_cannot_be_deleted_from_the_panel(client):
+    log_in(client, "Gardien", "mot-de-passe-admin")
+    response = client.delete(f"/admin/users/{_user_id('Gardien')}")
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Le compte administrateur ne peut pas être supprimé."
+
+
+def test_deleting_an_account_stops_its_running_game(client, monkeypatch):
+    log_in(client, "Gardien", "mot-de-passe-admin")
+    vesper_id = _user_id("Vesper")
+    state, agents, memory = setup_game(NAMES, "h", PERSONALITIES, random.Random(0))
+    session = GameSession(human_id="h", user_id=vesper_id, state=state, memory=memory, agents=agents)
+    monkeypatch.setattr(GameSession, "running", property(lambda self: self.outcome is None))
+    set_current_session(session)
+    game_records.open_record(session)
+
+    assert client.delete(f"/admin/users/{vesper_id}").status_code == 204
+    assert session.outcome is not None  # partie arrêtée
+    with get_session() as db:
+        game = db.query(GameRecord).one()  # gardée, anonyme, comptée comme abandonnée
+        assert game.user_id is None and game.status.value == "abandoned"
+
+
+def _user_id(pseudo):
+    with get_session() as db:
+        return find_by_pseudo(db, pseudo).id
