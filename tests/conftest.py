@@ -1,7 +1,13 @@
 """Outils communs aux tests du backend."""
-import pytest
+import os
 
-from backend.server.session import set_current_session
+# Base en mémoire pour tous les tests (y compris le démarrage de l'application) : la vraie base n'est jamais touchée
+os.environ["DATABASE_URL"] = "sqlite://"
+
+import pytest  # noqa: E402
+
+from backend.db import get_session, init_db  # noqa: E402
+from backend.server.session import set_current_session  # noqa: E402
 
 
 @pytest.fixture
@@ -10,3 +16,11 @@ def clean_server():
     set_current_session(None)
     yield
     set_current_session(None)
+
+
+@pytest.fixture
+def db():
+    """Base en mémoire, vide, avec ses tables ; session ouverte pendant le test."""
+    init_db("sqlite://")
+    with get_session() as session:
+        yield session

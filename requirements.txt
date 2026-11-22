@@ -9,6 +9,7 @@ websockets==17.4          # implémentation WebSocket utilisée par uvicorn
 pydantic==2.14.2          # validation des messages et modèles du jeu
 python-dotenv==1.2.4      # lecture du fichier .env
 litellm==1.108.0          # appels aux LLM des agents
+sqlalchemy==2.1.9         # base de données (comptes, parties, succès) : SQLite pour l'instant
 
 # --- Tests ---
 pytest==9.2.0

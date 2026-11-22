@@ -1,9 +1,12 @@
 import os
 import logging
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from backend.db import init_db
 from backend.server.websocket_endpoint import router as ws_router
 from backend.server.admin import router as admin_router
 # Chargé dès le démarrage (moteur de jeu, LiteLLM : quelques secondes) plutôt qu'à la première
@@ -18,10 +21,19 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Au démarrage : ouverture de la base (création des tables, parties restées en cours interrompues)."""
+    init_db()
+    yield
+
+
 app = FastAPI(
     title="Lantern Hollow - Backend API",
     description="API en temps réel (websockets) pour lier le moteur de jeu Python et le frontend.",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.include_router(ws_router)

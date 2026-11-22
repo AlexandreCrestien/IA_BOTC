@@ -16,6 +16,9 @@ env/
 .env.local
 .env.*.local
 
+# Base de données locale (comptes, parties, succès)
+data/
+
 # Sorties générées par le jeu et les scripts
 histories/
 # Ancien nom du dossier des historiques (à supprimer du disque s'il ne sert plus)
