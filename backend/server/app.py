@@ -2,9 +2,11 @@ import os
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from backend.accounts.service import ensure_admin
 from backend.db import get_session, init_db
@@ -48,6 +50,33 @@ app.include_router(auth_router)
 app.include_router(game_router)
 app.include_router(stats_router)
 app.include_router(admin_router)
+
+# --- Page introuvable ------------------------------------------------------------------
+# Une page demandée par le navigateur reçoit la page 404 du jeu ; les routes de l'API
+# (/api/…, /admin/…) gardent leur réponse JSON, lue par le front pour ses messages d'erreur ;
+# un fichier manquant (script, style, image) reçoit une simple 404.
+# Le fichier ne s'appelle pas 404.html : StaticFiles le servirait lui-même pour toute adresse inconnue,
+# y compris celles de l'API.
+NOT_FOUND_PAGE = os.path.join("static", "not-found.html")
+API_PREFIXES = ("/api/", "/admin/", "/ws/")
+
+
+def wants_not_found_page(request: Request) -> bool:
+    path = request.url.path
+    if path.startswith(API_PREFIXES):
+        return False
+    last = path.rsplit("/", 1)[-1]
+    if "." in last and not last.endswith(".html"):
+        return False
+    return "text/html" in request.headers.get("accept", "")
+
+
+@app.exception_handler(StarletteHTTPException)
+async def not_found_page(request: Request, exc: StarletteHTTPException):
+    if exc.status_code == 404 and wants_not_found_page(request):
+        return FileResponse(NOT_FOUND_PAGE, status_code=404)
+    return await http_exception_handler(request, exc)
+
 
 @app.get("/admin", tags=["Administration UI"])
 def serve_admin_page():

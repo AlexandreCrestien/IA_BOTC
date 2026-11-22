@@ -1,6 +1,10 @@
-# Protocole WebSocket entre le front et le serveur
+# Protocole entre le front et le serveur
 
-Connexion : `ws://<serveur>/ws/<pseudo>`. Un seul joueur humain et une seule partie à la fois.
+Deux canaux :
+- le **WebSocket** de la partie, `ws://<serveur>/ws/<pseudo>`. Un seul joueur humain et une seule partie à la fois ;
+- des **routes HTTP** (`/api/…`, `/admin/…`) pour les comptes, le tableau de bord et l'administration, hors de l'écran de jeu.
+
+La connexion à un compte est un **jeton JWT dans un cookie `HttpOnly`** (`lh_session`, `SameSite=Lax`, 7 jours), posé par le serveur à l'inscription ou à la connexion. Le JavaScript ne le lit jamais : le navigateur l'envoie avec chaque requête HTTP et à l'ouverture du WebSocket.
 
 - Le contrat est défini par des modèles Pydantic dans `backend/server/schemas.py` : **INPUTS** pour les actions du front, **OUTPUTS** pour les messages du serveur. Un champ inconnu ou manquant est une erreur, dans les deux sens.
 - **Les joueurs sont toujours désignés par leur identifiant** : `p1` … `p5` pour les agents, le pseudo pour le joueur humain. Le front affiche les noms à partir de la liste des joueurs reçue dans `game_state` (`getPlayerName`).
@@ -14,12 +18,25 @@ Connexion : `ws://<serveur>/ws/<pseudo>`. Un seul joueur humain et une seule par
 | `backend/server/protocol.py` | Traduction des demandes du moteur en messages, envoi, reprise après reconnexion |
 | `backend/server/websocket_endpoint.py` | Endpoint `/ws/{pseudo}` et un traitement par action du front |
 | `backend/server/game_runner.py` | Boucle de partie, lancement, refus, abandon |
+| `backend/server/game_records.py` | Enregistrement de la partie pour le compte du joueur, rattachement d'une partie d'invité, succès |
+| `backend/server/auth.py` | Routes `/api/auth`, `/api/account` ; dépendances `current_user`, `admin_user` |
+| `backend/server/game_routes.py`, `stats_routes.py`, `admin.py` | Routes `/api/game`, `/api/me`, `/admin` |
 
-## Connexion
+## Connexion au WebSocket
 
-1. Pseudo refusé (hors format : 1 à 20 caractères parmi lettres, chiffres, `-`, `_` et apostrophes ; réservé ; nom d'un agent) ou partie en cours d'un autre joueur : la connexion est acceptée puis fermée avec le code **4001**, le motif dans `reason`.
+Le serveur identifie le joueur par le cookie de connexion : un compte, ou un invité s'il n'y en a pas.
+
+1. **Refus** : la connexion est acceptée puis fermée avec le code **4001**, le motif dans `reason` (affiché sur l'accueil) :
+   - pseudo hors format (1 à 20 caractères parmi lettres, chiffres, `-`, `_` et apostrophes), réservé, ou nom d'un agent ;
+   - invité qui prend le pseudo d'un compte ;
+   - joueur connecté qui ne joue pas sous le pseudo de son compte ;
+   - partie en cours d'un autre joueur ;
+   - partie d'un compte que l'on n'a plus le droit de reprendre (session expirée, déconnexion).
 2. Sinon : `connected`, puis lancement d'une nouvelle partie ou reprise de la partie en cours.
-3. Reprise (rechargement, coupure) : `role_assigned` (avec `allies` si déjà révélés), `game_state`, les salons privés (`private_channel_opened` avec `focus: false`), tout le chat, `history`, puis la demande en attente du moteur, renvoyée telle quelle.
+3. **Invité** : `guest_session` avec un jeton, à présenter à l'inscription ou à la connexion pour rattacher la partie au compte.
+4. **Reprise** (rechargement, coupure, onglet fermé puis rouvert) : `role_assigned` (avec `allies` si déjà révélés), `game_state`, les salons privés (`private_channel_opened` avec `focus: false`), tout le chat, `history`, puis la demande en attente du moteur, renvoyée telle quelle.
+
+Fermer l'onglet ne termine pas la partie : elle attend le joueur. Un joueur connecté la reprend avec `/?play` (le front se connecte sous le pseudo de la partie, donné par `GET /api/game/current`).
 
 ## Actions du front
 
@@ -43,6 +60,7 @@ Une action hors de son moment, ou avec un choix non proposé, reçoit un message
 | `type` | Champs | Usage |
 |---|---|---|
 | `connected` | — | Accusé de connexion : le front affiche l'écran de jeu |
+| `guest_session` | `guest_token` | Partie d'invité : jeton gardé en mémoire par le front (jamais affiché), envoyé avec une inscription ou une connexion |
 | `role_assigned` | `role_name`, `description`, `allies` | Rôle du joueur (à chaque connexion) |
 | `game_state` | `state` : `day`, `phase` (`nuit` / `discussion` / `vote`), `aliveCount`, `players` [`id`, `name`, `alive`, `has_vote`] | Avant chaque demande ; source des noms affichés |
 | `action_request` | `kind` (`nuit` / `vote` / `discussion`), `candidates` (ids), `max_targets`, `min_targets`, `role` (nom anglais, nuit) | Encadré d'action |
@@ -57,6 +75,45 @@ Une action hors de son moment, ou avec un choix non proposé, reçoit un message
 | `history` | `nights` [`turn`, `type` (`role_info` / `result`), `info`, `dead_player`], `votes` [`turn`, `voter`, `target`, `executed`, `unavailable`] | Onglets Nuits et Votes, à la reconnexion |
 | `announcement` | `text` | Annonce courte (bandeau central) |
 | `error` | `data` | Action refusée ou invalide |
-| `game_over` | `winner` (`good` / `evil`), `details` | Fin de partie |
+| `game_over` | `winner` (`good` / `evil`), `details`, `achievements` [`code`, `title`, `description`, `message`] | Fin de partie ; succès débloqués par la partie (joueur connecté) |
 | `game_abandoned` | — | Abandon confirmé |
 | `game_interrupted` | `text` | La partie a planté : le front propose d'en relancer une |
+
+## Routes HTTP
+
+Réponses en JSON. Une erreur renvoie `{"detail": "<message en français>"}`, affiché tel quel par le front. Sans connexion, une route réservée renvoie **401** ; un compte joueur sur une route admin, **403**.
+
+### Comptes (`backend/server/auth.py`)
+
+| Route | Corps | Réponse |
+|---|---|---|
+| `POST /api/auth/register` | `pseudo`, `password`, `guest_token` (facultatif) | Compte créé et connecté (cookie) : `id`, `pseudo`, `is_admin`, `game_claimed`, `achievements` |
+| `POST /api/auth/login` | `pseudo`, `password`, `guest_token` (facultatif) | Comme l'inscription. 401 si le pseudo ou le mot de passe est faux (même message dans les deux cas) ; 429 après 5 échecs en 5 minutes pour un pseudo |
+| `POST /api/auth/logout` | — | 204, cookie effacé |
+| `GET /api/auth/me` | — | Compte connecté : `id`, `pseudo`, `is_admin` |
+| `PATCH /api/account/pseudo` | `current_password`, `pseudo` | 409 pendant une partie en cours du compte |
+| `PATCH /api/account/password` | `current_password`, `new_password` | Les autres appareils sont déconnectés ; celui-ci reçoit un nouveau cookie |
+
+`guest_token` : la partie de l'invité (en cours, ou gagnée ou perdue et encore affichée) est rattachée au compte (`game_claimed`). Si elle était terminée, `achievements` contient les succès qu'elle débloque.
+
+### Partie et tableau de bord
+
+| Route | Réponse |
+|---|---|
+| `GET /api/game/current` | `running`, `pseudo` (nom du joueur dans la partie), `turn`, `yours` (partie de ce compte, ou partie d'invité pour un visiteur non connecté) |
+| `POST /api/game/abandon` | Abandon de sa partie (défaite). Si l'écran de jeu est ouvert, il reçoit `game_abandoned` |
+| `GET /api/me/stats` | `played`, `wins`, `win_rate`, `good` et `evil` (`played`, `wins`, `win_rate`), `average_turns` |
+| `GET /api/me/games` | Parties terminées ou interrompues, de la plus récente à la plus ancienne : `date`, `role`, `role_name`, `alignment`, `status` (`won` / `lost` / `abandoned` / `interrupted`), `counted`, `turns` |
+| `GET /api/me/achievements` | Les 14 succès : `code`, `title`, `description`, `message`, `hidden`, `unlocked`, `unlocked_at`. Caché et non débloqué : `title` « ??? », sans message |
+
+### Administration (`backend/server/admin.py`, compte admin uniquement)
+
+| Route | Réponse |
+|---|---|
+| `GET /admin/debug/all-states` | État complet de la partie présente sur le serveur (rien n'est caché) |
+| `GET /admin/users` | Comptes : `id`, `pseudo`, `is_admin`, `created_at` |
+| `POST /admin/users/{id}/reset-password` | `pseudo`, `temporary_password` (affiché une seule fois). Refusé pour le compte admin |
+
+### Adresse inconnue
+
+Une page demandée par le navigateur reçoit la page 404 du jeu (`static/not-found.html`) ; `/api/…` et `/admin/…` gardent leur réponse JSON ; un fichier manquant (script, style, image) reçoit une 404 simple.
