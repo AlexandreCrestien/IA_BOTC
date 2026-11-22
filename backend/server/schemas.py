@@ -159,6 +159,13 @@ class Connected(OutMessage):
     type: Literal["connected"] = "connected"
 
 
+class GuestSession(OutMessage):
+    """Partie d'un invité : jeton à présenter à l'inscription ou à la connexion (pendant la partie ou sur
+    l'écran de fin) pour rattacher la partie au compte. Le front le garde en mémoire, sans le montrer."""
+    type: Literal["guest_session"] = "guest_session"
+    guest_token: str
+
+
 class RoleAssigned(OutMessage):
     type: Literal["role_assigned"] = "role_assigned"
     role_name: str

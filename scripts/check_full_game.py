@@ -57,6 +57,7 @@ WINNERS = {"good", "evil"}
 # Champs obligatoires par type de message, d'après connection.js (handleServerMessage)
 REQUIRED = {
     "connected": (),
+    "guest_session": ("guest_token",),
     "role_assigned": ("role_name", "description"),
     "game_state": ("state",),
     "action_request": ("kind", "candidates"),

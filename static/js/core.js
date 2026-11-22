@@ -14,6 +14,8 @@ const SERVER_WS_URL = `${location.protocol === "https:" ? "wss" : "ws"}://${loca
 // ================= ÉTAT GLOBAL =================
 let ws = null;
 let playerId = "";
+// Partie d'invité : jeton à présenter à l'inscription ou à la connexion pour rattacher la partie au compte
+let guestToken = null;
 let gameState = {
     day: 1,
     phase: "discussion", // "discussion" | "nuit" | "vote" (valeurs envoyées par le serveur)

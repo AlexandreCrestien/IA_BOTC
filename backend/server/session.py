@@ -8,10 +8,13 @@ Une GameSession regroupe :
 """
 import asyncio
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Optional
 
 from backend.engine.human_port import QueueHumanPort
 from backend.ai.memory_manager import MemoryManager
+from backend.db import GameStatus
+from backend.db.models import utcnow
 from backend.models import GameState
 
 # Demandes du moteur auxquelles le joueur doit répondre
@@ -25,6 +28,15 @@ class GameSession:
     port: QueueHumanPort = field(default_factory=QueueHumanPort)
     game_task: Optional[asyncio.Task] = None
     forward_task: Optional[asyncio.Task] = None
+
+    # Compte du joueur (None : invité). Un invité qui s'inscrit ou se connecte pendant la partie,
+    # ou sur l'écran de fin, la rattache à son compte en présentant guest_token (game_records.py).
+    user_id: Optional[int] = None
+    guest_token: Optional[str] = None
+    record_id: Optional[int] = None          # ligne de la table games (parties d'un compte)
+    started_at: datetime = field(default_factory=utcnow)
+    ended_at: Optional[datetime] = None
+    outcome: Optional[GameStatus] = None     # issue de la partie, une fois terminée
 
     # Partie : renseignés par game_runner, puis l'état est mis à jour à chaque demande du moteur
     state: Optional[GameState] = None

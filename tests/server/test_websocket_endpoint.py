@@ -32,7 +32,7 @@ def make_client() -> TestClient:
 @pytest.fixture(autouse=True)
 def no_real_game(monkeypatch, clean_server):
     """Se connecter ne doit pas lancer une vraie partie : la session est préparée par chaque test."""
-    monkeypatch.setattr(game_runner, "ensure_started", lambda player_id: None)
+    monkeypatch.setattr(game_runner, "ensure_started", lambda player_id, user=None: None)
 
 
 def waiting(kind=None, **request):

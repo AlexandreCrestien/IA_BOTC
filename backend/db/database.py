@@ -68,7 +68,8 @@ def init_db(url: Optional[str] = None) -> Engine:
 
 
 def get_session() -> Session:
-    """Nouvelle session de base, à utiliser avec « with get_session() as db: » puis db.commit()."""
+    """Nouvelle session de base, à utiliser avec « with get_session() as db: » puis db.commit().
+    Le serveur ouvre la base au démarrage ; à défaut (scripts, tests), elle est ouverte au premier usage."""
     if _engine is None:
-        raise RuntimeError("Base de données non initialisée : appeler init_db() au démarrage")
+        init_db()
     return _sessions()

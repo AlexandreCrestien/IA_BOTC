@@ -75,3 +75,10 @@ def test_accented_pseudo_with_apostrophe_is_encoded_in_the_address(page, server,
     page.press("#welcome-player-id", "Enter")
     expect(page.locator("#screen-game")).to_be_visible()
     assert server.route.url.endswith("/ws/Zo%C3%A9_O'Neil")
+
+
+def test_guest_token_is_kept_in_memory_and_never_shown(game, server):
+    """Partie d'invité : le jeton servira à rattacher la partie au compte en cas d'inscription."""
+    server.send(type="guest_session", guest_token="jeton-secret")
+    game.wait_for_function("guestToken === 'jeton-secret'")
+    expect(game.locator("body")).not_to_contain_text("jeton-secret")

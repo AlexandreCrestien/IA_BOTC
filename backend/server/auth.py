@@ -18,6 +18,8 @@ from backend.accounts.pseudo import normalize_pseudo
 from backend.accounts.service import AccountError
 from backend.accounts.tokens import COOKIE_NAME, TOKEN_LIFETIME, create_token
 from backend.db import User, get_session, pseudo_key
+from backend.server.game_records import claim_guest_game
+from backend.server.session import current_session
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +29,7 @@ NOT_LOGGED_IN = "Vous n'êtes pas connecté."
 ADMIN_ONLY = "Accès réservé à l'administrateur."
 BAD_CREDENTIALS = "Pseudo ou mot de passe incorrect."
 TOO_MANY_ATTEMPTS = "Trop de tentatives de connexion. Réessayez dans quelques minutes."
+PSEUDO_LOCKED = "Impossible de changer de pseudo pendant une partie en cours."
 
 
 # --- Dépendances --------------------------------------------------------------------
@@ -91,6 +94,9 @@ class Credentials(BaseModel):
     # Longueurs maximales larges : les vraies règles sont vérifiées par le service (messages en français)
     pseudo: str = Field(max_length=100)
     password: str = Field(max_length=200)
+    # Invité qui s'inscrit ou se connecte pendant sa partie, ou sur l'écran de fin : jeton reçu
+    # à la connexion WebSocket (message guest_session) pour rattacher la partie à son compte
+    guest_token: Optional[str] = Field(default=None, max_length=100)
 
 
 class PseudoChange(BaseModel):
@@ -109,8 +115,17 @@ class UserOut(BaseModel):
     is_admin: bool
 
 
+class LoginOut(UserOut):
+    game_claimed: bool = False  # la partie de l'invité a été rattachée au compte
+
+
 def user_out(user: User) -> UserOut:
     return UserOut(id=user.id, pseudo=user.pseudo, is_admin=user.is_admin)
+
+
+def login_out(user: User, guest_token: Optional[str]) -> LoginOut:
+    claimed = claim_guest_game(user.id, guest_token)
+    return LoginOut(id=user.id, pseudo=user.pseudo, is_admin=user.is_admin, game_claimed=claimed)
 
 
 def set_login_cookie(response: Response, user: User) -> None:
@@ -129,18 +144,18 @@ def _refuse(error: AccountError):
 # --- Routes ---------------------------------------------------------------------------
 
 @router.post("/auth/register", status_code=status.HTTP_201_CREATED)
-def register(body: Credentials, response: Response, db: Session = Depends(db_session)) -> UserOut:
-    """Crée le compte et connecte le joueur."""
+def register(body: Credentials, response: Response, db: Session = Depends(db_session)) -> LoginOut:
+    """Crée le compte et connecte le joueur (avec guest_token : rattache aussi sa partie d'invité)."""
     try:
         user = service.register(db, body.pseudo, body.password)
     except AccountError as error:
         _refuse(error)
     set_login_cookie(response, user)
-    return user_out(user)
+    return login_out(user, body.guest_token)
 
 
 @router.post("/auth/login")
-def login(body: Credentials, response: Response, db: Session = Depends(db_session)) -> UserOut:
+def login(body: Credentials, response: Response, db: Session = Depends(db_session)) -> LoginOut:
     key = pseudo_key(normalize_pseudo(body.pseudo))
     if login_limiter.blocked(key):
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, TOO_MANY_ATTEMPTS)
@@ -151,7 +166,7 @@ def login(body: Credentials, response: Response, db: Session = Depends(db_sessio
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, BAD_CREDENTIALS)
     login_limiter.succeeded(key)
     set_login_cookie(response, user)
-    return user_out(user)
+    return login_out(user, body.guest_token)
 
 
 @router.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
@@ -167,6 +182,10 @@ def me(user: User = Depends(current_user)) -> UserOut:
 @router.patch("/account/pseudo")
 def change_pseudo(body: PseudoChange, user: User = Depends(current_user),
                   db: Session = Depends(db_session)) -> UserOut:
+    """Interdit pendant une partie en cours du compte : le pseudo y sert d'identifiant du joueur."""
+    session = current_session()
+    if session is not None and session.running and session.user_id == user.id:
+        raise HTTPException(status.HTTP_409_CONFLICT, PSEUDO_LOCKED)
     try:
         service.change_pseudo(db, user, body.current_password, body.pseudo)
     except AccountError as error:

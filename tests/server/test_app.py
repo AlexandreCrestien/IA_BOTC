@@ -30,7 +30,7 @@ def clean_manager():
 def no_real_game(monkeypatch, clean_server):
     """Se connecter au WebSocket ne doit pas lancer une vraie partie (et donc de vrais appels LLM).
     Les états par joueur du serveur sont remis à zéro à chaque test."""
-    monkeypatch.setattr(game_runner, "ensure_started", lambda player_id: None)
+    monkeypatch.setattr(game_runner, "ensure_started", lambda player_id, user=None: None)
 
 
 def waiting_for(player_id: str, kind: str, **request):
@@ -157,7 +157,7 @@ def test_websocket_request_whisper(client):
 def test_websocket_refused_connection_is_closed_with_reason(client, monkeypatch):
     """Pseudo refusé : la connexion est acceptée puis fermée avec le code 4001 et le motif."""
     from starlette.websockets import WebSocketDisconnect
-    monkeypatch.setattr(game_runner, "can_join", lambda player_id: "Ce pseudo est réservé.")
+    monkeypatch.setattr(game_runner, "can_join", lambda player_id, user=None: "Ce pseudo est réservé.")
     with client.websocket_connect("/ws/marIA") as ws:
         with pytest.raises(WebSocketDisconnect) as closed:
             ws.receive_json()

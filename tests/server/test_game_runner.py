@@ -15,9 +15,11 @@ def no_game_yet(clean_server):
 
 
 def _state(turn, dead=()):
-    """État minimal : run_game lit le tour et les joueurs (voix d'outre-tombe)."""
-    return SimpleNamespace(turn=turn, players=tuple(
-        SimpleNamespace(id=pid, alive=pid not in dead) for pid in ("h", "p1", "p2")))
+    """État minimal : run_game lit le tour et les joueurs (voix d'outre-tombe, camp de l'humain en fin de partie).
+    L'humain « h » est du camp du bien."""
+    players = tuple(SimpleNamespace(id=pid, alive=pid not in dead, role=SimpleNamespace(alignment=Alignment.GOOD))
+                    for pid in ("h", "p1", "p2"))
+    return SimpleNamespace(turn=turn, players=players, player=lambda pid: next(p for p in players if p.id == pid))
 
 
 def _queued(session):

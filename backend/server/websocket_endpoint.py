@@ -2,11 +2,14 @@
 Ce que le serveur envoie au front est dans protocol.py ; la partie en cours dans session.py."""
 import json
 import logging
-from typing import Awaitable, Callable
+from typing import Awaitable, Callable, Optional
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
+from backend.accounts.service import user_from_token
+from backend.accounts.tokens import COOKIE_NAME
+from backend.db import User, get_session
 from backend.server import game_runner
 from backend.server.connection_manager import manager
 from backend.server.protocol import (
@@ -24,6 +27,7 @@ from backend.server.schemas import (
     Connected,
     Error,
     GameAbandoned,
+    GuestSession,
     NightActionAck,
 )
 from backend.server.session import WHISPER_MESSAGES, GameSession, current_session
@@ -185,8 +189,20 @@ ACTIONS: dict[str, Callable[[GameSession, BaseModel], Awaitable[None]]] = {
 
 # --- Connexion --------------------------------------------------------------------------
 
+def _connected_user(websocket: WebSocket) -> Optional[User]:
+    """Compte du joueur, d'après le cookie de connexion envoyé à l'ouverture du WebSocket (None : invité)."""
+    token = websocket.cookies.get(COOKIE_NAME)
+    if not token:
+        return None
+    with get_session() as db:
+        return user_from_token(db, token)
+
+
 async def _resume(session: GameSession) -> None:
-    """Nouvelle connexion : rôle et état, chat, salons et historiques, puis la demande en attente."""
+    """Nouvelle connexion : rôle et état, chat, salons et historiques, puis la demande en attente.
+    Invité : jeton qui permet de rattacher la partie à un compte s'il s'inscrit."""
+    if session.guest_token is not None:
+        await send(session.human_id, GuestSession(guest_token=session.guest_token))
     session.role_sent = False  # le front repart d'une page vide
     await send_state(session)
     await restore(session)
@@ -220,7 +236,8 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
     """Endpoint WebSocket du joueur. URL de connexion : ws://<serveur>/ws/<pseudo>"""
     # Refus (pseudo invalide, partie d'un autre joueur) : on accepte avant de refermer,
     # sinon le navigateur ne peut pas lire le motif du refus.
-    refusal = game_runner.can_join(player_id)
+    user = _connected_user(websocket)
+    refusal = game_runner.can_join(player_id, user)
     if refusal is not None:
         await websocket.accept()
         await websocket.close(code=CLOSE_REFUSED, reason=refusal)
@@ -232,7 +249,7 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
     await manager.send_to_player(player_id, Connected().model_dump())
 
     # Nouvelle partie, ou reprise de la partie en cours
-    refusal = game_runner.ensure_started(player_id)
+    refusal = game_runner.ensure_started(player_id, user)
     if refusal is not None:  # cas limite : un autre joueur a lancé une partie entre-temps
         await websocket.close(code=CLOSE_REFUSED, reason=refusal)
         manager.disconnect(player_id, websocket)

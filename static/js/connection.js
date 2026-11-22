@@ -115,6 +115,9 @@ function handleServerMessage(data) {
     switch (data.type) {
         case "connected":
             break; // accusé de connexion : l'écran de jeu est affiché par ws.onmessage
+        case "guest_session":
+            guestToken = data.guest_token; // jamais affiché : envoyé seulement avec une inscription ou une connexion
+            break;
         case "chat":
             receiveChatMessage(data.channel_id || "public", data.sender, data.content);
             break;
