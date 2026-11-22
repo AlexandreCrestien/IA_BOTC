@@ -54,9 +54,9 @@ def _run(monkeypatch, turns, setup_state=None):
 def test_run_game_plays_until_victory(monkeypatch):
     states = [_state(2), _state(3)]
     session, final, calls = _run(monkeypatch, [
-        SimpleNamespace(state=states[0], game_winner=None, votes={"h": "p1"}, executed="p1", vote_failures=frozenset(),
+        SimpleNamespace(state=states[0], game_winner=None, votes={"h": "p1"}, executed="p1", night_deaths=(), vote_failures=frozenset(),
                         ballots=(Ballot("h", "p1", ghost=False),)),
-        SimpleNamespace(state=states[1], game_winner=Alignment.GOOD, votes={"h": None}, executed=None, vote_failures=frozenset(), ballots=()),
+        SimpleNamespace(state=states[1], game_winner=Alignment.GOOD, votes={"h": None}, executed=None, night_deaths=(), vote_failures=frozenset(), ballots=()),
     ])
 
     assert final is states[1]
@@ -66,12 +66,13 @@ def test_run_game_plays_until_victory(monkeypatch):
     # Le front reçoit des identifiants ; il affiche les noms lui-même
     assert queued[0] == {"kind": "vote_result", "turn": 1, "executed": "p1",
                          "votes": [{"voter": "h", "target": "p1", "ghost": False, "unavailable": False}]}
-    assert queued[-1] == {"kind": "game_over", "winner": "good", "details": "Le village a rendu son dernier verdict."}
+    assert queued[-1] == {"kind": "game_over", "winner": "good", "details": "Le village a rendu son dernier verdict.",
+                          "achievements": []}  # invité : aucun succès
 
 
 def test_evil_victory_sent_as_team(monkeypatch):
     session, _, _ = _run(monkeypatch, [
-        SimpleNamespace(state=_state(1), game_winner=Alignment.EVIL, votes={}, executed=None, vote_failures=frozenset(), ballots=())])
+        SimpleNamespace(state=_state(1), game_winner=Alignment.EVIL, votes={}, executed=None, night_deaths=(), vote_failures=frozenset(), ballots=())])
     assert _queued(session)[-1]["winner"] == "evil"
 
 
@@ -85,7 +86,7 @@ def test_ballots_keep_the_engine_flags_and_mark_unavailable_ais(monkeypatch):
     )
     session, _, _ = _run(monkeypatch, [SimpleNamespace(
         state=_state(2), game_winner=Alignment.GOOD, votes={}, executed="p2",
-        vote_failures=frozenset({"p2"}), ballots=engine_ballots)])
+        night_deaths=(), vote_failures=frozenset({"p2"}), ballots=engine_ballots)])
 
     ballots = {v["voter"]: v for v in _queued(session)[0]["votes"]}
     assert {pid: (v["ghost"], v["unavailable"]) for pid, v in ballots.items()} == {
@@ -97,7 +98,7 @@ def test_game_over_comes_after_the_last_night_deaths(monkeypatch):
     le résultat du tour et la fin de partie, car tout passe par la même file."""
     async def night_win(port):
         await port.show_night_deaths(_state(1), ("p1",))  # le moteur annonce le mort
-        return SimpleNamespace(state=_state(1), game_winner=Alignment.EVIL, votes={}, executed=None, vote_failures=frozenset(), ballots=())
+        return SimpleNamespace(state=_state(1), game_winner=Alignment.EVIL, votes={}, executed=None, night_deaths=(), vote_failures=frozenset(), ballots=())
 
     session, _, _ = _run(monkeypatch, [night_win])
     assert [item["kind"] for item in _queued(session)] == ["night_deaths", "vote_result", "game_over"]

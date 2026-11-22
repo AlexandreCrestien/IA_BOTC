@@ -16,6 +16,7 @@ from backend.ai.memory_manager import MemoryManager
 from backend.db import GameStatus
 from backend.db.models import utcnow
 from backend.models import GameState
+from backend.stats.achievements import GameFacts
 
 # Demandes du moteur auxquelles le joueur doit répondre
 ANSWERABLE = {"night_choice", "vote", "public_message", "private_partners", "private_message", "agent_invitation"}
@@ -37,6 +38,8 @@ class GameSession:
     started_at: datetime = field(default_factory=utcnow)
     ended_at: Optional[datetime] = None
     outcome: Optional[GameStatus] = None     # issue de la partie, une fois terminée
+    facts: GameFacts = field(default_factory=GameFacts)  # pour les succès (exécution, voix d'outre-tombe…)
+    unlocked: list[dict] = field(default_factory=list)   # succès débloqués par cette partie (écran de fin)
 
     # Partie : renseignés par game_runner, puis l'état est mis à jour à chaque demande du moteur
     state: Optional[GameState] = None

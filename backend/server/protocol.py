@@ -32,6 +32,7 @@ from backend.server.schemas import (
     OutMessage,
     PrivateChannelOpened,
     RoleAssigned,
+    UnlockedAchievementOut,
     VoteHistoryEntry,
     VoteResult,
 )
@@ -230,7 +231,9 @@ async def send_request(session: GameSession, request: dict) -> None:
         await send_vote_result(session, request["turn"], request["executed"], request["votes"])
 
     elif kind == "game_over":
-        await send(human, GameOver(winner=request["winner"], details=request["details"]))
+        achievements = [UnlockedAchievementOut(**{key: a[key] for key in ("code", "title", "description", "message")})
+                        for a in request.get("achievements", [])]
+        await send(human, GameOver(winner=request["winner"], details=request["details"], achievements=achievements))
 
     else:
         logger.info("Demande du moteur sans équivalent front : %s", kind)

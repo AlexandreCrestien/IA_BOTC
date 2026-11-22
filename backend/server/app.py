@@ -10,6 +10,7 @@ from backend.accounts.service import ensure_admin
 from backend.db import get_session, init_db
 from backend.server.auth import router as auth_router
 from backend.server.game_routes import router as game_router
+from backend.server.stats_routes import router as stats_router
 from backend.server.websocket_endpoint import router as ws_router
 from backend.server.admin import router as admin_router
 # Chargé dès le démarrage (moteur de jeu, LiteLLM : quelques secondes) plutôt qu'à la première
@@ -45,6 +46,7 @@ app = FastAPI(
 app.include_router(ws_router)
 app.include_router(auth_router)
 app.include_router(game_router)
+app.include_router(stats_router)
 app.include_router(admin_router)
 
 @app.get("/admin", tags=["Administration UI"])

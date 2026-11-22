@@ -106,6 +106,7 @@ class QueueHumanPort:
         """Le joueur est le Valet et son maître n'a pas voté : il ne vote pas ce tour-ci."""
         await self._tell("valet_blocked", state, master=master_id)
 
-    async def show_game_over(self, state: GameState, winner: str, details: str) -> None:
-        """Fin de partie : winner = "good" | "evil". Posé par game_runner."""
-        await self._tell("game_over", state, winner=winner, details=details)
+    async def show_game_over(self, state: GameState, winner: str, details: str, achievements=()) -> None:
+        """Fin de partie : winner = "good" | "evil", et succès débloqués par la partie (joueur connecté).
+        Posé par game_runner."""
+        await self._tell("game_over", state, winner=winner, details=details, achievements=list(achievements))

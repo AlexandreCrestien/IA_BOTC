@@ -59,7 +59,7 @@ def play(monkeypatch, session, winner, final_turn=3):
     async def one_turn(state, rng, agents, memory, human_id, port):
         assert records()[-1].status == GameStatus.IN_PROGRESS if session.user_id else not records()
         return SimpleNamespace(state=make_state(final_turn), game_winner=winner, executed=None,
-                               vote_failures=frozenset(), ballots=())
+                               night_deaths=(), vote_failures=frozenset(), ballots=())
 
     monkeypatch.setattr(gr, "play_turn", one_turn)
     asyncio.run(gr.run_game(session, {"h": "h"}, []))

@@ -256,10 +256,19 @@ class Error(OutMessage):
     data: str
 
 
+class UnlockedAchievementOut(OutMessage):
+    """Succès débloqué par la partie, annoncé sur l'écran de fin."""
+    code: str
+    title: str
+    description: str
+    message: Optional[str] = None
+
+
 class GameOver(OutMessage):
     type: Literal["game_over"] = "game_over"
     winner: Literal["good", "evil"]
     details: str
+    achievements: List[UnlockedAchievementOut] = Field(default_factory=list)
 
 
 class GameAbandoned(OutMessage):

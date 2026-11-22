@@ -288,7 +288,7 @@ def test_turn_result_and_game_over_relayed_from_the_queue():
 
     assert sent == [
         {"type": "vote_result", "turn": 3, "executed": None, "votes": []},
-        {"type": "game_over", "winner": "good", "details": "Fin."},
+        {"type": "game_over", "winner": "good", "details": "Fin.", "achievements": []},
     ]
     assert session.vote_log == []  # aucun bulletin à retenir ce tour-là
 

@@ -59,6 +59,7 @@ async def run_game(session: GameSession, names: dict[str, str], personality_name
         turn = state.turn
         result = await play_turn(state, rng, agents, memory, session.human_id, port)
         state = result.state
+        session.facts.record_turn(session.human_id, turn, result)
         # Même file que les messages du moteur : le front reçoit tout dans l'ordre
         # (sinon la fin de partie pourrait arriver avant les morts de la dernière nuit).
         await port.show_turn_result(state, turn, front_ballots(result), result.executed)
@@ -67,7 +68,7 @@ async def run_game(session: GameSession, names: dict[str, str], personality_name
             logger.info("Partie terminée, vainqueur : %s", result.game_winner)
             close_record(session, outcome_for(state, session.human_id, result.game_winner), turns=state.turn)
             await port.show_game_over(state, WINNER_TEAMS[result.game_winner],
-                                      "Le village a rendu son dernier verdict.")
+                                      "Le village a rendu son dernier verdict.", achievements=session.unlocked)
             return state
 
 

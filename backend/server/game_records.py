@@ -5,6 +5,9 @@
 - Invité : rien n'est enregistré. S'il s'inscrit ou se connecte pendant la partie, ou sur l'écran de fin,
   il présente le guest_token reçu à la connexion et la partie est rattachée à son compte (claim_guest_game).
 
+À la fin d'une partie gagnée ou perdue d'un compte, les succès obtenus sont débloqués (backend/stats)
+et gardés dans la session (session.unlocked) pour être annoncés sur l'écran de fin.
+
 Une erreur de base de données est journalisée mais n'interrompt jamais la partie.
 """
 import logging
@@ -12,11 +15,14 @@ import secrets
 from typing import Optional
 
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 
 from backend.db import GameRecord, GameStatus, get_session
 from backend.db.models import utcnow
 from backend.models import Alignment, GameState
 from backend.server.session import GameSession, current_session
+from backend.stats.achievements import GameSummary, earned_achievements
+from backend.stats.queries import achievement_out, unlock
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +39,17 @@ def outcome_for(state: GameState, human_id: str, winner: Alignment) -> GameStatu
     return GameStatus.WON if state.player(human_id).role.alignment == winner else GameStatus.LOST
 
 
+def _unlock_achievements(db: Session, session: GameSession, record: GameRecord) -> None:
+    """Partie terminée normalement (victoire ou défaite) : débloque les succès obtenus.
+    Abandon ou interruption : aucun succès."""
+    if record.status not in CLAIMABLE_OUTCOMES:
+        return
+    summary = GameSummary(role=record.role, won=record.status == GameStatus.WON, turns=record.turns,
+                          facts=session.facts)
+    new = unlock(db, record.user_id, record.id, earned_achievements(summary))
+    session.unlocked = [achievement_out(a, unlocked_at=utcnow()) for a in new]
+
+
 def open_record(session: GameSession) -> None:
     """Crée la ligne de la partie pour le compte du joueur (une seule fois, une fois la partie mise en place).
     Partie déjà terminée (invité inscrit sur l'écran de fin) : la ligne est créée directement avec son issue."""
@@ -47,6 +64,8 @@ def open_record(session: GameSession) -> None:
                 status=session.outcome or GameStatus.IN_PROGRESS, ended_at=session.ended_at,
             )
             db.add(record)
+            db.flush()
+            _unlock_achievements(db, session, record)  # partie déjà terminée (inscription sur l'écran de fin)
             db.commit()
             session.record_id = record.id
     except SQLAlchemyError:
@@ -65,6 +84,7 @@ def close_record(session: GameSession, status: GameStatus, turns: Optional[int] 
         with get_session() as db:
             record = db.get(GameRecord, session.record_id)
             record.status, record.turns, record.ended_at = status, turns, session.ended_at
+            _unlock_achievements(db, session, record)
             db.commit()
     except SQLAlchemyError:
         logger.exception("Issue de la partie %s non enregistrée", session.record_id)

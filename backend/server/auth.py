@@ -117,6 +117,8 @@ class UserOut(BaseModel):
 
 class LoginOut(UserOut):
     game_claimed: bool = False  # la partie de l'invité a été rattachée au compte
+    # Partie déjà terminée rattachée depuis l'écran de fin : succès qu'elle vient de débloquer
+    achievements: list[dict] = []
 
 
 def user_out(user: User) -> UserOut:
@@ -125,7 +127,10 @@ def user_out(user: User) -> UserOut:
 
 def login_out(user: User, guest_token: Optional[str]) -> LoginOut:
     claimed = claim_guest_game(user.id, guest_token)
-    return LoginOut(id=user.id, pseudo=user.pseudo, is_admin=user.is_admin, game_claimed=claimed)
+    session = current_session()
+    achievements = session.unlocked if claimed and session is not None and not session.running else []
+    return LoginOut(id=user.id, pseudo=user.pseudo, is_admin=user.is_admin, game_claimed=claimed,
+                    achievements=achievements)
 
 
 def set_login_cookie(response: Response, user: User) -> None:
