@@ -17,6 +17,14 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def iso_utc(moment: datetime) -> str:
+    """Date au format ISO avec son fuseau, pour le front. SQLite rend les dates sans fuseau :
+    elles sont toujours enregistrées en UTC."""
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment.isoformat()
+
+
 def _enum(enum_class) -> SAEnum:
     """Colonne texte qui stocke la valeur de l'énumération ("reaper", "good"…), pas son nom."""
     return SAEnum(enum_class, native_enum=False, length=20, validate_strings=True,

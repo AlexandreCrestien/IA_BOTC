@@ -38,21 +38,25 @@
                 </p>
 
                 <p class="text-sm text-gray-400 leading-relaxed">
-                    Entrez le jeton administrateur configuré sur le serveur pour consulter les historiques et la mémoire des agents IA.
+                    Connectez-vous avec le compte administrateur pour consulter les historiques, la mémoire des agents IA et les comptes joueurs.
                 </p>
             </div>
 
             <!-- Formulaire : la touche Entrée valide -->
             <form id="login-form" class="w-full space-y-3">
-                <label for="admin-token-input" class="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Jeton administrateur</label>
-                <input type="password" id="admin-token-input" placeholder="••••••••" autocomplete="current-password" autofocus
+                <label for="admin-pseudo-input" class="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Pseudo</label>
+                <input type="text" id="admin-pseudo-input" autocomplete="username" autofocus maxlength="20"
+                    class="w-full bg-black/40 border border-[var(--gold)] rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[var(--gold)] text-center text-gray-200">
+
+                <label for="admin-password-input" class="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Mot de passe</label>
+                <input type="password" id="admin-password-input" placeholder="••••••••" autocomplete="current-password"
                     class="w-full bg-black/40 border border-[var(--gold)] rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[var(--gold)] text-center font-mono text-gray-200">
 
                 <button type="submit" id="login-btn" class="w-full bg-seal text-white font-display tracking-wider py-3.5 rounded-xl transition shadow-seal uppercase text-sm font-bold disabled:opacity-60 disabled:cursor-progress">
                     Accéder au panneau
                 </button>
 
-                <!-- Erreur de connexion (jeton refusé, serveur injoignable…) -->
+                <!-- Erreur de connexion (identifiants refusés, compte non admin, serveur injoignable…) -->
                 <p id="login-error" role="alert" class="welcome-error hidden text-sm text-center"></p>
             </form>
         </div>
@@ -109,6 +113,16 @@
                     </div>
                 </div>
             </div>
+
+            <!-- COMPTES JOUEURS : réinitialisation du mot de passe (dépannage) -->
+            <section class="admin-section rounded-2xl p-6 space-y-4">
+                <h2 class="admin-section-title">Comptes</h2>
+                <!-- Mot de passe temporaire, affiché une seule fois après une réinitialisation -->
+                <p id="reset-result" role="status" class="modal-notice notice-night hidden text-sm"></p>
+                <div id="accounts-container" class="overflow-x-auto text-sm">
+                    <span class="italic opacity-60">Aucun compte.</span>
+                </div>
+            </section>
 
             <!-- JOUEURS : rôles, camps, personnalités (tout est visible dans l'admin) -->
             <section class="admin-section rounded-2xl p-6 space-y-4">

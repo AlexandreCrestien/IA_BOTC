@@ -1,7 +1,11 @@
 'use strict';
 
+// Routes réservées au compte admin : le cookie de connexion (HttpOnly) est envoyé automatiquement
 const ADMIN_API_URL = "/admin/debug/all-states";
-const TOKEN_STORAGE_KEY = 'Lantern_hollow_admin_token';
+const USERS_API_URL = "/admin/users";
+const LOGIN_API_URL = "/api/auth/login";
+const LOGOUT_API_URL = "/api/auth/logout";
+const NOT_ADMIN = "Ce compte n'a pas accès au panneau d'administration.";
 
 // Données gardées en mémoire pour changer d'agent sans refaire de requête
 let currentAdminData = null;
@@ -16,35 +20,72 @@ window.addEventListener('DOMContentLoaded', () => {
     document.getElementById('refresh-btn').addEventListener('click', fetchAdminData);
     document.getElementById('logout-btn').addEventListener('click', logout);
 
-    const savedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
-    if (savedToken) {
-        document.getElementById('admin-token-input').value = savedToken;
-        fetchAdminData();
-    }
+    // Déjà connecté (cookie) : panneau directement ; sinon l'écran de connexion reste affiché, sans erreur
+    fetchAdminData({ silent: true });
 });
 
 // ================= CONNEXION / DÉCONNEXION =================
 async function login() {
-    const input = document.getElementById('admin-token-input');
-    const token = input.value.trim();
-    if (!token) {
-        showLoginError("Veuillez entrer le jeton administrateur.");
-        input.focus();
+    const pseudoInput = document.getElementById('admin-pseudo-input');
+    const passwordInput = document.getElementById('admin-password-input');
+    const pseudo = pseudoInput.value.trim().normalize('NFC');
+    const password = passwordInput.value;
+    if (!pseudo || !password) {
+        showLoginError("Veuillez entrer le pseudo et le mot de passe de l'administrateur.");
+        (pseudo ? passwordInput : pseudoInput).focus();
         return;
     }
-    localStorage.setItem(TOKEN_STORAGE_KEY, token);
+
+    setLoading(true);
+    let response;
+    try {
+        response = await fetch(LOGIN_API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pseudo, password }),
+        });
+    } catch (err) {
+        console.error(err);
+        setLoading(false);
+        return showLoginError("Impossible de joindre le serveur. Vérifiez qu'il est bien lancé, puis réessayez.");
+    }
+    setLoading(false);
+    if (!response.ok) {
+        // 401 identifiants refusés, 429 trop de tentatives : le serveur donne le motif
+        return showLoginError(await errorDetail(response, "Connexion refusée."));
+    }
+    passwordInput.value = '';
     await fetchAdminData();
 }
 
-function logout() {
-    localStorage.removeItem(TOKEN_STORAGE_KEY);
+async function logout() {
+    try {
+        await fetch(LOGOUT_API_URL, { method: 'POST' });
+    } catch (err) {
+        console.error(err);
+    }
+    showLoginScreen(null);
+}
+
+function showLoginScreen(error) {
     currentAdminData = null;
     selectedAgentId = null;
-    document.getElementById('admin-token-input').value = '';
-    showLoginError(null);
+    document.getElementById('admin-password-input').value = '';
+    showLoginError(error);
     document.getElementById('dashboard-section').classList.add('hidden');
     document.getElementById('login-section').classList.remove('hidden');
-    document.getElementById('admin-token-input').focus();
+    document.getElementById('admin-pseudo-input').focus();
+}
+
+// Motif d'erreur envoyé par le serveur ({"detail": "..."}), ou texte par défaut
+async function errorDetail(response, fallback) {
+    try {
+        const body = await response.json();
+        if (typeof body?.detail === 'string') return body.detail;
+    } catch {
+        // corps illisible : texte par défaut
+    }
+    return fallback;
 }
 
 function showLoginError(text) {
@@ -63,28 +104,27 @@ function setLoading(loading) {
 }
 
 // ================= RÉCUPÉRATION DES DONNÉES =================
-async function fetchAdminData() {
-    const token = localStorage.getItem(TOKEN_STORAGE_KEY);
-    if (!token) return logout();
-
+// silent : premier chargement de la page, pas d'erreur affichée si personne n'est connecté
+async function fetchAdminData({ silent = false } = {}) {
     setLoading(true);
     let response;
     try {
-        response = await fetch(ADMIN_API_URL, { headers: { "x-admin-token": token } });
+        response = await fetch(ADMIN_API_URL);
     } catch (err) {
-        // Serveur éteint ou injoignable : le jeton n'est pas en cause, on le garde
         console.error(err);
         setLoading(false);
         return showFetchError("Impossible de joindre le serveur. Vérifiez qu'il est bien lancé, puis réessayez.");
     }
     setLoading(false);
 
-    if (response.status === 401 || response.status === 403) {
-        // Jeton refusé : on l'oublie et on revient à l'écran de connexion
-        localStorage.removeItem(TOKEN_STORAGE_KEY);
-        document.getElementById('dashboard-section').classList.add('hidden');
-        document.getElementById('login-section').classList.remove('hidden');
-        return showLoginError("Jeton administrateur invalide.");
+    if (response.status === 401) {
+        // Pas connecté, ou connexion expirée / invalidée
+        return showLoginScreen(silent ? null : "Votre session a expiré. Reconnectez-vous.");
+    }
+    if (response.status === 403) {
+        // Connecté avec un compte joueur : on le déconnecte du panneau
+        await fetch(LOGOUT_API_URL, { method: 'POST' }).catch(() => {});
+        return showLoginScreen(NOT_ADMIN);
     }
     if (!response.ok) {
         return showFetchError(`Erreur du serveur (${response.status}). Réessayez plus tard.`);
@@ -104,6 +144,81 @@ async function fetchAdminData() {
         `Mis à jour à ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
 
     renderDashboard(data);
+    await fetchAccounts();
+}
+
+// ================= COMPTES =================
+async function fetchAccounts() {
+    let users = null;
+    try {
+        const response = await fetch(USERS_API_URL);
+        if (response.ok) users = await response.json();
+    } catch (err) {
+        console.error(err);
+    }
+    renderAccounts(Array.isArray(users) ? users : null);
+}
+
+function renderAccounts(users) {
+    const container = document.getElementById('accounts-container');
+    if (users === null) {
+        container.innerHTML = emptyLine("Impossible de charger les comptes.");
+        return;
+    }
+    if (!users.length) {
+        container.innerHTML = emptyLine("Aucun compte.");
+        return;
+    }
+    container.innerHTML = `
+        <table class="admin-table w-full">
+            <thead>
+                <tr><th>Pseudo</th><th>Créé le</th><th>Action</th></tr>
+            </thead>
+            <tbody>
+                ${users.map(u => `
+                    <tr>
+                        <td class="font-semibold">${escapeHtml(u.pseudo)}${u.is_admin ? ' <span class="opacity-60 font-normal">(admin)</span>' : ''}</td>
+                        <td>${escapeHtml(formatDate(u.created_at))}</td>
+                        <td>${u.is_admin ? '<span class="opacity-50">—</span>' : `
+                            <button type="button" class="btn-ghost admin-btn reset-password-btn"
+                                data-user-id="${escapeHtml(u.id)}" data-pseudo="${escapeHtml(u.pseudo)}">
+                                Réinitialiser le mot de passe
+                            </button>`}</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+    container.querySelectorAll('.reset-password-btn').forEach(btn => {
+        btn.addEventListener('click', () => resetPassword(btn.dataset.userId, btn.dataset.pseudo));
+    });
+}
+
+async function resetPassword(userId, pseudo) {
+    if (!window.confirm(`Réinitialiser le mot de passe de ${pseudo} ? Il sera déconnecté.`)) return;
+    let response;
+    try {
+        response = await fetch(`${USERS_API_URL}/${encodeURIComponent(userId)}/reset-password`, { method: 'POST' });
+    } catch (err) {
+        console.error(err);
+        return showResetResult("Impossible de joindre le serveur.");
+    }
+    if (response.status === 401) return showLoginScreen("Votre session a expiré. Reconnectez-vous.");
+    if (!response.ok) return showResetResult(await errorDetail(response, "La réinitialisation a échoué."));
+    const body = await response.json();
+    showResetResult(`Mot de passe temporaire de ${body.pseudo} : ${body.temporary_password} — ` +
+        "transmettez-le-lui, il pourra le changer depuis son profil. Il ne sera plus affiché.");
+}
+
+function showResetResult(text) {
+    const el = document.getElementById('reset-result');
+    el.textContent = text;
+    el.classList.remove('hidden');
+}
+
+function formatDate(iso) {
+    const date = new Date(iso);
+    return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('fr-FR');
 }
 
 // Erreur affichée là où se trouve l'utilisateur (écran de connexion ou panneau)

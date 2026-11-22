@@ -6,7 +6,9 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from backend.db import init_db
+from backend.accounts.service import ensure_admin
+from backend.db import get_session, init_db
+from backend.server.auth import router as auth_router
 from backend.server.websocket_endpoint import router as ws_router
 from backend.server.admin import router as admin_router
 # Chargé dès le démarrage (moteur de jeu, LiteLLM : quelques secondes) plutôt qu'à la première
@@ -24,8 +26,11 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    """Au démarrage : ouverture de la base (création des tables, parties restées en cours interrompues)."""
+    """Au démarrage : ouverture de la base (création des tables, parties restées en cours interrompues),
+    puis création du compte admin s'il n'existe pas (ADMIN_PSEUDO / ADMIN_PASSWORD du .env)."""
     init_db()
+    with get_session() as db:
+        ensure_admin(db)
     yield
 
 
@@ -37,6 +42,7 @@ app = FastAPI(
 )
 
 app.include_router(ws_router)
+app.include_router(auth_router)
 app.include_router(admin_router)
 
 @app.get("/admin", tags=["Administration UI"])

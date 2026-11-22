@@ -3,13 +3,13 @@ Une seule partie à la fois : la session courante (backend/server/session.py).""
 import asyncio
 import logging
 import random
-import re
 from typing import Optional
 
+from backend.accounts.pseudo import INVALID_PSEUDO, pseudo_is_valid
 from backend.engine.config import AI_NAMES, PERSONALITY_NAMES
 from backend.engine.setup import setup_game
 from backend.models import Alignment
-from backend.server.protocol import CODEX, forward_requests, send_game_interrupted
+from backend.server.protocol import forward_requests, send_game_interrupted
 from backend.server.session import GameSession, current_session, set_current_session
 from backend.engine.turn import play_turn
 
@@ -24,12 +24,9 @@ GAME_CONFIG = {
 # Camp vainqueur, tel qu'envoyé au front (qui écrit le titre et compare au camp du joueur)
 WINNER_TEAMS = {Alignment.GOOD: "good", Alignment.EVIL: "evil"}
 
-# Motifs de refus envoyés au front (affichés sur l'écran d'accueil)
-REFUSED_PSEUDO = ("Pseudo invalide : 1 à 20 caractères parmi lettres, chiffres, tirets, « _ » et apostrophes, "
-                  "et différent du nom d'un personnage.")
-# Pseudo autorisé : lettres (accents compris), chiffres, - _ ' ’ ; 20 caractères au plus.
-# Même règle côté front (static/js/connection.js, PSEUDO_PATTERN).
-PSEUDO_PATTERN = re.compile(r"[\w'’-]{1,20}")
+# Motifs de refus envoyés au front (affichés sur l'écran d'accueil).
+# Règles du pseudo : backend/accounts/pseudo.py
+REFUSED_PSEUDO = INVALID_PSEUDO
 REFUSED_BUSY = "Une partie est déjà en cours avec un autre joueur."
 
 
@@ -89,16 +86,9 @@ def _game_running() -> bool:
     return session is not None and session.running
 
 
-def _pseudo_is_valid(pseudo: str) -> bool:
-    """Refuse un pseudo hors format (PSEUDO_PATTERN), réservé, ou déjà pris par un agent (sans tenir compte de la casse)."""
-    taken = {k.casefold() for k in AI_NAMES} | {v.casefold() for v in AI_NAMES.values()}
-    taken |= {"game_master", CODEX.casefold()}
-    return PSEUDO_PATTERN.fullmatch(pseudo) is not None and pseudo.casefold() not in taken
-
-
 def can_join(player_id: str) -> Optional[str]:
     """Le joueur peut-il entrer ? None si oui, sinon le motif du refus. Ne lance rien."""
-    if not _pseudo_is_valid(player_id):
+    if not pseudo_is_valid(player_id):
         return REFUSED_PSEUDO
     if _game_running() and player_id != current_session().human_id:
         return REFUSED_BUSY

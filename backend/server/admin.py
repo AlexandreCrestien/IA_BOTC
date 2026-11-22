@@ -1,36 +1,46 @@
-import os
+"""Routes du panneau d'administration, réservées au compte admin (cookie de connexion, voir auth.py) :
+état complet de la partie en cours, liste des comptes et réinitialisation d'un mot de passe."""
 import logging
-import secrets
-from typing import Optional
-from fastapi import APIRouter, Header, HTTPException, status, Depends
-from dotenv import load_dotenv
 
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from backend.accounts import service
+from backend.accounts.service import AccountError
+from backend.db import User, iso_utc
+from backend.server.auth import admin_user, db_session
 from backend.server.session import current_session
-
-load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/admin", tags=["Administration"])
-
-ADMIN_SECRET_TOKEN = os.getenv("ADMIN_SECRET_TOKEN")
-
-def verify_admin_token(x_admin_token: Optional[str] = Header(default=None)):
-    """Vérifie que la requête contient le bon jeton secret dans le header.
-    Si aucun jeton n'est configuré (variable absente ou vide), l'accès admin est toujours refusé.
-    Header absent ou jeton faux : même réponse 403.
-    compare_digest compare en temps constant : le temps de réponse ne révèle rien du jeton.
-    On compare des octets : avec du texte, un caractère non ASCII ferait planter la comparaison."""
-    if not ADMIN_SECRET_TOKEN or not x_admin_token or not secrets.compare_digest(x_admin_token.encode(), ADMIN_SECRET_TOKEN.encode()):
-        logger.warning("Tentative d'accès admin non autorisée détectée.")
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Accès refusé : Jeton admin invalide ou manquant."
-        )
-    return x_admin_token
+# Toutes les routes : 401 sans connexion, 403 pour un compte qui n'est pas admin
+router = APIRouter(prefix="/admin", tags=["Administration"], dependencies=[Depends(admin_user)])
 
 
-@router.get("/debug/all-states", dependencies=[Depends(verify_admin_token)])
+@router.get("/users")
+def list_users(db: Session = Depends(db_session)) -> list[dict]:
+    """Comptes, du plus ancien au plus récent (jamais le hash du mot de passe)."""
+    users = db.scalars(select(User).order_by(User.created_at, User.id)).all()
+    return [{"id": u.id, "pseudo": u.pseudo, "is_admin": u.is_admin, "created_at": iso_utc(u.created_at)}
+            for u in users]
+
+
+@router.post("/users/{user_id}/reset-password")
+def reset_user_password(user_id: int, db: Session = Depends(db_session)) -> dict:
+    """Dépannage d'un joueur qui a oublié son mot de passe : mot de passe temporaire, montré une seule fois
+    à l'admin qui le lui transmet. Le joueur est déconnecté partout."""
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Compte introuvable.")
+    try:
+        temporary = service.reset_password(db, user)
+    except AccountError as error:
+        raise HTTPException(error.status, error.message)
+    return {"pseudo": user.pseudo, "temporary_password": temporary}
+
+
+@router.get("/debug/all-states")
 def get_all_debug_states():
     """
     Route sécurisée pour inspecter la partie en cours (ou la dernière terminée), sans rien cacher :

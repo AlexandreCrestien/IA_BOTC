@@ -6,7 +6,7 @@
 // Code de fermeture envoyé par le serveur quand il refuse la connexion (motif dans event.reason)
 const CLOSE_REFUSED = 4001;
 // Pseudo autorisé : lettres (accents compris), chiffres, - _ ' ’ ; 20 caractères au plus.
-// Même règle côté serveur (backend/server/game_runner.py, PSEUDO_PATTERN).
+// Même règle côté serveur (backend/accounts/pseudo.py, PSEUDO_PATTERN).
 const PSEUDO_PATTERN = /^[\p{L}\p{N}_'’-]{1,20}$/u;
 
 // ================= CONNEXION =================

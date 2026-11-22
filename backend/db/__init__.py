@@ -6,6 +6,7 @@ from backend.db.models import (
     GameStatus,
     UnlockedAchievement,
     User,
+    iso_utc,
     pseudo_key,
 )
 
@@ -17,5 +18,6 @@ __all__ = [
     "User",
     "get_session",
     "init_db",
+    "iso_utc",
     "pseudo_key",
 ]
