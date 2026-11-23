@@ -117,7 +117,7 @@ def test_login_sends_credentials(page, static_url):
     server = mock_api(page)
     login(page, static_url, "Gardien", "secret-admin")
     expect(page.locator("#dashboard-section")).to_be_visible()
-    assert server.calls[0] == ("login", {"pseudo": "Gardien", "password": "secret-admin"})
+    assert server.calls[0] == ("login", {"login": "Gardien", "password": "secret-admin"})
 
 
 def test_page_opens_directly_when_already_logged_in(page, static_url):

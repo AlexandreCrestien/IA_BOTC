@@ -34,7 +34,7 @@ def fresh_db(db, clean_server):
 
 def account(pseudo="Vesper") -> int:
     with get_session() as db:
-        return service.register(db, pseudo, "mot-de-passe").id
+        return service.register(db, pseudo, "mot-de-passe", f"{pseudo.lower()}@exemple.fr").id
 
 
 def records() -> list[GameRecord]:
@@ -222,7 +222,7 @@ def client():
 
 
 def log_in(client, pseudo="Vesper"):
-    assert client.post("/api/auth/login", json={"pseudo": pseudo, "password": "mot-de-passe"}).status_code == 200
+    assert client.post("/api/auth/login", json={"login": pseudo, "password": "mot-de-passe"}).status_code == 200
 
 
 def test_current_game_without_game(client):
@@ -276,7 +276,8 @@ def test_pseudo_cannot_change_during_own_game(client, monkeypatch):
 
 def test_register_with_guest_token_claims_the_game(client, monkeypatch):
     running_session(monkeypatch, guest_token="jeton", human_id="Lune", state=make_state())
-    response = client.post("/api/auth/register", json={"pseudo": "Vesper", "password": "mot-de-passe",
+    response = client.post("/api/auth/register", json={"pseudo": "Vesper", "email": "vesper@exemple.fr",
+                                                       "password": "mot-de-passe",
                                                        "guest_token": "jeton"})
     assert response.status_code == 201 and response.json()["game_claimed"] is True
     assert records()[0].user_id == response.json()["id"]
@@ -285,14 +286,14 @@ def test_register_with_guest_token_claims_the_game(client, monkeypatch):
 def test_login_with_guest_token_claims_the_game(client, monkeypatch):
     account("Vesper")
     running_session(monkeypatch, guest_token="jeton", human_id="Lune", state=make_state())
-    response = client.post("/api/auth/login", json={"pseudo": "Vesper", "password": "mot-de-passe", "guest_token": "jeton"})
+    response = client.post("/api/auth/login", json={"login": "Vesper", "password": "mot-de-passe", "guest_token": "jeton"})
     assert response.json()["game_claimed"] is True
 
 
 def test_login_without_token_claims_nothing(client, monkeypatch):
     account("Vesper")
     running_session(monkeypatch, guest_token="jeton", human_id="Lune", state=make_state())
-    assert client.post("/api/auth/login", json={"pseudo": "Vesper", "password": "mot-de-passe"}).json()["game_claimed"] is False
+    assert client.post("/api/auth/login", json={"login": "Vesper", "password": "mot-de-passe"}).json()["game_claimed"] is False
     assert records() == []
 
 

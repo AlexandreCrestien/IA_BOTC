@@ -110,6 +110,7 @@
         <!-- PROFIL -->
         <section id="section-profile" class="dash-section">
             <h2 class="dash-section-title">Profil</h2>
+            <p class="text-sm opacity-80 mb-4">Adresse e-mail du compte : <span id="profile-email" class="text-gold"></span></p>
             <div class="profile-grid">
                 <form id="pseudo-form" class="space-y-3">
                     <p class="modal-kicker">Changer de pseudo</p>
@@ -120,6 +121,23 @@
                     <button type="submit" id="pseudo-submit" class="btn-seal w-full">Changer de pseudo</button>
                     <p id="pseudo-error" role="alert" class="welcome-error hidden text-sm text-center"></p>
                     <p id="pseudo-success" role="status" class="form-success hidden text-sm text-center"></p>
+                </form>
+
+                <form id="email-form" class="space-y-3">
+                    <p class="modal-kicker">Changer d'adresse e-mail</p>
+                    <div class="label-with-tip">
+                        <label for="new-email" class="text-xs font-semibold uppercase tracking-wider block opacity-70">Nouvelle adresse</label>
+                        <span class="info-tip">
+                            <button type="button" class="info-tip-icon" aria-label="Pourquoi votre adresse e-mail ?" aria-describedby="new-email-tip">?</button>
+                            <span id="new-email-tip" role="tooltip" class="info-tip-text">Votre adresse sert uniquement à vous connecter, à recevoir un lien si vous oubliez votre mot de passe et à être prévenu un mois avant la suppression d'un compte inactif. Elle n'est jamais transmise à personne, ni utilisée pour de la publicité.</span>
+                        </span>
+                    </div>
+                    <input type="email" id="new-email" maxlength="254" autocomplete="email" class="welcome-input w-full" aria-describedby="new-email-tip">
+                    <label for="email-current-password" class="text-xs font-semibold uppercase tracking-wider block opacity-70">Mot de passe actuel</label>
+                    <input type="password" id="email-current-password" autocomplete="current-password" class="welcome-input w-full font-mono">
+                    <button type="submit" id="email-submit" class="btn-seal w-full">Changer d'adresse</button>
+                    <p id="email-error" role="alert" class="welcome-error hidden text-sm text-center"></p>
+                    <p id="email-success" role="status" class="form-success hidden text-sm text-center"></p>
                 </form>
 
                 <form id="password-form" class="space-y-3">
@@ -180,7 +198,7 @@
             <div class="modal-notice notice-blood">
                 <strong class="block mb-1">Supprimés définitivement :</strong>
                 <ul class="list-disc pl-5 space-y-0.5">
-                    <li>votre compte : pseudo et mot de passe ;</li>
+                    <li>votre compte : pseudo, adresse e-mail et mot de passe ;</li>
                     <li>vos succès.</li>
                 </ul>
                 <strong class="block mt-2 mb-1">Gardés de façon anonyme :</strong>

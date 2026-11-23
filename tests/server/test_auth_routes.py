@@ -13,12 +13,17 @@ def client(clean_server):
         yield client
 
 
-def register(client, pseudo="Vesper", password="mot-de-passe"):
-    return client.post("/api/auth/register", json={"pseudo": pseudo, "password": password})
+def email_of(pseudo):
+    return f"{pseudo.lower()}@exemple.fr"
+
+
+def register(client, pseudo="Vesper", password="mot-de-passe", email=None):
+    return client.post("/api/auth/register",
+                       json={"pseudo": pseudo, "email": email or email_of(pseudo), "password": password})
 
 
 def login(client, pseudo="Vesper", password="mot-de-passe"):
-    return client.post("/api/auth/login", json={"pseudo": pseudo, "password": password})
+    return client.post("/api/auth/login", json={"login": pseudo, "password": password})
 
 
 def test_register_logs_the_player_in(client):
@@ -57,7 +62,7 @@ def test_login_does_not_reveal_whether_the_pseudo_exists(client):
     register(client)
     wrong_password, unknown = login(client, password="mauvais"), login(client, pseudo="Inconnu")
     assert wrong_password.status_code == unknown.status_code == 401
-    assert wrong_password.json() == unknown.json() == {"detail": "Pseudo ou mot de passe incorrect."}
+    assert wrong_password.json() == unknown.json() == {"detail": "Identifiant ou mot de passe incorrect."}
 
 
 def test_login_is_blocked_after_too_many_failures(client):
@@ -176,7 +181,9 @@ def test_inactive_accounts_are_purged_except_the_one_playing(clean_server, monke
         register(TestClient(app), "Joueur")
         with get_session() as db:
             for pseudo in ("Dormeur", "Joueur"):
-                service.find_by_pseudo(db, pseudo).last_seen_at = utcnow() - timedelta(days=400)
+                user = service.find_by_pseudo(db, pseudo)
+                user.last_seen_at = utcnow() - timedelta(days=400)
+                user.inactivity_warned_at = utcnow() - timedelta(days=31)  # prévenus il y a plus de 30 jours
             db.commit()
             playing_id = service.find_by_pseudo(db, "Joueur").id
         monkeypatch.setattr(GameSession, "running", property(lambda self: True))  # partie en cours

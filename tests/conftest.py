@@ -14,6 +14,9 @@ os.environ["JWT_SECRET"] = "cle-de-test-uniquement-pour-pytest-0123456789"
 os.environ["BCRYPT_ROUNDS"] = "4"
 os.environ["ADMIN_PSEUDO"] = ""
 os.environ["ADMIN_PASSWORD"] = ""
+os.environ["ADMIN_EMAIL"] = ""
+# E-mails gardés en mémoire (backend.mail.OUTBOX), jamais envoyés ni affichés
+os.environ["MAIL_MODE"] = "memory"
 
 import pytest  # noqa: E402
 
@@ -64,8 +67,20 @@ def db():
 
 @pytest.fixture(autouse=True)
 def reset_login_limiter():
-    """Les échecs de connexion sont gardés en mémoire par le serveur : on repart de zéro à chaque test."""
-    from backend.server.auth import login_limiter
-    login_limiter.failures.clear()
+    """Les échecs de connexion et les demandes de mot de passe oublié sont gardés en mémoire par le serveur :
+    on repart de zéro à chaque test."""
+    from backend.server.auth import login_limiter, reset_limiter
+    for limiter in (login_limiter, reset_limiter):
+        limiter.failures.clear()
     yield
-    login_limiter.failures.clear()
+    for limiter in (login_limiter, reset_limiter):
+        limiter.failures.clear()
+
+
+@pytest.fixture(autouse=True)
+def outbox():
+    """E-mails « envoyés » pendant le test (MAIL_MODE=memory)."""
+    from backend.mail import OUTBOX
+    OUTBOX.clear()
+    yield OUTBOX
+    OUTBOX.clear()

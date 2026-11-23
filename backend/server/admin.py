@@ -23,7 +23,8 @@ router = APIRouter(prefix="/admin", tags=["Administration"], dependencies=[Depen
 def list_users(db: Session = Depends(db_session)) -> list[dict]:
     """Comptes, du plus ancien au plus récent (jamais le hash du mot de passe)."""
     users = db.scalars(select(User).order_by(User.created_at, User.id)).all()
-    return [{"id": u.id, "pseudo": u.pseudo, "is_admin": u.is_admin, "created_at": iso_utc(u.created_at)}
+    return [{"id": u.id, "pseudo": u.pseudo, "email": u.email, "is_admin": u.is_admin,
+             "created_at": iso_utc(u.created_at)}
             for u in users]
 
 

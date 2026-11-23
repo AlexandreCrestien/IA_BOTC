@@ -47,7 +47,7 @@ async function login() {
         response = await fetch(LOGIN_API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ pseudo, password }),
+            body: JSON.stringify({ login: pseudo, password }),
         });
     } catch (err) {
         console.error(err);
@@ -177,12 +177,13 @@ function renderAccounts(users) {
     container.innerHTML = `
         <table class="admin-table w-full">
             <thead>
-                <tr><th>Pseudo</th><th>Créé le</th><th>Action</th></tr>
+                <tr><th>Pseudo</th><th>Adresse e-mail</th><th>Créé le</th><th>Action</th></tr>
             </thead>
             <tbody>
                 ${users.map(u => `
                     <tr>
                         <td class="font-semibold">${escapeHtml(u.pseudo)}${u.is_admin ? ' <span class="opacity-60 font-normal">(admin)</span>' : ''}</td>
+                        <td>${u.email ? escapeHtml(u.email) : '<span class="opacity-50">—</span>'}</td>
                         <td>${escapeHtml(formatDate(u.created_at))}</td>
                         <td>${u.is_admin ? '<span class="opacity-50">—</span>' : `
                             <div class="flex flex-wrap gap-2">

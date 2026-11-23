@@ -121,6 +121,7 @@ def export_account(db: Session, user: User) -> dict:
         },
         "account": {
             "pseudo": user.pseudo,
+            "email": user.email,
             "type": "administrateur" if user.is_admin else "joueur",
             "created_at": iso_utc(user.created_at),
             "last_activity_at": iso_utc(user.last_seen_at),

@@ -74,6 +74,11 @@ document.getElementById('register-form').addEventListener('submit', (event) => {
     submitWelcomeAccount('register');
 });
 
+document.getElementById('forgot-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    submitForgotPassword();
+});
+
 document.getElementById('account-form').addEventListener('submit', (event) => {
     event.preventDefault();
     submitGameAccount();

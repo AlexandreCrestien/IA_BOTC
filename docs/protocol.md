@@ -87,10 +87,13 @@ Réponses en JSON. Une erreur renvoie `{"detail": "<message en français>"}`, af
 
 | Route | Corps | Réponse |
 |---|---|---|
-| `POST /api/auth/register` | `pseudo`, `password`, `guest_token` (facultatif) | Compte créé et connecté (cookie) : `id`, `pseudo`, `is_admin`, `game_claimed`, `achievements` |
-| `POST /api/auth/login` | `pseudo`, `password`, `guest_token` (facultatif) | Comme l'inscription. 401 si le pseudo ou le mot de passe est faux (même message dans les deux cas) ; 429 après 5 échecs en 5 minutes pour un pseudo |
+| `POST /api/auth/register` | `pseudo`, `email`, `password`, `guest_token` (facultatif) | Compte créé et connecté (cookie) : `id`, `pseudo`, `email`, `is_admin`, `game_claimed`, `achievements`. 409 si le pseudo ou l'adresse est déjà pris |
+| `POST /api/auth/login` | `login` (pseudo ou adresse e-mail), `password`, `guest_token` (facultatif) | Comme l'inscription. 401 si l'identifiant ou le mot de passe est faux (même message dans les deux cas) ; 429 après 5 échecs en 5 minutes pour un même compte |
+| `POST /api/auth/forgot-password` | `email` | Toujours la même réponse (`message`), que l'adresse ait un compte ou non. Si oui : e-mail avec un lien `reset-password.html?token=…` (usage unique, 30 minutes). 3 demandes au plus par adresse en 15 minutes |
+| `POST /api/auth/reset-password` | `token`, `new_password` | Nouveau mot de passe ; tous les appareils sont déconnectés. 400 si le lien a déjà servi ou a expiré |
 | `POST /api/auth/logout` | — | 204, cookie effacé |
-| `GET /api/auth/me` | — | Compte connecté : `id`, `pseudo`, `is_admin` |
+| `GET /api/auth/me` | — | Compte connecté : `id`, `pseudo`, `email`, `is_admin` |
+| `PATCH /api/account/email` | `current_password`, `email` | 409 si l'adresse est déjà prise |
 | `PATCH /api/account/pseudo` | `current_password`, `pseudo` | 409 pendant une partie en cours du compte |
 | `PATCH /api/account/password` | `current_password`, `new_password` | Les autres appareils sont déconnectés ; celui-ci reçoit un nouveau cookie |
 | `DELETE /api/account` | `current_password` | 204 : compte et succès supprimés, parties gardées anonymement, partie en cours arrêtée, cookie effacé. 403 si le mot de passe est faux, 400 pour le compte admin |
@@ -113,7 +116,7 @@ Réponses en JSON. Une erreur renvoie `{"detail": "<message en français>"}`, af
 | Route | Réponse |
 |---|---|
 | `GET /admin/debug/all-states` | État complet de la partie présente sur le serveur (rien n'est caché) |
-| `GET /admin/users` | Comptes : `id`, `pseudo`, `is_admin`, `created_at` |
+| `GET /admin/users` | Comptes : `id`, `pseudo`, `email`, `is_admin`, `created_at` |
 | `POST /admin/users/{id}/reset-password` | `pseudo`, `temporary_password` (affiché une seule fois). Refusé pour le compte admin |
 | `DELETE /admin/users/{id}` | 204 : même suppression que `DELETE /api/account` ; sa partie en cours est arrêtée (l'écran de jeu reçoit `game_abandoned`). Refusé pour le compte admin |
 

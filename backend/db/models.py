@@ -51,6 +51,8 @@ class Base(DeclarativeBase):
 
 class User(Base):
     __tablename__ = "users"
+    # Contrainte nommée : une migration peut la retrouver pour la supprimer (retour arrière)
+    __table_args__ = (UniqueConstraint("email", name="uq_users_email"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     pseudo: Mapped[str] = mapped_column(String(20))
@@ -63,8 +65,13 @@ class User(Base):
     token_version: Mapped[int] = mapped_column(default=0)
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
     # Dernière activité (connexion, visite connectée, au plus une mise à jour par jour) :
-    # un compte inactif depuis un an est supprimé automatiquement (backend/server/maintenance.py)
+    # un compte inactif depuis un an est supprimé automatiquement (backend/server/account_removal.py)
     last_seen_at: Mapped[datetime] = mapped_column(default=utcnow)
+    # Adresse e-mail, en minuscules : connexion, mot de passe oublié, avertissement avant suppression.
+    # Obligatoire à l'inscription ; vide seulement pour le compte admin créé sans ADMIN_EMAIL.
+    email: Mapped[Optional[str]] = mapped_column(String(254))
+    # Avertissement « compte bientôt supprimé pour inactivité » envoyé (remis à vide à la reconnexion)
+    inactivity_warned_at: Mapped[Optional[datetime]]
 
     games: Mapped[list["GameRecord"]] = relationship(back_populates="user")
     achievements: Mapped[list["UnlockedAchievement"]] = relationship(back_populates="user")
@@ -112,3 +119,16 @@ class UnlockedAchievement(Base):
     game_id: Mapped[Optional[int]] = mapped_column(ForeignKey("games.id"))
 
     user: Mapped[User] = relationship(back_populates="achievements")
+
+
+class PasswordResetToken(Base):
+    """Lien « mot de passe oublié » : usage unique, valable RESET_TOKEN_LIFETIME (backend/accounts/service.py).
+    Seule l'empreinte du jeton est stockée : qui lit la base ne peut pas s'en servir."""
+    __tablename__ = "password_reset_tokens"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    expires_at: Mapped[datetime]
+    used_at: Mapped[Optional[datetime]]

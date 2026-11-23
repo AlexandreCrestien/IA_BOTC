@@ -58,7 +58,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         return; // 401 : redirection vers l'accueil
     }
     currentUser = me.body;
-    document.getElementById('dashboard-pseudo').textContent = currentUser.pseudo;
+    showIdentity();
     document.getElementById('dashboard-main').classList.remove('hidden');
     await refreshAll();
 });
@@ -108,6 +108,10 @@ function bindEvents() {
     document.getElementById('pseudo-form').addEventListener('submit', (event) => {
         event.preventDefault();
         changePseudo();
+    });
+    document.getElementById('email-form').addEventListener('submit', (event) => {
+        event.preventDefault();
+        changeEmail();
     });
     document.getElementById('password-form').addEventListener('submit', (event) => {
         event.preventDefault();
@@ -265,9 +269,28 @@ async function changePseudo() {
     const result = await api('/api/account/pseudo', { method: 'PATCH', data: { pseudo, current_password: password } });
     if (!result.ok) return setFormMessages('pseudo', errorText(result, "Le changement de pseudo a échoué."));
     currentUser = result.body;
-    document.getElementById('dashboard-pseudo').textContent = currentUser.pseudo;
+    showIdentity();
     document.getElementById('pseudo-form').reset();
     setFormMessages('pseudo', null, `Votre pseudo est maintenant ${currentUser.pseudo}.`);
+}
+
+async function changeEmail() {
+    const email = document.getElementById('new-email').value.trim();
+    const password = document.getElementById('email-current-password').value;
+    if (!email || !password) return setFormMessages('email', "Entrez la nouvelle adresse et votre mot de passe actuel.");
+
+    const result = await api('/api/account/email', { method: 'PATCH', data: { email, current_password: password } });
+    if (!result.ok) return setFormMessages('email', errorText(result, "Le changement d'adresse a échoué."));
+    currentUser = result.body;
+    showIdentity();
+    document.getElementById('email-form').reset();
+    setFormMessages('email', null, `Votre adresse est maintenant ${currentUser.email}.`);
+}
+
+// Pseudo dans l'en-tête, adresse e-mail dans le profil
+function showIdentity() {
+    document.getElementById('dashboard-pseudo').textContent = currentUser.pseudo;
+    document.getElementById('profile-email').textContent = currentUser.email || "aucune";
 }
 
 async function changePassword() {

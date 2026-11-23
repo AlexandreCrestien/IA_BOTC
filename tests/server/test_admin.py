@@ -106,12 +106,12 @@ def client(clean_server):
     with TestClient(app) as client:
         with get_session() as db:
             ensure_admin(db, "Gardien", "mot-de-passe-admin")
-            register(db, "Vesper", "mot-de-passe-joueur")
+            register(db, "Vesper", "mot-de-passe-joueur", "vesper@exemple.fr")
         yield client
 
 
 def log_in(client, pseudo, password):
-    assert client.post("/api/auth/login", json={"pseudo": pseudo, "password": password}).status_code == 200
+    assert client.post("/api/auth/login", json={"login": pseudo, "password": password}).status_code == 200
 
 
 def test_admin_routes_require_a_login(client):
@@ -143,7 +143,7 @@ def test_admin_lists_accounts_without_password_hash(client):
     log_in(client, "Gardien", "mot-de-passe-admin")
     users = client.get("/admin/users").json()
     assert [(u["pseudo"], u["is_admin"]) for u in users] == [("Gardien", True), ("Vesper", False)]
-    assert all(set(u) == {"id", "pseudo", "is_admin", "created_at"} for u in users)
+    assert all(set(u) == {"id", "pseudo", "email", "is_admin", "created_at"} for u in users)
     assert all(u["created_at"].endswith("+00:00") for u in users)  # fuseau explicite pour le navigateur
 
 
@@ -159,7 +159,7 @@ def test_admin_resets_a_player_password(client):
     assert response.json()["pseudo"] == "Vesper" and len(temporary) >= 8
 
     assert player.get("/api/auth/me").status_code == 401  # le joueur est déconnecté
-    assert client.post("/api/auth/login", json={"pseudo": "Vesper", "password": "mot-de-passe-joueur"}).status_code == 401
+    assert client.post("/api/auth/login", json={"login": "Vesper", "password": "mot-de-passe-joueur"}).status_code == 401
     log_in(TestClient(app), "Vesper", temporary)
 
 

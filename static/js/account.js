@@ -54,16 +54,27 @@ async function fetchCurrentGame() {
     return result.ok && result.body ? result.body : { running: false };
 }
 
-// Inscription ou connexion ; guest_token : rattache la partie de l'invité au compte
-async function authenticate(mode, pseudo, password) {
-    const url = mode === 'register' ? '/api/auth/register' : '/api/auth/login';
-    return apiPost(url, { pseudo, password, guest_token: guestToken });
+// Inscription (pseudo, e-mail, mot de passe) ou connexion (pseudo ou e-mail, mot de passe) ;
+// guest_token : rattache la partie de l'invité au compte
+async function authenticate(mode, fields) {
+    if (mode === 'register') {
+        return apiPost('/api/auth/register', {
+            pseudo: fields.pseudo, email: fields.email, password: fields.password, guest_token: guestToken,
+        });
+    }
+    return apiPost('/api/auth/login', { login: fields.login, password: fields.password, guest_token: guestToken });
 }
 
 // Vérifications faites avant d'appeler le serveur (qui refait les siennes)
-function credentialsError(mode, pseudo, password, confirm) {
-    if (!pseudo || !password) return "Veuillez entrer un pseudo et un mot de passe.";
-    if (mode === 'register' && password !== confirm) return "Les deux mots de passe ne correspondent pas.";
+function credentialsError(mode, fields) {
+    if (mode === 'register') {
+        if (!fields.pseudo || !fields.email || !fields.password) {
+            return "Veuillez entrer un pseudo, une adresse e-mail et un mot de passe.";
+        }
+        if (fields.password !== fields.confirm) return "Les deux mots de passe ne correspondent pas.";
+        return null;
+    }
+    if (!fields.login || !fields.password) return "Veuillez entrer votre pseudo (ou e-mail) et votre mot de passe.";
     return null;
 }
 
@@ -79,17 +90,29 @@ function setFormError(id, text) {
 
 // ================= ACCUEIL =================
 const WELCOME_TABS = ['guest', 'login', 'register'];
+// « Mot de passe oublié » s'ouvre depuis la connexion : panneau sans onglet, l'onglet Connexion reste actif
+const WELCOME_PANELS = [...WELCOME_TABS, 'forgot'];
+const FIRST_FIELDS = { guest: 'welcome-player-id', login: 'login-identifier', register: 'register-pseudo',
+                       forgot: 'forgot-email' };
 
 function switchWelcomeTab(tab) {
+    const highlighted = tab === 'forgot' ? 'login' : tab;
     WELCOME_TABS.forEach(name => {
-        const active = name === tab;
+        const active = name === highlighted;
         const button = document.getElementById(`welcome-tab-${name}`);
         button.classList.toggle('is-active', active);
         button.setAttribute('aria-selected', String(active));
-        document.querySelector(`.welcome-panel[data-panel="${name}"]`).classList.toggle('hidden', !active);
     });
-    const firstField = { guest: 'welcome-player-id', login: 'login-pseudo', register: 'register-pseudo' }[tab];
-    document.getElementById(firstField).focus();
+    WELCOME_PANELS.forEach(name => {
+        document.querySelector(`.welcome-panel[data-panel="${name}"]`).classList.toggle('hidden', name !== tab);
+    });
+    document.getElementById(FIRST_FIELDS[tab]).focus();
+}
+
+function showWelcomeNotice(text) {
+    const notice = document.getElementById('welcome-notice');
+    notice.textContent = text;
+    notice.classList.remove('hidden');
 }
 
 // Au chargement : joueur connecté → tableau de bord (ou sa partie avec /?play) ;
@@ -99,9 +122,14 @@ async function initWelcome() {
     const wantsToPlay = params.has(PLAY_PARAM);
     if (params.has('deleted')) {
         // Compte supprimé depuis le tableau de bord
-        document.getElementById('welcome-notice').textContent = "Votre compte a été supprimé.";
-        document.getElementById('welcome-notice').classList.remove('hidden');
+        showWelcomeNotice("Votre compte a été supprimé.");
         history.replaceState(null, '', '/');
+    }
+    if (params.has('reset')) {
+        // Nouveau mot de passe choisi depuis le lien reçu par e-mail (reset-password.html)
+        showWelcomeNotice("Votre mot de passe a été modifié : connectez-vous avec le nouveau.");
+        history.replaceState(null, '', '/');
+        switchWelcomeTab('login');
     }
     const [user, game] = await Promise.all([fetchCurrentUser(), fetchCurrentGame()]);
     currentUser = user;
@@ -147,22 +175,47 @@ function resumeGuestGame() {
 // Connexion ou inscription depuis l'accueil : direction le tableau de bord
 async function submitWelcomeAccount(mode) {
     const prefix = mode === 'register' ? 'register' : 'login';
-    const pseudo = readField(`${prefix}-pseudo`).trim().normalize('NFC');
-    const password = readField(`${prefix}-password`);
-    const confirm = mode === 'register' ? readField('register-password-confirm') : null;
-    const error = credentialsError(mode, pseudo, password, confirm);
+    const fields = mode === 'register'
+        ? {
+            pseudo: readField('register-pseudo').trim().normalize('NFC'),
+            email: readField('register-email').trim(),
+            password: readField('register-password'),
+            confirm: readField('register-password-confirm'),
+        }
+        : { login: readField('login-identifier').trim().normalize('NFC'), password: readField('login-password') };
+    const error = credentialsError(mode, fields);
     setFormError(`${prefix}-error`, error);
     if (error) return;
 
     const button = document.getElementById(`${prefix}-btn`);
     button.disabled = true;
-    const result = await authenticate(mode, pseudo, password);
+    const result = await authenticate(mode, fields);
     button.disabled = false;
     if (!result.ok) {
         setFormError(`${prefix}-error`, apiError(result, "La connexion a échoué."));
         return;
     }
     location.href = DASHBOARD_URL;
+}
+
+// Mot de passe oublié : le serveur répond la même chose que l'adresse ait un compte ou non
+async function submitForgotPassword() {
+    const email = readField('forgot-email').trim();
+    const message = document.getElementById('forgot-message');
+    message.classList.add('hidden');
+    setFormError('forgot-error', email ? null : "Veuillez entrer votre adresse e-mail.");
+    if (!email) return;
+
+    const button = document.getElementById('forgot-btn');
+    button.disabled = true;
+    const result = await apiPost('/api/auth/forgot-password', { email });
+    button.disabled = false;
+    if (!result.ok) {
+        setFormError('forgot-error', apiError(result, "La demande a échoué. Réessayez."));
+        return;
+    }
+    message.textContent = result.body?.message || "Un e-mail vient d'être envoyé.";
+    message.classList.remove('hidden');
 }
 
 // ================= MENU DE LA PARTIE =================
@@ -203,22 +256,26 @@ function openAccountModal(mode) {
     setAccountMode(mode);
     // Pseudo d'invité proposé pour le compte
     document.getElementById('account-pseudo').value = mode === 'register' ? playerId : '';
+    document.getElementById('account-email').value = '';
     document.getElementById('account-password').value = '';
     document.getElementById('account-password-confirm').value = '';
     document.getElementById('account-hint').textContent = gameIsOver
         ? "Cette partie sera enregistrée dans votre compte, avec les succès qu'elle débloque."
         : "Cette partie sera enregistrée dans votre compte.";
     openModal('modal-account');
-    document.getElementById(mode === 'register' ? 'account-password' : 'account-pseudo').focus();
+    document.getElementById(mode === 'register' ? 'account-email' : 'account-pseudo').focus();
 }
 
 function setAccountMode(mode) {
     accountMode = mode;
     const texts = ACCOUNT_TEXTS[mode];
+    const registering = mode === 'register';
     document.getElementById('account-title').textContent = texts.title;
     document.getElementById('account-submit').textContent = texts.submit;
     document.getElementById('account-switch').textContent = texts.switchTo;
-    document.getElementById('account-confirm-row').classList.toggle('hidden', mode !== 'register');
+    document.getElementById('account-pseudo-label').textContent = registering ? "Pseudo" : "Pseudo ou adresse e-mail";
+    document.getElementById('account-email-row').classList.toggle('hidden', !registering);
+    document.getElementById('account-confirm-row').classList.toggle('hidden', !registering);
     document.getElementById('account-password').autocomplete = mode === 'register' ? 'new-password' : 'current-password';
     setFormError('account-error', null);
 }
@@ -232,15 +289,19 @@ function closeAccountModal() {
 }
 
 async function submitGameAccount() {
-    const pseudo = readField('account-pseudo').trim().normalize('NFC');
+    const identifier = readField('account-pseudo').trim().normalize('NFC');
     const password = readField('account-password');
-    const error = credentialsError(accountMode, pseudo, password, readField('account-password-confirm'));
+    const fields = accountMode === 'register'
+        ? { pseudo: identifier, email: readField('account-email').trim(), password,
+            confirm: readField('account-password-confirm') }
+        : { login: identifier, password };
+    const error = credentialsError(accountMode, fields);
     setFormError('account-error', error);
     if (error) return;
 
     const button = document.getElementById('account-submit');
     button.disabled = true;
-    const result = await authenticate(accountMode, pseudo, password);
+    const result = await authenticate(accountMode, fields);
     button.disabled = false;
     if (!result.ok) {
         setFormError('account-error', apiError(result, "La connexion a échoué."));
@@ -248,7 +309,7 @@ async function submitGameAccount() {
     }
 
     const body = result.body;
-    currentUser = { id: body.id, pseudo: body.pseudo, is_admin: body.is_admin };
+    currentUser = { id: body.id, pseudo: body.pseudo, email: body.email, is_admin: body.is_admin };
     guestToken = null; // usage unique : la partie est rattachée (ou ne peut plus l'être)
     closeAccountModal();
     refreshGameMenu();

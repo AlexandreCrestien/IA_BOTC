@@ -265,3 +265,24 @@ def test_export_error_is_shown(page, static_url):
     page.route("**/api/me/export", lambda route: route.fulfill(status=500, body="erreur"))
     page.click("#export-data-btn")
     expect(page.locator("#export-error")).to_have_text("Le téléchargement a échoué. Réessayez.")
+
+
+def test_profile_shows_and_changes_the_email(page, static_url):
+    api = open_dashboard(page, static_url)
+    expect(page.locator("#profile-email")).to_have_text("vesper@exemple.fr")
+    api.set("PATCH", "/api/account/email", 200, {**USER, "email": "nouveau@exemple.fr"})
+    page.fill("#new-email", "nouveau@exemple.fr")
+    page.fill("#email-current-password", "mot-de-passe")
+    page.click("#email-submit")
+    expect(page.locator("#email-success")).to_have_text("Votre adresse est maintenant nouveau@exemple.fr.")
+    expect(page.locator("#profile-email")).to_have_text("nouveau@exemple.fr")
+    assert api.sent("PATCH", "/api/account/email") == [{"email": "nouveau@exemple.fr", "current_password": "mot-de-passe"}]
+
+
+def test_change_email_error_is_shown(page, static_url):
+    api = open_dashboard(page, static_url)
+    api.set("PATCH", "/api/account/email", 409, {"detail": "Cette adresse e-mail est déjà utilisée par un autre compte."})
+    page.fill("#new-email", "pris@exemple.fr")
+    page.fill("#email-current-password", "mot-de-passe")
+    page.click("#email-submit")
+    expect(page.locator("#email-error")).to_have_text("Cette adresse e-mail est déjà utilisée par un autre compte.")

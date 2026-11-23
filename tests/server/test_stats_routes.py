@@ -34,9 +34,9 @@ def client():
 
 def account(client=None, pseudo="Vesper") -> int:
     with get_session() as db:
-        user_id = service.register(db, pseudo, "mot-de-passe").id
+        user_id = service.register(db, pseudo, "mot-de-passe", f"{pseudo.lower()}@exemple.fr").id
     if client is not None:
-        client.post("/api/auth/login", json={"pseudo": pseudo, "password": "mot-de-passe"})
+        client.post("/api/auth/login", json={"login": pseudo, "password": "mot-de-passe"})
     return user_id
 
 
@@ -100,7 +100,8 @@ def test_signup_from_end_screen_returns_the_achievements(client, monkeypatch):
     play_one_turn(monkeypatch, session)
     session.state = make_state(1)  # comme après le relais de la fin de partie
 
-    response = client.post("/api/auth/register", json={"pseudo": "Vesper", "password": "mot-de-passe",
+    response = client.post("/api/auth/register", json={"pseudo": "Vesper", "email": "vesper@exemple.fr",
+                                                       "password": "mot-de-passe",
                                                        "guest_token": "jeton"})
     body = response.json()
     assert body["game_claimed"] is True

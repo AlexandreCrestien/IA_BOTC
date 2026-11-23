@@ -9,7 +9,8 @@ import logging
 
 from sqlalchemy.orm import Session
 
-from backend.accounts import service
+from backend.accounts import emails, service
+from backend.mail import send_mail
 from backend.db import User, get_session
 from backend.server import game_runner
 from backend.server.protocol import send
@@ -38,9 +39,29 @@ async def remove_account(db: Session, user: User, reason: str) -> None:
     service.delete_account(db, user, reason=reason)
 
 
+def warn_inactive_accounts() -> list[str]:
+    """Prévient par e-mail les comptes inactifs depuis 11 mois : sans connexion dans les 30 jours, ils seront
+    supprimés. Un compte n'est marqué « prévenu » que si l'e-mail est bien parti. Renvoie les pseudos prévenus."""
+    warned = []
+    with get_session() as db:
+        for user in service.accounts_to_warn(db):
+            subject, text = emails.inactivity_warning(user.pseudo, service.deletion_date(user))
+            if send_mail(user.email, subject, text):
+                service.mark_warned(db, user)
+                warned.append(user.pseudo)
+    if warned:
+        logger.info("%d compte(s) inactif(s) prévenu(s) avant suppression", len(warned))
+    return warned
+
+
 def purge_inactive_accounts() -> list[str]:
-    """Supprime les comptes sans activité depuis un an. Un compte dont la partie est en cours est épargné :
-    il est actif. Renvoie les pseudos supprimés."""
+    """Tâche quotidienne : prévient les comptes bientôt concernés, efface les liens « mot de passe oublié »
+    expirés, puis supprime les comptes inactifs depuis un an et prévenus depuis 30 jours au moins
+    (ou sans adresse). Un compte dont la partie est en cours est épargné : il est actif.
+    Renvoie les pseudos supprimés."""
+    warn_inactive_accounts()
+    with get_session() as db:
+        service.delete_stale_reset_tokens(db)
     session = current_session()
     keep = [session.user_id] if session is not None and session.running and session.user_id else []
     with get_session() as db:

@@ -9,7 +9,7 @@ from backend.db import User
 
 
 def account(db, pseudo="Vesper", password="mot-de-passe"):
-    return service.register(db, pseudo, password)
+    return service.register(db, pseudo, password, f"{pseudo.lower()}@exemple.fr")
 
 
 def refusal(call) -> AccountError:
@@ -170,6 +170,7 @@ def test_inactive_accounts_are_deleted_after_a_year(db):
     sleeper, playing, active = account(db, "Dormeur"), account(db, "Joueur"), account(db, "Actif")
     for user in (admin, sleeper, playing):
         user.last_seen_at = utcnow() - timedelta(days=400)
+        user.inactivity_warned_at = utcnow() - timedelta(days=31)  # prévenus il y a plus de 30 jours
     active.last_seen_at = utcnow() - timedelta(days=364)
     db.commit()
 

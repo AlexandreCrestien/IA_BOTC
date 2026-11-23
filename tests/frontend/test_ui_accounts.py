@@ -6,7 +6,7 @@ from playwright.sync_api import expect
 
 from conftest import PLAYER, players
 
-USER = {"id": 1, "pseudo": PLAYER, "is_admin": False}
+USER = {"id": 1, "pseudo": PLAYER, "email": "vesper@exemple.fr", "is_admin": False}
 ACHIEVEMENT = {"code": "one_turn_win", "title": "Coup de maître", "description": "Gagner une partie en un seul tour.",
                "message": "Talents de détective surnaturels ou chance inouïe ?"}
 
@@ -70,18 +70,18 @@ def test_login_opens_the_dashboard(page, static_url):
     api = open_welcome(page, static_url)
     api.set("POST", "/api/auth/login", 200, {**USER, "game_claimed": False, "achievements": []})
     page.click("#welcome-tab-login")
-    page.fill("#login-pseudo", PLAYER)
+    page.fill("#login-identifier", PLAYER)
     page.fill("#login-password", "mot-de-passe")
     page.press("#login-password", "Enter")
     page.wait_for_url("**/dashboard.html")
-    assert api.sent("POST", "/api/auth/login")[0] == {"pseudo": PLAYER, "password": "mot-de-passe", "guest_token": None}
+    assert api.sent("POST", "/api/auth/login")[0] == {"login": PLAYER, "password": "mot-de-passe", "guest_token": None}
 
 
 def test_login_error_from_server_is_shown(page, static_url):
     api = open_welcome(page, static_url)
     api.set("POST", "/api/auth/login", 401, {"detail": "Pseudo ou mot de passe incorrect."})
     page.click("#welcome-tab-login")
-    page.fill("#login-pseudo", PLAYER)
+    page.fill("#login-identifier", PLAYER)
     page.fill("#login-password", "mauvais")
     page.click("#login-btn")
     expect(page.locator("#login-error")).to_have_text("Pseudo ou mot de passe incorrect.")
@@ -91,6 +91,7 @@ def test_register_checks_the_confirmation_before_sending(page, static_url):
     api = open_welcome(page, static_url)
     page.click("#welcome-tab-register")
     page.fill("#register-pseudo", PLAYER)
+    page.fill("#register-email", "vesper@exemple.fr")
     page.fill("#register-password", "mot-de-passe")
     page.fill("#register-password-confirm", "autre-chose")
     page.click("#register-btn")
@@ -103,6 +104,7 @@ def test_register_opens_the_dashboard(page, static_url):
     api.set("POST", "/api/auth/register", 201, {**USER, "game_claimed": False, "achievements": []})
     page.click("#welcome-tab-register")
     page.fill("#register-pseudo", PLAYER)
+    page.fill("#register-email", "vesper@exemple.fr")
     page.fill("#register-password", "mot-de-passe")
     page.fill("#register-password-confirm", "mot-de-passe")
     page.click("#register-btn")
@@ -200,6 +202,7 @@ def test_guest_registers_during_the_game(page, server, static_url):
     page.click("#menu-btn")
     page.click("#menu-register")
     expect(page.locator("#account-pseudo")).to_have_value(PLAYER)  # pseudo d'invité proposé
+    page.fill("#account-email", "vesper@exemple.fr")
     page.fill("#account-password", "mot-de-passe")
     page.fill("#account-password-confirm", "mot-de-passe")
     page.click("#account-submit")
@@ -252,6 +255,7 @@ def test_guest_registers_from_the_end_screen(page, server, static_url):
 
     api.set("POST", "/api/auth/register", 201, {**USER, "game_claimed": True, "achievements": [ACHIEVEMENT]})
     page.click("#gameover-register [data-mode='register']")
+    page.fill("#account-email", "vesper@exemple.fr")
     page.fill("#account-password", "mot-de-passe")
     page.fill("#account-password-confirm", "mot-de-passe")
     page.click("#account-submit")
@@ -277,3 +281,92 @@ def test_new_game_for_a_logged_in_player_starts_right_away(page, server, static_
     server.send(type="game_over", winner="evil", details="Fin.")
     page.click("#modal-gameover [data-action='new-game']")
     page.wait_for_url("**/?play")
+
+
+# --- E-mail : inscription, mot de passe oublié -------------------------------------------------
+
+def test_register_sends_the_email(page, static_url):
+    api = open_welcome(page, static_url)
+    api.set("POST", "/api/auth/register", 201, {**USER, "game_claimed": False, "achievements": []})
+    page.click("#welcome-tab-register")
+    page.fill("#register-pseudo", PLAYER)
+    page.fill("#register-email", " Vesper@Exemple.fr ")
+    page.fill("#register-password", "mot-de-passe")
+    page.fill("#register-password-confirm", "mot-de-passe")
+    page.click("#register-btn")
+    page.wait_for_url("**/dashboard.html")
+    assert api.sent("POST", "/api/auth/register")[0]["email"] == "Vesper@Exemple.fr"
+
+
+def test_register_requires_the_email(page, static_url):
+    api = open_welcome(page, static_url)
+    page.click("#welcome-tab-register")
+    page.fill("#register-pseudo", PLAYER)
+    page.fill("#register-password", "mot-de-passe")
+    page.fill("#register-password-confirm", "mot-de-passe")
+    page.click("#register-btn")
+    expect(page.locator("#register-error")).to_contain_text("adresse e-mail")
+    assert api.sent("POST", "/api/auth/register") == []
+
+
+def test_forgot_password_panel(page, static_url):
+    api = open_welcome(page, static_url)
+    message = "Si un compte existe avec cette adresse, un e-mail vient d'y être envoyé."
+    api.set("POST", "/api/auth/forgot-password", 200, {"message": message})
+    page.click("#welcome-tab-login")
+    page.click("#forgot-link")
+    expect(page.locator("#forgot-form")).to_be_visible()
+    expect(page.locator("#login-form")).to_be_hidden()
+    expect(page.locator("#welcome-tab-login")).to_have_attribute("aria-selected", "true")  # onglet Connexion gardé
+    expect(page.locator("#forgot-email")).to_be_focused()
+
+    page.click("#forgot-btn")
+    expect(page.locator("#forgot-error")).to_have_text("Veuillez entrer votre adresse e-mail.")
+    assert api.sent("POST", "/api/auth/forgot-password") == []
+
+    page.fill("#forgot-email", "vesper@exemple.fr")
+    page.press("#forgot-email", "Enter")
+    expect(page.locator("#forgot-message")).to_have_text(message)
+    assert api.sent("POST", "/api/auth/forgot-password") == [{"email": "vesper@exemple.fr"}]
+
+    page.click("#forgot-form [data-tab='login']")
+    expect(page.locator("#login-form")).to_be_visible()
+
+
+def test_welcome_confirms_a_password_reset(page, static_url):
+    FakeApi(page)
+    page.goto(f"{static_url}/index.html?reset=done")
+    expect(page.locator("#welcome-notice")).to_have_text("Votre mot de passe a été modifié : connectez-vous avec le nouveau.")
+    expect(page.locator("#login-form")).to_be_visible()
+    assert "reset" not in page.url
+
+
+def test_in_game_login_accepts_pseudo_or_email(page, server, static_url):
+    api = open_welcome(page, static_url)
+    join_as_guest(page, server)
+    api.set("POST", "/api/auth/login", 200, {**USER, "game_claimed": True, "achievements": []})
+    page.click("#menu-btn")
+    page.click("#menu-login")
+    expect(page.locator("#account-pseudo-label")).to_have_text("Pseudo ou adresse e-mail")
+    expect(page.locator("#account-email-row")).to_be_hidden()
+    page.fill("#account-pseudo", "vesper@exemple.fr")
+    page.fill("#account-password", "mot-de-passe")
+    page.click("#account-submit")
+    expect(page.locator("#modal-account")).to_be_hidden()
+    assert api.sent("POST", "/api/auth/login")[0]["login"] == "vesper@exemple.fr"
+
+
+def test_email_info_tooltip_on_hover_and_focus(page, static_url):
+    open_welcome(page, static_url)
+    page.click("#welcome-tab-register")
+    tip = page.locator("#register-email-tip")
+    expect(tip).to_be_hidden()
+    page.hover("#register-form .info-tip-icon")
+    expect(tip).to_be_visible()
+    expect(tip).to_contain_text("jamais transmise")
+    page.mouse.move(0, 0)
+    expect(tip).to_be_hidden()
+
+    page.focus("#register-form .info-tip-icon")  # au clavier (Tab) : visible aussi
+    expect(tip).to_be_visible()
+    expect(page.locator("#register-email")).to_have_attribute("aria-describedby", "register-email-tip")
