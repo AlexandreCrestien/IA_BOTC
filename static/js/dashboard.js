@@ -113,6 +113,7 @@ function bindEvents() {
         event.preventDefault();
         changePassword();
     });
+    document.getElementById('export-data-btn').addEventListener('click', exportData);
     document.getElementById('delete-account-btn').addEventListener('click', openDeleteModal);
     document.getElementById('delete-account-cancel').addEventListener('click', closeDeleteModal);
     document.getElementById('delete-account-form').addEventListener('submit', (event) => {
@@ -280,6 +281,34 @@ async function changePassword() {
     if (!result.ok) return setFormMessages('password', errorText(result, "Le changement de mot de passe a échoué."));
     document.getElementById('password-form').reset();
     setFormMessages('password', null, "Mot de passe modifié. Vos autres appareils ont été déconnectés.");
+}
+
+// ================= EXPORT DES DONNÉES =================
+// Le serveur renvoie le fichier (Content-Disposition) ; on le télécharge sans quitter la page
+async function exportData() {
+    const button = document.getElementById('export-data-btn');
+    const errorEl = document.getElementById('export-error');
+    errorEl.classList.add('hidden');
+    button.disabled = true;
+    try {
+        const response = await fetch('/api/me/export');
+        if (response.status === 401) return location.replace('/');
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const disposition = response.headers.get('Content-Disposition') || '';
+        const filename = disposition.match(/filename="([^"]+)"/)?.[1] || 'lantern-hollow-mes-donnees.json';
+        const url = URL.createObjectURL(await response.blob());
+        const link = Object.assign(document.createElement('a'), { href: url, download: filename });
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+    } catch (err) {
+        console.error(err);
+        errorEl.textContent = "Le téléchargement a échoué. Réessayez.";
+        errorEl.classList.remove('hidden');
+    } finally {
+        button.disabled = false;
+    }
 }
 
 // ================= SUPPRESSION DU COMPTE =================

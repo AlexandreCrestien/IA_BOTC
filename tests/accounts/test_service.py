@@ -21,6 +21,7 @@ def refusal(call) -> AccountError:
 def test_register_hashes_the_password(db):
     user = account(db)
     assert user.id is not None and user.pseudo == "Vesper" and not user.is_admin
+    assert user.last_seen_at == user.created_at  # même instant : jamais d'activité avant la création
     assert user.password_hash != "mot-de-passe"
 
 

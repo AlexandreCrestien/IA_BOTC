@@ -141,3 +141,47 @@ def test_interrupted_game_is_listed_but_not_counted(client, monkeypatch):
 
     assert client.get("/api/me/stats").json()["played"] == 0
     assert [g["status"] for g in client.get("/api/me/games").json()] == ["interrupted"]
+
+
+# --- Export des données (droit d'accès) ---------------------------------------------------
+
+def test_export_requires_a_login(client):
+    assert client.get("/api/me/export").status_code == 401
+
+
+def test_export_contains_all_account_data(client, monkeypatch):
+    user_id = account(client)
+    play_one_turn(monkeypatch, GameSession(human_id="h", user_id=user_id))  # Médium, victoire en 1 tour
+
+    response = client.get("/api/me/export")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.headers["content-disposition"].startswith('attachment; filename="lantern-hollow-mes-donnees-')
+    assert "\n  " in response.text  # indenté : lisible dans un éditeur de texte
+    data = response.json()
+
+    assert data["account"]["pseudo"] == "Vesper" and data["account"]["type"] == "joueur"
+    assert data["account"]["created_at"].endswith("+00:00")
+    assert [(g["role"], g["side"], g["result"], g["turns"]) for g in data["games"]] == [
+        ("Médium", "Villageois", "victoire", 1)]
+    titles = {a["title"] for a in data["achievements"]}
+    assert {"Victoire : Médium", "Coup de maître"} <= titles  # les succès cachés débloqués sont révélés
+    assert data["statistics"]["played"] == 1
+    assert "not_stored" in data["export"]
+
+
+def test_export_never_contains_the_password_hash(client):
+    account(client)
+    text = client.get("/api/me/export").text
+    with get_session() as db:
+        user = service.find_by_pseudo(db, "Vesper")
+    assert user.password_hash not in text
+    assert "password_hash" not in text and "token_version" not in text
+
+
+def test_export_is_limited_to_the_logged_in_account(client, monkeypatch):
+    other = account(pseudo="Ombre")
+    play_one_turn(monkeypatch, GameSession(human_id="h", user_id=other))
+    account(client)
+    data = client.get("/api/me/export").json()
+    assert data["games"] == [] and data["achievements"] == []

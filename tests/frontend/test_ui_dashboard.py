@@ -245,3 +245,23 @@ def test_delete_account_then_welcome_confirms(page, static_url):
     expect(page.locator("#welcome-notice")).to_have_text("Votre compte a été supprimé.")
     assert api.sent("DELETE", "/api/account") == [{"current_password": "mot-de-passe"}]
     assert not page.url.endswith("deleted")  # l'adresse est nettoyée
+
+
+def test_export_downloads_a_json_file(page, static_url):
+    open_dashboard(page, static_url)
+    page.route("**/api/me/export", lambda route: route.fulfill(
+        status=200, body='{"account": {"pseudo": "Vesper"}}', content_type="application/json",
+        headers={"Content-Disposition": 'attachment; filename="lantern-hollow-mes-donnees-2026-11-23.json"'}))
+    with page.expect_download() as download_info:
+        page.click("#export-data-btn")
+    download = download_info.value
+    assert download.suggested_filename == "lantern-hollow-mes-donnees-2026-11-23.json"
+    expect(page.locator("#export-error")).to_be_hidden()
+    expect(page.locator("#export-data-btn")).to_be_enabled()
+
+
+def test_export_error_is_shown(page, static_url):
+    open_dashboard(page, static_url)
+    page.route("**/api/me/export", lambda route: route.fulfill(status=500, body="erreur"))
+    page.click("#export-data-btn")
+    expect(page.locator("#export-error")).to_have_text("Le téléchargement a échoué. Réessayez.")

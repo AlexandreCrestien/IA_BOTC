@@ -68,7 +68,8 @@ def _commit(db: Session) -> None:
 def register(db: Session, pseudo: str, password: str) -> User:
     pseudo = _check_pseudo(db, pseudo)
     _check_password(password)
-    user = User(pseudo=pseudo, password_hash=hash_password(password), last_seen_at=utcnow())
+    now = utcnow()
+    user = User(pseudo=pseudo, password_hash=hash_password(password), created_at=now, last_seen_at=now)
     db.add(user)
     _commit(db)
     logger.info("Compte créé : %s", pseudo)

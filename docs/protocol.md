@@ -105,6 +105,7 @@ Réponses en JSON. Une erreur renvoie `{"detail": "<message en français>"}`, af
 | `POST /api/game/abandon` | Abandon de sa partie (défaite). Si l'écran de jeu est ouvert, il reçoit `game_abandoned` |
 | `GET /api/me/stats` | `played`, `wins`, `win_rate`, `good` et `evil` (`played`, `wins`, `win_rate`), `average_turns` |
 | `GET /api/me/games` | Parties terminées ou interrompues, de la plus récente à la plus ancienne : `date`, `role`, `role_name`, `alignment`, `status` (`won` / `lost` / `abandoned` / `interrupted`), `counted`, `turns` |
+| `GET /api/me/export` | Fichier JSON à télécharger (`Content-Disposition: attachment`) : `export`, `account`, `games` (partie en cours comprise), `achievements` (débloqués), `statistics`. Jamais l'empreinte du mot de passe |
 | `GET /api/me/achievements` | Les 14 succès : `code`, `title`, `description`, `message`, `hidden`, `unlocked`, `unlocked_at`. Caché et non débloqué : `title` « ??? », sans message |
 
 ### Administration (`backend/server/admin.py`, compte admin uniquement)

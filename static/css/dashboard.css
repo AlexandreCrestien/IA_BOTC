@@ -262,3 +262,15 @@
   background-color: color-mix(in oklab, var(--blood) 18%, transparent);
   color: oklch(0.8 0.15 25);
 }
+
+/* Export des données, en bas du profil (au-dessus de la suppression du compte) */
+.data-zone {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+}

@@ -39,7 +39,7 @@ Provocateur, Parano, Bouffon, Stratège et Observateur (fichiers dans `skills/pe
 ### Comptes, statistiques et succès
 
 - **Invité ou compte.** On peut jouer en invité (pseudo seul, rien n'est enregistré) ou avec un compte (pseudo et mot de passe). Un invité qui crée un compte, ou se connecte, pendant la partie ou sur l'écran de fin, y rattache la partie en cours.
-- **Tableau de bord** (joueur connecté) : lancer, reprendre ou abandonner sa partie ; statistiques ; historique des parties ; succès ; changement de pseudo et de mot de passe ; suppression du compte.
+- **Tableau de bord** (joueur connecté) : lancer, reprendre ou abandonner sa partie ; statistiques ; historique des parties ; succès ; changement de pseudo et de mot de passe ; export de ses données (fichier JSON : profil, parties, succès, statistiques) ; suppression du compte.
 - **Suppression d'un compte**, la même par le joueur (tableau de bord, mot de passe demandé), par l'admin, ou automatiquement après **un an sans connexion** : le compte (pseudo, mot de passe) et ses succès sont effacés ; le résumé de ses parties est gardé de façon anonyme (détaché du compte, daté au jour près) pour les statistiques du jeu. Sa partie en cours est arrêtée. Le compte admin ne peut pas être supprimé.
 - **Statistiques :** parties jouées, part de victoires (au total, côté villageois, côté démons), nombre moyen de tours. Un abandon compte comme une défaite ; une partie interrompue par le serveur (arrêt, plantage) ne compte pas.
 - **Fermer l'onglet ne termine pas la partie :** elle attend le joueur, qui la reprend ou l'abandonne depuis l'accueil ou le tableau de bord.
@@ -248,7 +248,6 @@ ruff check .
 - **Une partie par joueur** : aujourd'hui une seule partie à la fois sur le serveur (une session globale), ce qui suffit en local. Il faudrait une session par joueur, et des messages publics limités à leur partie.
 - **Historique détaillé des parties dans le panel admin** : choisir un joueur, puis une de ses parties passées, et en voir tout le détail (chat, votes, nuits, mémoire des IA). Il faudrait enregistrer en base, à la fin de chaque partie, ce que le panel montre de la partie en cours (un bloc JSON par partie). RGPD : ce détail contient le pseudo et les messages libres du joueur, il ne peut pas être anonymisé ; il faudrait le **supprimer avec le compte**, le garder pour une **durée limitée** (par exemple 6 mois) et l'annoncer dans le Codex.
 - **Comparaison aux autres joueurs** dans le tableau de bord : moyennes calculées par partie (elles peuvent inclure les parties anonymisées) ou par joueur (comptes existants seulement) ; « x % des joueurs ont débloqué ce succès », affiché à partir d'un nombre minimum de joueurs (avec 3 joueurs, un pourcentage désigne presque quelqu'un).
-- **Export des données** (« Télécharger mes données ») : droit d'accès du RGPD, pendant de la suppression.
 - **Journaux du serveur** : aujourd'hui affichés dans la console seulement. S'ils sont un jour écrits dans des fichiers, limiter leur durée de conservation : ils contiennent des pseudos et des heures.
 
 ## Documentation

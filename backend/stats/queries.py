@@ -9,10 +9,11 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.db import COUNTED_STATUSES, GameRecord, GameStatus, UnlockedAchievement, iso_utc
+from backend.db import COUNTED_STATUSES, GameRecord, GameStatus, UnlockedAchievement, User, iso_utc
+from backend.db.models import utcnow
 from backend.models import Alignment
 from backend.rules import get_role
-from backend.stats.achievements import ACHIEVEMENTS, Achievement
+from backend.stats.achievements import ACHIEVEMENTS, BY_CODE, Achievement
 
 HIDDEN_TITLE = "???"
 HIDDEN_DESCRIPTION = "Succès caché."
@@ -89,3 +90,60 @@ def achievements_of(db: Session, user_id: int) -> list[dict]:
     unlocked = dict(db.execute(select(UnlockedAchievement.code, UnlockedAchievement.unlocked_at)
                                .where(UnlockedAchievement.user_id == user_id)).all())
     return [achievement_out(a, unlocked.get(a.code)) for a in ACHIEVEMENTS]
+
+
+STATUS_LABELS = {
+    GameStatus.IN_PROGRESS: "en cours",
+    GameStatus.WON: "victoire",
+    GameStatus.LOST: "défaite",
+    GameStatus.ABANDONED: "défaite (abandon)",
+    GameStatus.INTERRUPTED: "interrompue (non comptée)",
+}
+ALIGNMENT_LABELS = {Alignment.GOOD: "Villageois", Alignment.EVIL: "Démons"}
+
+
+def export_account(db: Session, user: User) -> dict:
+    """Copie de toutes les données du compte (droit d'accès du RGPD), lisible par une personne :
+    compte, parties (partie en cours comprise), succès débloqués et statistiques.
+    Ni le mot de passe (seule son empreinte est stockée, jamais exportée) ni la version de jeton."""
+    games = db.scalars(select(GameRecord).where(GameRecord.user_id == user.id)
+                       .order_by(GameRecord.started_at, GameRecord.id))
+    unlocked = db.scalars(select(UnlockedAchievement).where(UnlockedAchievement.user_id == user.id)
+                          .order_by(UnlockedAchievement.unlocked_at, UnlockedAchievement.id))
+    return {
+        "export": {
+            "service": "Lantern Hollow",
+            "generated_at": iso_utc(utcnow()),
+            "contents": "Toutes les données enregistrées pour votre compte. Les dates sont en UTC.",
+            "not_stored": "Le déroulé des parties (messages, votes, actions) n'est jamais enregistré : il n'existe "
+                          "que pendant la partie, dans la mémoire du serveur. Votre mot de passe n'est pas stocké : "
+                          "seule une empreinte chiffrée l'est, et elle n'est pas exportée.",
+        },
+        "account": {
+            "pseudo": user.pseudo,
+            "type": "administrateur" if user.is_admin else "joueur",
+            "created_at": iso_utc(user.created_at),
+            "last_activity_at": iso_utc(user.last_seen_at),
+        },
+        "games": [
+            {
+                "started_at": iso_utc(g.started_at),
+                "ended_at": iso_utc(g.ended_at) if g.ended_at else None,
+                "role": get_role(g.role).name_FR,
+                "side": ALIGNMENT_LABELS[g.alignment],
+                "result": STATUS_LABELS[g.status],
+                "turns": g.turns,
+            }
+            for g in games
+        ],
+        "achievements": [
+            {
+                "title": BY_CODE[a.code].title if a.code in BY_CODE else a.code,
+                "description": BY_CODE[a.code].description if a.code in BY_CODE else None,
+                "unlocked_at": iso_utc(a.unlocked_at),
+            }
+            for a in unlocked
+        ],
+        "statistics": player_stats(db, user.id),
+    }
+
