@@ -7,7 +7,7 @@ from enum import StrEnum
 from typing import Optional
 
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy import ForeignKey, String, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, validates
 
 from backend.models import Alignment, RoleKey
@@ -18,8 +18,8 @@ def utcnow() -> datetime:
 
 
 def iso_utc(moment: datetime) -> str:
-    """Date au format ISO avec son fuseau, pour le front. SQLite rend les dates sans fuseau :
-    elles sont toujours enregistrées en UTC."""
+    """Date au format ISO avec son fuseau, pour le front. Les dates sont toujours enregistrées en UTC ;
+    SQLite les rend sans fuseau, PostgreSQL avec."""
     if moment.tzinfo is None:
         moment = moment.replace(tzinfo=timezone.utc)
     return moment.isoformat()
@@ -44,7 +44,9 @@ COUNTED_STATUSES = (GameStatus.WON, GameStatus.LOST, GameStatus.ABANDONED)
 
 
 class Base(DeclarativeBase):
-    pass
+    # Dates avec fuseau : TIMESTAMP WITH TIME ZONE sous PostgreSQL (sans effet sous SQLite).
+    # Sans fuseau, PostgreSQL convertirait les dates selon le fuseau de la session.
+    type_annotation_map = {datetime: DateTime(timezone=True)}
 
 
 class User(Base):

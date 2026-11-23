@@ -64,7 +64,7 @@ Un succès caché s'affiche « ??? » tant qu'il n'est pas débloqué. Titres et
 - **Python** (3.12 ou plus)
 - **FastAPI** + **Uvicorn** : serveur HTTP et WebSocket
 - **Pydantic** : modèles de données et validation
-- **SQLAlchemy** + **SQLite** : comptes, parties jouées et succès (fichier `data/lantern_hollow.db`)
+- **PostgreSQL** (lancé avec **Docker Compose**), **SQLAlchemy** et **Alembic** (migrations) : comptes, parties jouées et succès. Sans Docker, le jeu peut utiliser un fichier **SQLite** à la place
 - **bcrypt** (mots de passe) et **PyJWT** (jeton de connexion, dans un cookie `HttpOnly`)
 - **LiteLLM** : accès aux LLM (Groq, Gemini, OpenRouter), avec bascule automatique vers un autre modèle en cas d'échec
 - **pytest** et **Playwright** : tests
@@ -86,6 +86,7 @@ backend/
 │   └── admin.py           Routes /admin : état complet de la partie, comptes (réservées au compte admin)
 ├── accounts/          Comptes : règles du pseudo, mots de passe (bcrypt), jetons (JWT), opérations sur les comptes
 ├── db/                Base de données (SQLAlchemy) : tables des comptes, parties et succès ; ouverture au démarrage
+│   └── migrations/        Migrations Alembic (versions/ : une migration par changement du schéma)
 ├── stats/             Succès (définitions, conditions) et statistiques d'un compte
 ├── engine/            Moteur de jeu
 │   ├── setup.py           Mise en place : rôles, personnalités, fausse piste, agents, infos de première nuit
@@ -107,8 +108,11 @@ skills/                Textes des prompts : règles générales, rôles, personn
 scripts/               Parties dans le terminal, simulations et test complet
 docs/                  Documentation technique
 tests/                 Tests, rangés comme le code : models, rules, engine, ai, server, frontend (Playwright), integration
-data/                  Base SQLite, créée au premier démarrage (ignorée par git)
+docker/                Script de création de la base des tests (exécuté par PostgreSQL au premier démarrage)
+data/                  Base SQLite, seulement sans Docker (ignorée par git)
 main.py                Lance le serveur
+docker-compose.yml     Base PostgreSQL locale
+alembic.ini            Configuration des migrations
 pyproject.toml         Configuration de pytest et ruff
 ```
 
@@ -121,9 +125,52 @@ python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 python -m playwright install chromium   # navigateur des tests du frontend
+cp .env.example .env                    # puis remplir les clés (voir ci-dessous)
 ```
 
-Copier `.env.example` en `.env`, puis remplir les clés :
+Docker (avec Docker Compose) doit être installé : il fait tourner la base PostgreSQL, accessible depuis cet ordinateur seulement (`127.0.0.1:5432`).
+
+## Lancer le jeu
+
+**La première fois** (ou après avoir arrêté la base), deux commandes :
+
+```bash
+docker compose up -d   # 1. démarrer la base PostgreSQL (en arrière-plan)
+python main.py         # 2. démarrer le serveur du jeu
+```
+
+**Les fois suivantes, une seule commande suffit** : la base reste lancée en arrière-plan, et Docker la redémarre tout seul, même après un redémarrage de l'ordinateur, tant qu'elle n'a pas été arrêtée.
+
+```bash
+python main.py
+```
+
+Si la base n'est pas lancée, `python main.py` s'arrête aussitôt avec ce message : « Base de données injoignable… lancez-la : `docker compose up -d` ».
+
+**Arrêter :** `Ctrl+C` arrête le serveur du jeu. Pour arrêter aussi la base :
+
+```bash
+docker compose down    # arrêter la base (les comptes, parties et succès sont gardés)
+docker compose ps      # vérifier si la base tourne
+```
+
+Les données sont gardées dans un volume Docker : `docker compose down` puis `docker compose up -d` les retrouve. Seul `docker compose down -v` les efface définitivement.
+
+## Base de données et migrations
+
+Au démarrage, le serveur applique les **migrations** Alembic : la première fois, il crée toutes les tables. Après un changement de `backend/db/models.py`, créer la migration correspondante puis la relire :
+
+```bash
+alembic revision --autogenerate -m "description du changement"
+alembic upgrade head      # l'appliquer sans attendre le redémarrage du serveur
+alembic current           # version de la base
+```
+
+**Sans Docker :** laisser `DATABASE_URL` vide dans `.env`. Le jeu utilise alors un fichier SQLite (`data/lantern_hollow.db`), créé au premier démarrage. Une base SQLite créée par une version du jeu antérieure aux migrations est refusée avec un message clair : il suffit de la supprimer.
+
+## Variables d'environnement
+
+Le fichier `.env.example`, copié en `.env` à l'installation, contient toutes les variables :
 
 | Variable | Rôle |
 |---|---|
@@ -132,7 +179,9 @@ Copier `.env.example` en `.env`, puis remplir les clés :
 | `OPENROUTER_API_KEY` | Clé API OpenRouter |
 | `JWT_SECRET` | Clé qui signe les jetons de connexion. Absente : clé temporaire, les joueurs sont déconnectés à chaque redémarrage |
 | `ADMIN_PSEUDO`, `ADMIN_PASSWORD` | Compte administrateur, créé au premier démarrage s'il n'existe pas (mot de passe : 8 caractères au moins). Absents : pas de compte admin, panneau fermé |
-| `DATABASE_URL` | Facultatif. Adresse de la base, par défaut `sqlite:///data/lantern_hollow.db` |
+| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT` | Identifiants de la base PostgreSQL créée par `docker compose` |
+| `DATABASE_URL` | Adresse de la base : `postgresql+psycopg://utilisateur:mot_de_passe@localhost:5432/nom_de_la_base` (mêmes valeurs que ci-dessus). Vide : fichier SQLite `data/lantern_hollow.db` |
+| `TEST_DATABASE_URL` | Facultatif : lancer les tests sur PostgreSQL (voir Tests) |
 
 `JWT_SECRET` doit être une **longue chaîne aléatoire** (au moins 32 caractères), jamais un mot ou une phrase : qui la connaît peut se faire passer pour n'importe quel compte, admin compris. Pour en obtenir une, lancer une fois dans le terminal l'une de ces commandes et coller le résultat dans `.env` :
 
@@ -143,13 +192,9 @@ openssl rand -hex 32
 
 Le fichier `.env` ne doit jamais être commité.
 
-## Lancer le serveur
+## Adresses du serveur
 
-```bash
-python main.py
-```
-
-Le serveur démarre sur `http://127.0.0.1:8000` :
+Une fois lancé (`python main.py`), le serveur répond sur `http://127.0.0.1:8000` :
 
 | Adresse | Rôle |
 |---|---|
@@ -215,7 +260,13 @@ python -m pytest tests/ -q --ignore=tests/frontend   # backend seul
 python -m pytest tests/frontend -q             # frontend seul (ajouter --headed pour voir le navigateur)
 ```
 
-Les tests n'appellent jamais de vrai LLM : ils utilisent de faux agents, ou le mode simulation. Ils n'utilisent jamais la vraie base : chaque test a sa base SQLite en mémoire (`tests/conftest.py`), et le compte admin du `.env` est ignoré. `tests/integration/test_full_game.py` joue des parties complètes avec `scripts/check_full_game.py`. À lancer depuis la racine du projet.
+Les tests n'appellent jamais de vrai LLM : ils utilisent de faux agents, ou le mode simulation. Ils n'utilisent jamais la base du jeu : chaque test a sa base SQLite en mémoire (`tests/conftest.py`), et le compte admin du `.env` est ignoré. Les migrations sont testées : elles créent exactement les tables de `models.py` et peuvent être annulées puis rejouées.
+
+Pour lancer les tests du backend sur PostgreSQL, sur une base dédiée créée au premier `docker compose up` et vidée avant chaque test :
+
+```bash
+TEST_DATABASE_URL=postgresql+psycopg://lantern:lantern@localhost:5432/lantern_hollow_test python -m pytest tests/ -q --ignore=tests/frontend
+``` `tests/integration/test_full_game.py` joue des parties complètes avec `scripts/check_full_game.py`. À lancer depuis la racine du projet.
 
 Les tests du frontend (`tests/frontend/`) pilotent un vrai navigateur avec Playwright. Ils ne demandent ni serveur lancé ni connexion internet : le dossier `static/` est servi localement, et le serveur (WebSocket et routes `/api`) est simulé.
 
@@ -235,6 +286,7 @@ ruff check .
 - Interface web reliée au moteur, et parties dans le terminal
 - Comptes (invité ou compte, connexion par cookie), tableau de bord, statistiques, historique des parties, succès ; compte admin, réinitialisation des mots de passe et suppression des comptes
 - Page 404
+- Base PostgreSQL avec Docker Compose, migrations Alembic (SQLite toujours possible sans Docker)
 
 **À faire :**
 - Résumer la mémoire des agents au fil des jours : le contexte grandit à chaque événement (voir les limites connues dans `docs/ai_architecture.md`)
@@ -242,8 +294,7 @@ ruff check .
 
 ## Axes d'amélioration
 
-- **PostgreSQL et Alembic** : remplacer SQLite par PostgreSQL et faire évoluer le schéma par migrations (aujourd'hui, les tables sont créées au démarrage, et une mise à niveau provisoire adapte une base d'une version précédente : `_upgrade_schema` dans `backend/db/database.py`). Le code passe par SQLAlchemy : il suffit surtout de changer `DATABASE_URL` et le driver.
-- **Docker** : `docker-compose` avec le serveur et la base.
+- **Docker pour le serveur** : aujourd'hui seule la base tourne dans Docker, le serveur se lance avec `python main.py`. Une image du serveur, ajoutée au `docker-compose.yml`, permettrait de tout lancer en une commande.
 - **Adresse e-mail** : connexion par e-mail, mot de passe oublié par lien envoyé par e-mail (aujourd'hui, l'admin réinitialise le mot de passe). Elle permettrait aussi de prévenir un joueur avant la suppression de son compte inactif. À supprimer avec le compte (un e-mail haché n'est pas anonyme).
 - **Une partie par joueur** : aujourd'hui une seule partie à la fois sur le serveur (une session globale), ce qui suffit en local. Il faudrait une session par joueur, et des messages publics limités à leur partie.
 - **Historique détaillé des parties dans le panel admin** : choisir un joueur, puis une de ses parties passées, et en voir tout le détail (chat, votes, nuits, mémoire des IA). Il faudrait enregistrer en base, à la fin de chaque partie, ce que le panel montre de la partie en cours (un bloc JSON par partie). RGPD : ce détail contient le pseudo et les messages libres du joueur, il ne peut pas être anonymisé ; il faudrait le **supprimer avec le compte**, le garder pour une **durée limitée** (par exemple 6 mois) et l'annoncer dans le Codex.

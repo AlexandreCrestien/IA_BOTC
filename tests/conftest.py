@@ -1,8 +1,13 @@
 """Outils communs aux tests du backend."""
 import os
 
-# Base en mémoire pour tous les tests (y compris le démarrage de l'application) : la vraie base n'est jamais touchée
-os.environ["DATABASE_URL"] = "sqlite://"
+from dotenv import load_dotenv
+
+# Base des tests : SQLite en mémoire (rapide, sans Docker), ou PostgreSQL si TEST_DATABASE_URL est défini
+# (base dédiée, vidée avant chaque test). La base du jeu (DATABASE_URL du .env) n'est jamais touchée.
+load_dotenv()
+TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL") or "sqlite://"
+os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 # Comptes : clé de test, hachage rapide, et pas de compte admin venu du vrai .env
 # (load_dotenv ne remplace pas une variable déjà définie, même vide)
 os.environ["JWT_SECRET"] = "cle-de-test-uniquement-pour-pytest-0123456789"
@@ -24,10 +29,35 @@ def clean_server():
     set_current_session(None)
 
 
+def _on_postgres() -> bool:
+    return TEST_DATABASE_URL.startswith("postgresql")
+
+
+def _empty_test_database() -> None:
+    """Vide la base PostgreSQL de test : tables et version des migrations (schéma public recréé)."""
+    from sqlalchemy import create_engine
+    engine = create_engine(TEST_DATABASE_URL)
+    with engine.begin() as conn:
+        conn.exec_driver_sql("DROP SCHEMA public CASCADE")
+        conn.exec_driver_sql("CREATE SCHEMA public")
+    engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def fresh_test_database():
+    """Tests sur PostgreSQL : chaque test repart d'une base vide, comme avec une base SQLite en mémoire."""
+    if _on_postgres():
+        _empty_test_database()
+        init_db(TEST_DATABASE_URL)
+    yield
+
+
 @pytest.fixture
 def db():
-    """Base en mémoire, vide, avec ses tables ; session ouverte pendant le test."""
-    init_db("sqlite://")
+    """Base de test vide, avec ses tables ; session ouverte pendant le test."""
+    if _on_postgres():
+        _empty_test_database()
+    init_db(TEST_DATABASE_URL)
     with get_session() as session:
         yield session
 

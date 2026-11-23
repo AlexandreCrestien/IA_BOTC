@@ -121,40 +121,66 @@ OLD_SCHEMA = """
 CREATE TABLE users (id INTEGER PRIMARY KEY, pseudo VARCHAR(20) NOT NULL, pseudo_key VARCHAR(80) NOT NULL UNIQUE,
     password_hash VARCHAR(100) NOT NULL, is_admin BOOLEAN NOT NULL, token_version INTEGER NOT NULL,
     created_at DATETIME NOT NULL);
-CREATE TABLE games (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), started_at DATETIME NOT NULL,
-    ended_at DATETIME, role VARCHAR(20) NOT NULL, alignment VARCHAR(20) NOT NULL, turns INTEGER NOT NULL,
-    status VARCHAR(20) NOT NULL);
-CREATE INDEX ix_games_user_id ON games (user_id);
-CREATE INDEX ix_games_status ON games (status);
-CREATE TABLE unlocked_achievements (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id),
-    code VARCHAR(40) NOT NULL, unlocked_at DATETIME NOT NULL, game_id INTEGER REFERENCES games(id),
-    UNIQUE (user_id, code));
-INSERT INTO users VALUES (1, 'Vesper', 'vesper', 'hash', 0, 0, '2026-11-20 10:00:00');
-INSERT INTO games VALUES (1, 1, '2026-11-21 20:00:00', '2026-11-21 20:30:00', 'valet', 'good', 3, 'won');
-INSERT INTO unlocked_achievements VALUES (1, 1, 'win_valet', '2026-11-21 20:30:00', 1);
 """
 
 
-def test_database_from_a_previous_version_is_upgraded(tmp_path):
-    """Base créée avant last_seen_at et les parties anonymisées : mise à niveau sans perte au démarrage."""
+def test_database_from_before_migrations_is_refused_clearly(tmp_path):
+    """Base SQLite créée avant Alembic : message clair plutôt qu'une erreur SQL obscure."""
     import sqlite3
     path = tmp_path / "ancienne.db"
     with sqlite3.connect(path) as conn:
         conn.executescript(OLD_SCHEMA)
-
-    init_db(f"sqlite:///{path}")
-    with get_session() as db:
-        user = db.scalar(select(User))
-        assert user.last_seen_at == user.created_at  # dernière activité : la création, à défaut de mieux
-        game = db.scalar(select(GameRecord))
-        assert (game.user_id, game.role, game.status, game.turns) == (1, RoleKey.VALET, GameStatus.WON, 3)
-        assert db.scalar(select(UnlockedAchievement)).game_id == 1
-        assert db.execute(text("PRAGMA foreign_key_check")).all() == []  # références intactes
-        assert "REFERENCES games" in db.execute(text(
-            "SELECT sql FROM sqlite_master WHERE name = 'unlocked_achievements'")).scalar()
-        db.add(GameRecord(role=RoleKey.REAPER, alignment=Alignment.EVIL))  # partie anonyme désormais permise
-        db.commit()
-        indexes = {i["name"] for i in inspect(db.get_bind()).get_indexes("games")}
-        assert {"ix_games_user_id", "ix_games_status"} <= indexes
-    init_db(f"sqlite:///{path}")  # second démarrage : rien à refaire
+    with pytest.raises(RuntimeError, match="version précédente du jeu"):
+        init_db(f"sqlite:///{path}")
     init_db("sqlite://")
+
+
+def test_migrations_match_the_models(db):
+    """La dernière migration crée exactement les tables décrites dans models.py
+    (sinon : oubli de `alembic revision --autogenerate` après un changement de modèle)."""
+    from alembic.autogenerate import compare_metadata
+    from alembic.migration import MigrationContext
+    from backend.db.models import Base
+    differences = compare_metadata(MigrationContext.configure(db.connection()), Base.metadata)
+    assert differences == []
+
+
+def test_migrations_can_be_rolled_back_and_replayed(tmp_path):
+    from alembic import command
+    from alembic.config import Config
+    from backend.db.database import ALEMBIC_INI
+    url = f"sqlite:///{tmp_path / 'aller-retour.db'}"
+    engine = init_db(url)
+    config = Config(str(ALEMBIC_INI))
+    with engine.begin() as connection:
+        config.attributes["connection"] = connection
+        command.downgrade(config, "base")
+    assert set(inspect(engine).get_table_names()) == {"alembic_version"}
+    init_db(url)
+    assert {"users", "games", "unlocked_achievements"} <= set(inspect(engine).get_table_names())
+    init_db("sqlite://")
+
+
+UNREACHABLE = "postgresql+psycopg://lantern:secret@localhost:1/lantern_hollow"  # aucun serveur sur le port 1
+
+
+def test_unreachable_database_gives_a_clear_message():
+    """PostgreSQL pas lancé (docker compose oublié) : message clair, sans le mot de passe."""
+    from backend.db.database import DatabaseUnavailable, check_database
+    with pytest.raises(DatabaseUnavailable) as error:
+        check_database(UNREACHABLE)
+    message = str(error.value)
+    assert "docker compose up -d" in message
+    assert "localhost:1" in message and "secret" not in message
+
+
+def test_server_start_with_unreachable_database_gives_the_same_message():
+    from backend.db.database import DatabaseUnavailable
+    with pytest.raises(DatabaseUnavailable, match="docker compose up -d"):
+        init_db(UNREACHABLE)
+    init_db("sqlite://")
+
+
+def test_reachable_database_passes_the_check():
+    from backend.db.database import check_database
+    check_database("sqlite://")

@@ -34,7 +34,8 @@ logger = logging.getLogger(__name__)
 async def lifespan(_app: FastAPI):
     """Au démarrage : ouverture de la base (création des tables, parties restées en cours interrompues),
     création du compte admin s'il n'existe pas (ADMIN_PSEUDO / ADMIN_PASSWORD du .env), puis suppression
-    des comptes inactifs depuis un an (maintenant, puis une fois par jour)."""
+    des comptes inactifs depuis un an (maintenant, puis une fois par jour).
+    Base injoignable : DatabaseUnavailable, avec un message clair (main.py le vérifie même avant)."""
     init_db()
     with get_session() as db:
         ensure_admin(db)

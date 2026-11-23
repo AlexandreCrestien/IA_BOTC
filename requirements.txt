@@ -9,7 +9,9 @@ websockets==17.4          # implémentation WebSocket utilisée par uvicorn
 pydantic==2.14.2          # validation des messages et modèles du jeu
 python-dotenv==1.2.4      # lecture du fichier .env
 litellm==1.108.0          # appels aux LLM des agents
-sqlalchemy==2.1.9         # base de données (comptes, parties, succès) : SQLite pour l'instant
+sqlalchemy==2.1.9         # base de données (comptes, parties, succès) : PostgreSQL, ou SQLite sans Docker
+alembic==1.20.1           # migrations de la base (backend/db/migrations)
+psycopg[binary]==3.3.9    # driver PostgreSQL
 bcrypt==5.0.0             # hachage des mots de passe
 pyjwt==2.15.1             # jetons de connexion (JWT, dans un cookie HttpOnly)
 
