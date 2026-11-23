@@ -270,12 +270,14 @@ def test_export_error_is_shown(page, static_url):
 def test_profile_shows_and_changes_the_email(page, static_url):
     api = open_dashboard(page, static_url)
     expect(page.locator("#profile-email")).to_have_text("vesper@exemple.fr")
-    api.set("PATCH", "/api/account/email", 200, {**USER, "email": "nouveau@exemple.fr"})
+    expect(page.locator("#profile-email-status")).to_have_text("Vérifiée")
+    api.set("PATCH", "/api/account/email", 200, {**USER, "pending_email": "nouveau@exemple.fr"})
     page.fill("#new-email", "nouveau@exemple.fr")
     page.fill("#email-current-password", "mot-de-passe")
     page.click("#email-submit")
-    expect(page.locator("#email-success")).to_have_text("Votre adresse est maintenant nouveau@exemple.fr.")
-    expect(page.locator("#profile-email")).to_have_text("nouveau@exemple.fr")
+    expect(page.locator("#email-success")).to_contain_text("Un lien de confirmation a été envoyé à nouveau@exemple.fr")
+    expect(page.locator("#profile-email")).to_have_text("vesper@exemple.fr")  # l'ancienne reste active
+    expect(page.locator("#profile-pending")).to_contain_text("nouveau@exemple.fr")
     assert api.sent("PATCH", "/api/account/email") == [{"email": "nouveau@exemple.fr", "current_password": "mot-de-passe"}]
 
 
@@ -286,3 +288,69 @@ def test_change_email_error_is_shown(page, static_url):
     page.fill("#email-current-password", "mot-de-passe")
     page.click("#email-submit")
     expect(page.locator("#email-error")).to_have_text("Cette adresse e-mail est déjà utilisée par un autre compte.")
+
+
+# --- Adresse pas encore vérifiée ------------------------------------------------------------
+
+UNVERIFIED = {**USER, "email_verified": False}
+
+
+def open_unverified(page, static_url, game=None):
+    api = FakeApi(page, me=UNVERIFIED, game=game)
+    page.goto(f"{static_url}/dashboard.html")
+    expect(page.locator("#verify-section")).to_be_visible()
+    return api
+
+
+def test_unverified_account_sees_only_the_verification_screen(page, static_url):
+    api = open_unverified(page, static_url)
+    expect(page.locator("#verify-email")).to_have_text("vesper@exemple.fr")
+    expect(page.locator("#dashboard-main")).to_be_hidden()
+    expect(page.locator("#dashboard-nav")).to_be_hidden()
+    expect(page.locator("#verify-resume")).to_be_hidden()
+    assert api.sent("GET", "/api/me/stats") == []  # aucune donnée du tableau de bord demandée
+
+
+def test_resend_the_verification_link(page, static_url):
+    api = open_unverified(page, static_url)
+    api.set("POST", "/api/account/verification-email", 200,
+            {"message": "Un lien de confirmation vient d'être envoyé à vesper@exemple.fr (valable 24 heures)."})
+    page.click("#verify-resend")
+    expect(page.locator("#verify-message")).to_contain_text("vient d'être envoyé")
+
+
+def test_resend_limit_is_explained(page, static_url):
+    api = open_unverified(page, static_url)
+    api.set("POST", "/api/account/verification-email", 429, {"detail": "Plusieurs liens viennent d'être envoyés."})
+    page.click("#verify-resend")
+    expect(page.locator("#verify-error")).to_have_text("Plusieurs liens viennent d'être envoyés.")
+
+
+def test_fix_a_typo_in_the_address(page, static_url):
+    api = open_unverified(page, static_url)
+    api.set("PATCH", "/api/account/email", 200, {**UNVERIFIED, "email": "bonne@exemple.fr"})
+    page.fill("#verify-fix-email", "bonne@exemple.fr")
+    page.fill("#verify-fix-password", "mot-de-passe")
+    page.click("#verify-fix-submit")
+    expect(page.locator("#verify-email")).to_have_text("bonne@exemple.fr")
+    expect(page.locator("#verify-message")).to_contain_text("un nouveau lien a été envoyé à bonne@exemple.fr")
+    assert api.sent("PATCH", "/api/account/email") == [{"email": "bonne@exemple.fr", "current_password": "mot-de-passe"}]
+
+
+def test_unverified_player_can_resume_the_game_claimed_at_signup(page, static_url):
+    open_unverified(page, static_url, game={"running": True, "pseudo": "Lune", "turn": 2, "yours": True})
+    expect(page.locator("#verify-resume")).to_be_visible()
+    page.click("#verify-resume")
+    page.wait_for_url("**/?play")
+
+
+def test_pending_email_change_is_shown_in_the_profile(page, static_url):
+    api = FakeApi(page, me={**USER, "pending_email": "nouveau@exemple.fr"})
+    api.set("GET", "/api/me/stats", 200, STATS)
+    api.set("GET", "/api/me/games", 200, GAMES)
+    api.set("GET", "/api/me/achievements", 200, ACHIEVEMENTS)
+    api.set("POST", "/api/account/verification-email", 200, {"message": "Lien renvoyé."})
+    page.goto(f"{static_url}/dashboard.html")
+    expect(page.locator("#profile-pending")).to_contain_text("nouveau@exemple.fr")
+    page.click("#profile-pending-resend")
+    expect(page.locator("#profile-pending-message")).to_have_text("Lien renvoyé.")

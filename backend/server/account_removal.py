@@ -19,7 +19,9 @@ from backend.server.session import current_session
 
 logger = logging.getLogger(__name__)
 
-PURGE_INTERVAL_SECONDS = 24 * 3600  # recherche des comptes inactifs : au démarrage, puis une fois par jour
+# Tâche de nettoyage : au démarrage, puis une fois par jour. Les échéances sont donc respectées à un jour près
+# (un compte jamais vérifié est supprimé entre 72 et 96 heures après l'inscription).
+PURGE_INTERVAL_SECONDS = 24 * 3600
 
 
 async def stop_game_of(user_id: int) -> None:
@@ -55,9 +57,9 @@ def warn_inactive_accounts() -> list[str]:
 
 
 def purge_inactive_accounts() -> list[str]:
-    """Tâche quotidienne : prévient les comptes bientôt concernés, efface les liens « mot de passe oublié »
-    expirés, puis supprime les comptes inactifs depuis un an et prévenus depuis 30 jours au moins
-    (ou sans adresse). Un compte dont la partie est en cours est épargné : il est actif.
+    """Tâche de nettoyage : prévient les comptes bientôt concernés, efface les liens envoyés par e-mail expirés,
+    supprime les comptes jamais vérifiés après 72 heures, puis ceux inactifs depuis un an et prévenus depuis
+    30 jours au moins (ou sans adresse vérifiée). Un compte dont la partie est en cours est épargné.
     Renvoie les pseudos supprimés."""
     warn_inactive_accounts()
     with get_session() as db:
@@ -65,14 +67,18 @@ def purge_inactive_accounts() -> list[str]:
     session = current_session()
     keep = [session.user_id] if session is not None and session.running and session.user_id else []
     with get_session() as db:
+        unverified = service.delete_unverified_accounts(db, keep=keep)
         deleted = service.delete_inactive_accounts(db, keep=keep)
+    if unverified:
+        logger.info("%d compte(s) jamais vérifié(s) supprimé(s) après 72 heures", len(unverified))
+    deleted = unverified + deleted
     if deleted:
         logger.info("%d compte(s) inactif(s) depuis un an supprimé(s)", len(deleted))
     return deleted
 
 
 async def purge_periodically() -> None:
-    """Tâche de fond lancée au démarrage du serveur : purge, puis une fois par jour."""
+    """Tâche de fond lancée au démarrage du serveur : nettoyage, puis une fois par jour."""
     while True:
         try:
             purge_inactive_accounts()

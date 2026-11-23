@@ -19,6 +19,7 @@ from backend.accounts.passwords import verify_password
 from backend.accounts.service import AccountError
 from backend.accounts.tokens import COOKIE_NAME, TOKEN_LIFETIME, create_token
 from backend.db import User, get_session
+from backend.db.models import utcnow
 from backend.mail import mask_email, send_mail
 from backend.server.account_removal import remove_account
 from backend.server.game_records import claim_guest_game
@@ -29,6 +30,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["Comptes"])
 
 NOT_LOGGED_IN = "Vous n'êtes pas connecté."
+EMAIL_NOT_VERIFIED = "Confirmez d'abord votre adresse e-mail (lien envoyé à l'inscription)."
+VERIFICATION_SENT = "Un lien de confirmation vient d'être envoyé à {email} (valable 24 heures)."
+EMAIL_VERIFIED = "Adresse e-mail confirmée."
 ADMIN_ONLY = "Accès réservé à l'administrateur."
 BAD_CREDENTIALS = "Identifiant ou mot de passe incorrect."
 TOO_MANY_ATTEMPTS = "Trop de tentatives de connexion. Réessayez dans quelques minutes."
@@ -55,6 +59,15 @@ def optional_user(request: Request, db: Session = Depends(db_session)) -> Option
 def current_user(user: Optional[User] = Depends(optional_user)) -> User:
     if user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, NOT_LOGGED_IN)
+    return user
+
+
+def verified_user(user: User = Depends(current_user)) -> User:
+    """Compte dont l'adresse est vérifiée (l'admin en est dispensé) : tableau de bord, parties, profil.
+    Un compte non vérifié peut seulement se connecter, voir son compte, corriger son adresse, redemander
+    le lien, télécharger ses données et supprimer son compte."""
+    if not user.email_verified and not user.is_admin:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, EMAIL_NOT_VERIFIED)
     return user
 
 
@@ -93,13 +106,15 @@ class LoginLimiter:
 
 
 class ResetLimiter(LoginLimiter):
-    """Demandes « mot de passe oublié » : 3 au plus par adresse en 15 minutes (évite d'inonder une boîte mail)."""
+    """Demandes d'e-mail (mot de passe oublié, nouveau lien de vérification) : 3 au plus par adresse ou par
+    compte en 15 minutes (évite d'inonder une boîte mail)."""
     MAX_FAILURES = 3
     WINDOW = 900
 
 
 login_limiter = LoginLimiter()
 reset_limiter = ResetLimiter()
+verification_limiter = ResetLimiter()
 
 
 # --- Schémas --------------------------------------------------------------------------
@@ -152,7 +167,13 @@ class UserOut(BaseModel):
     id: int
     pseudo: str
     email: Optional[str]
+    email_verified: bool
+    pending_email: Optional[str] = None  # nouvelle adresse en attente de confirmation
     is_admin: bool
+
+
+class VerifyEmail(BaseModel):
+    token: str = Field(max_length=200)
 
 
 class LoginOut(UserOut):
@@ -161,8 +182,24 @@ class LoginOut(UserOut):
     achievements: list[dict] = []
 
 
-def user_out(user: User) -> UserOut:
-    return UserOut(id=user.id, pseudo=user.pseudo, email=user.email, is_admin=user.is_admin)
+def user_out(user: User, pending_email: Optional[str] = None) -> UserOut:
+    return UserOut(id=user.id, pseudo=user.pseudo, email=user.email, email_verified=user.email_verified,
+                   pending_email=pending_email, is_admin=user.is_admin)
+
+
+async def notify_password_changed(user: User, how: str) -> None:
+    """Prévient le joueur que son mot de passe a changé (adresse vérifiée seulement), avec qui contacter
+    si ce n'est pas lui."""
+    if user.email and user.email_verified:
+        subject, text = emails.password_changed(user.pseudo, utcnow(), how)
+        await asyncio.to_thread(send_mail, user.email, subject, text)
+
+
+async def send_verification(db: Session, user: User, token: str, email: str) -> None:
+    """Envoie le lien de vérification à `email` (adresse du compte, ou nouvelle adresse à confirmer)."""
+    hours = int(service.VERIFY_TOKEN_LIFETIME.total_seconds() // 3600)
+    subject, text = emails.email_verification(user.pseudo, token, hours, change=user.email_verified)
+    await asyncio.to_thread(send_mail, email, subject, text)  # SMTP : sans bloquer le serveur
 
 
 def login_out(user: User, guest_token: Optional[str]) -> LoginOut:
@@ -188,12 +225,15 @@ def _refuse(error: AccountError):
 # --- Routes ---------------------------------------------------------------------------
 
 @router.post("/auth/register", status_code=status.HTTP_201_CREATED)
-def register(body: Registration, response: Response, db: Session = Depends(db_session)) -> LoginOut:
-    """Crée le compte et connecte le joueur (avec guest_token : rattache aussi sa partie d'invité)."""
+async def register(body: Registration, response: Response, db: Session = Depends(db_session)) -> LoginOut:
+    """Crée le compte, envoie le lien de vérification de l'adresse et connecte le joueur
+    (avec guest_token : rattache aussi sa partie d'invité). Jusqu'à la vérification, le tableau de bord
+    et les nouvelles parties avec ce compte sont bloqués."""
     try:
         user = service.register(db, body.pseudo, body.password, body.email)
     except AccountError as error:
         _refuse(error)
+    await send_verification(db, user, service.create_verification_token(db, user), user.email)
     set_login_cookie(response, user)
     return login_out(user, body.guest_token)
 
@@ -230,7 +270,8 @@ async def forgot_password(body: ForgotPassword, db: Session = Depends(db_session
     if not reset_limiter.blocked(email):
         reset_limiter.failed(email)  # chaque demande compte
         user = service.find_by_email(db, email)
-        if user is not None:
+        # Jamais de lien vers une adresse non vérifiée : une faute de frappe donnerait le compte à un inconnu
+        if user is not None and user.email_verified:
             token = service.create_reset_token(db, user)
             minutes = int(service.RESET_TOKEN_LIFETIME.total_seconds() // 60)
             subject, text = emails.password_reset(user.pseudo, token, minutes)
@@ -239,22 +280,53 @@ async def forgot_password(body: ForgotPassword, db: Session = Depends(db_session
 
 
 @router.post("/auth/reset-password")
-def reset_password(body: PasswordReset, db: Session = Depends(db_session)) -> dict:
-    """Nouveau mot de passe choisi depuis le lien reçu par e-mail. Tous les appareils sont déconnectés."""
+async def reset_password(body: PasswordReset, db: Session = Depends(db_session)) -> dict:
+    """Nouveau mot de passe choisi depuis le lien reçu par e-mail. Tous les appareils sont déconnectés,
+    et le joueur en est prévenu par e-mail."""
     try:
-        service.reset_password_with_token(db, body.token, body.new_password)
+        user = service.reset_password_with_token(db, body.token, body.new_password)
     except AccountError as error:
         _refuse(error)
+    await notify_password_changed(user, "avec le lien « mot de passe oublié »")
     return {"message": PASSWORD_RESET_DONE}
 
 
+@router.post("/auth/verify-email")
+async def verify_email(body: VerifyEmail, db: Session = Depends(db_session)) -> dict:
+    """Lien de vérification ouvert (sans besoin d'être connecté : il peut l'être sur un autre appareil).
+    Changement d'adresse : l'ancienne adresse est prévenue (si ce n'est pas le joueur, il peut réagir)."""
+    try:
+        user, previous_email = service.verify_email(db, body.token)
+    except AccountError as error:
+        _refuse(error)
+    if previous_email:
+        subject, text = emails.email_changed(user.pseudo, user.email, utcnow())
+        await asyncio.to_thread(send_mail, previous_email, subject, text)
+    return {"message": EMAIL_VERIFIED, "pseudo": user.pseudo, "email": user.email}
+
+
+@router.post("/account/verification-email")
+async def resend_verification(user: User = Depends(current_user), db: Session = Depends(db_session)) -> dict:
+    """Nouveau lien de vérification (adresse du compte non vérifiée, ou nouvelle adresse en attente)."""
+    target = service.verification_target(db, user)
+    if target is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, service.ALREADY_VERIFIED)
+    key = f"compte:{user.id}"
+    if verification_limiter.blocked(key):
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS,
+                            "Plusieurs liens viennent d'être envoyés. Vérifiez vos e-mails, puis réessayez plus tard.")
+    verification_limiter.failed(key)
+    await send_verification(db, user, service.create_verification_token(db, user, target), target)
+    return {"message": VERIFICATION_SENT.format(email=target)}
+
+
 @router.get("/auth/me")
-def me(user: User = Depends(current_user)) -> UserOut:
-    return user_out(user)
+def me(user: User = Depends(current_user), db: Session = Depends(db_session)) -> UserOut:
+    return user_out(user, service.pending_email(db, user))
 
 
 @router.patch("/account/pseudo")
-def change_pseudo(body: PseudoChange, user: User = Depends(current_user),
+def change_pseudo(body: PseudoChange, user: User = Depends(verified_user),
                   db: Session = Depends(db_session)) -> UserOut:
     """Interdit pendant une partie en cours du compte : le pseudo y sert d'identifiant du joueur."""
     session = current_session()
@@ -268,24 +340,29 @@ def change_pseudo(body: PseudoChange, user: User = Depends(current_user),
 
 
 @router.patch("/account/email")
-def change_email(body: EmailChange, user: User = Depends(current_user),
-                 db: Session = Depends(db_session)) -> UserOut:
+async def change_email(body: EmailChange, user: User = Depends(current_user),
+                       db: Session = Depends(db_session)) -> UserOut:
+    """Nouvelle adresse : un lien de confirmation y est envoyé. Si l'adresse actuelle est vérifiée, elle reste
+    en place jusqu'à la confirmation (pending_email) ; sinon (faute de frappe à l'inscription), elle est remplacée."""
     try:
-        service.change_email(db, user, body.current_password, body.email)
+        token = service.change_email(db, user, body.current_password, body.email)
     except AccountError as error:
         _refuse(error)
-    return user_out(user)
+    target = service.verification_target(db, user)
+    await send_verification(db, user, token, target)
+    return user_out(user, service.pending_email(db, user))
 
 
 @router.patch("/account/password")
-def change_password(body: PasswordChange, response: Response, user: User = Depends(current_user),
-                    db: Session = Depends(db_session)) -> UserOut:
-    """Les autres appareils sont déconnectés ; celui-ci reçoit un nouveau jeton."""
+async def change_password(body: PasswordChange, response: Response, user: User = Depends(verified_user),
+                          db: Session = Depends(db_session)) -> UserOut:
+    """Les autres appareils sont déconnectés ; celui-ci reçoit un nouveau jeton. Le joueur est prévenu par e-mail."""
     try:
         service.change_password(db, user, body.current_password, body.new_password)
     except AccountError as error:
         _refuse(error)
     set_login_cookie(response, user)
+    await notify_password_changed(user, "depuis votre profil")
     return user_out(user)
 
 

@@ -34,7 +34,10 @@ def fresh_db(db, clean_server):
 
 def account(pseudo="Vesper") -> int:
     with get_session() as db:
-        return service.register(db, pseudo, "mot-de-passe", f"{pseudo.lower()}@exemple.fr").id
+        user = service.register(db, pseudo, "mot-de-passe", f"{pseudo.lower()}@exemple.fr")
+        user.email_verified_at = user.created_at  # adresse confirmée (lien ouvert)
+        db.commit()
+        return user.id
 
 
 def records() -> list[GameRecord]:

@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from backend.accounts.tokens import COOKIE_NAME
 from backend.server.app import app
 from backend.server.auth import LoginLimiter
+from server_helpers import verify_account
 
 
 @pytest.fixture
@@ -17,9 +18,13 @@ def email_of(pseudo):
     return f"{pseudo.lower()}@exemple.fr"
 
 
-def register(client, pseudo="Vesper", password="mot-de-passe", email=None):
-    return client.post("/api/auth/register",
-                       json={"pseudo": pseudo, "email": email or email_of(pseudo), "password": password})
+def register(client, pseudo="Vesper", password="mot-de-passe", email=None, verified=True):
+    """Inscription ; verified : adresse confirmée comme si le lien reçu par e-mail avait été ouvert."""
+    response = client.post("/api/auth/register",
+                           json={"pseudo": pseudo, "email": email or email_of(pseudo), "password": password})
+    if verified and response.status_code == 201:
+        verify_account(pseudo)
+    return response
 
 
 def login(client, pseudo="Vesper", password="mot-de-passe"):

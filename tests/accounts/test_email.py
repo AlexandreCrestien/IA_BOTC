@@ -9,8 +9,13 @@ from backend.db import PasswordResetToken, User
 from backend.db.models import utcnow
 
 
-def account(db, pseudo="Vesper", email="vesper@exemple.fr", password="mot-de-passe"):
-    return service.register(db, pseudo, password, email)
+def account(db, pseudo="Vesper", email="vesper@exemple.fr", password="mot-de-passe", verified=True):
+    """Compte inscrit ; verified : adresse confirmée comme si le lien reçu par e-mail avait été ouvert."""
+    user = service.register(db, pseudo, password, email)
+    if verified:
+        user.email_verified_at = utcnow()
+        db.commit()
+    return user
 
 
 def refusal(call) -> AccountError:
@@ -52,8 +57,12 @@ def test_change_email(db):
     account(db, "Ombre", "ombre@exemple.fr")
     assert refusal(lambda: service.change_email(db, user, "mauvais", "nouveau@exemple.fr")).status == 403
     assert refusal(lambda: service.change_email(db, user, "mot-de-passe", "ombre@exemple.fr")).status == 409
-    service.change_email(db, user, "mot-de-passe", "Nouveau@Exemple.fr")
-    assert user.email == "nouveau@exemple.fr"
+    token = service.change_email(db, user, "mot-de-passe", "Nouveau@Exemple.fr")
+    # Adresse vérifiée : l'ancienne reste en place jusqu'à la confirmation de la nouvelle
+    assert user.email == "vesper@exemple.fr" and service.pending_email(db, user) == "nouveau@exemple.fr"
+    service.verify_email(db, token)
+    assert user.email == "nouveau@exemple.fr" and user.email_verified
+    assert service.pending_email(db, user) is None
 
 
 def test_admin_email_is_optional_and_added_later(db):

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from backend.accounts import service
 from backend.accounts.service import AccountError
 from backend.db import User, iso_utc
-from backend.server.auth import admin_user, db_session
+from backend.server.auth import admin_user, db_session, notify_password_changed
 from backend.server.account_removal import remove_account
 from backend.server.session import current_session
 
@@ -23,15 +23,16 @@ router = APIRouter(prefix="/admin", tags=["Administration"], dependencies=[Depen
 def list_users(db: Session = Depends(db_session)) -> list[dict]:
     """Comptes, du plus ancien au plus récent (jamais le hash du mot de passe)."""
     users = db.scalars(select(User).order_by(User.created_at, User.id)).all()
-    return [{"id": u.id, "pseudo": u.pseudo, "email": u.email, "is_admin": u.is_admin,
+    return [{"id": u.id, "pseudo": u.pseudo, "email": u.email, "email_verified": u.email_verified,
+             "is_admin": u.is_admin,
              "created_at": iso_utc(u.created_at)}
             for u in users]
 
 
 @router.post("/users/{user_id}/reset-password")
-def reset_user_password(user_id: int, db: Session = Depends(db_session)) -> dict:
+async def reset_user_password(user_id: int, db: Session = Depends(db_session)) -> dict:
     """Dépannage d'un joueur qui a oublié son mot de passe : mot de passe temporaire, montré une seule fois
-    à l'admin qui le lui transmet. Le joueur est déconnecté partout."""
+    à l'admin qui le lui transmet. Le joueur est déconnecté partout et prévenu par e-mail."""
     user = db.get(User, user_id)
     if user is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Compte introuvable.")
@@ -39,6 +40,7 @@ def reset_user_password(user_id: int, db: Session = Depends(db_session)) -> dict
         temporary = service.reset_password(db, user)
     except AccountError as error:
         raise HTTPException(error.status, error.message)
+    await notify_password_changed(user, "par l'administrateur")
     return {"pseudo": user.pseudo, "temporary_password": temporary}
 
 

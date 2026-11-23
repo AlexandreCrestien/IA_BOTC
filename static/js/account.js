@@ -136,7 +136,11 @@ async function initWelcome() {
     refreshGameMenu();
 
     if (user) {
-        if (!wantsToPlay) {
+        // Adresse pas encore vérifiée : pas de nouvelle partie avec ce compte (seulement celle rattachée à
+        // l'inscription, si elle tourne) ; le tableau de bord affiche l'écran de confirmation
+        const ownGame = game.running && game.yours;
+        const mustVerify = !user.email_verified && !user.is_admin && !ownGame;
+        if (!wantsToPlay || mustVerify) {
             location.replace(DASHBOARD_URL);
             return;
         }
@@ -309,13 +313,18 @@ async function submitGameAccount() {
     }
 
     const body = result.body;
-    currentUser = { id: body.id, pseudo: body.pseudo, email: body.email, is_admin: body.is_admin };
+    currentUser = { id: body.id, pseudo: body.pseudo, email: body.email, email_verified: body.email_verified,
+                    is_admin: body.is_admin };
     guestToken = null; // usage unique : la partie est rattachée (ou ne peut plus l'être)
     closeAccountModal();
     refreshGameMenu();
     document.getElementById('gameover-register').classList.add('hidden');
 
-    const welcome = accountMode === 'register' ? `Compte ${body.pseudo} créé.` : `Connecté en tant que ${body.pseudo}.`;
+    let welcome = accountMode === 'register' ? `Compte ${body.pseudo} créé.` : `Connecté en tant que ${body.pseudo}.`;
+    if (!body.email_verified && !body.is_admin) {
+        welcome += ` Un lien de confirmation a été envoyé à ${body.email} : confirmez votre adresse pour accéder `
+            + "à votre tableau de bord.";
+    }
     if (!body.game_claimed) {
         appendSystemMessage(`${welcome} Cette partie n'a pas pu être rattachée à votre compte.`);
     } else if (gameIsOver) {

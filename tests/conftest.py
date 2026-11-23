@@ -15,6 +15,7 @@ os.environ["BCRYPT_ROUNDS"] = "4"
 os.environ["ADMIN_PSEUDO"] = ""
 os.environ["ADMIN_PASSWORD"] = ""
 os.environ["ADMIN_EMAIL"] = ""
+os.environ["CONTACT_EMAIL"] = ""
 # E-mails gardés en mémoire (backend.mail.OUTBOX), jamais envoyés ni affichés
 os.environ["MAIL_MODE"] = "memory"
 

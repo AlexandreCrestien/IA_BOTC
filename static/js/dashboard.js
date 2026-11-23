@@ -59,13 +59,58 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
     currentUser = me.body;
     showIdentity();
+    // Adresse pas encore vérifiée (l'admin en est dispensé) : écran de confirmation seulement
+    if (!currentUser.email_verified && !currentUser.is_admin) {
+        await showVerificationScreen();
+        return;
+    }
     document.getElementById('dashboard-main').classList.remove('hidden');
     await refreshAll();
 });
 
+// ================= ADRESSE À CONFIRMER =================
+async function showVerificationScreen() {
+    document.getElementById('dashboard-nav').classList.add('hidden');
+    document.getElementById('verify-email').textContent = currentUser.email;
+    document.getElementById('verify-section').classList.remove('hidden');
+    // Invité inscrit pendant sa partie : il peut la finir avant de confirmer son adresse
+    const game = await api('/api/game/current');
+    document.getElementById('verify-resume').classList.toggle('hidden', !(game.ok && game.body?.running && game.body?.yours));
+}
+
+function setVerifyMessages(error, success) {
+    const errorEl = document.getElementById('verify-error');
+    const successEl = document.getElementById('verify-message');
+    errorEl.textContent = error || '';
+    errorEl.classList.toggle('hidden', !error);
+    successEl.textContent = success || '';
+    successEl.classList.toggle('hidden', !success);
+}
+
+// Nouveau lien de vérification (adresse du compte, ou nouvelle adresse en attente) ; onSuccess, onError : où l'annoncer
+async function resendVerification(onSuccess, onError) {
+    const result = await api('/api/account/verification-email', { method: 'POST' });
+    if (result.ok) onSuccess(result.body?.message || "Un nouveau lien vient d'être envoyé.");
+    else onError(errorText(result, "L'envoi du lien a échoué."));
+}
+
+async function fixUnverifiedEmail() {
+    const email = document.getElementById('verify-fix-email').value.trim();
+    const password = document.getElementById('verify-fix-password').value;
+    if (!email || !password) return setVerifyMessages("Entrez la bonne adresse et votre mot de passe.");
+    const result = await api('/api/account/email', { method: 'PATCH', data: { email, current_password: password } });
+    if (!result.ok) return setVerifyMessages(errorText(result, "La correction a échoué."));
+    currentUser = result.body;
+    document.getElementById('verify-email').textContent = currentUser.email;
+    document.getElementById('verify-fix-form').reset();
+    setVerifyMessages(null, `Adresse corrigée : un nouveau lien a été envoyé à ${currentUser.email}.`);
+}
+
 // Retour sur l'onglet (ouvert depuis la partie) : la partie a pu avancer ou se terminer
 document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && currentUser) refreshAll();
+    if (document.visibilityState === 'visible' && currentUser && !document.getElementById('dashboard-main').classList.contains('hidden')) {
+        refreshAll();
+    }
 });
 
 // Raccourcis de l'en-tête : le lien de la section affichée est mis en valeur pendant le défilement.
@@ -108,6 +153,19 @@ function bindEvents() {
     document.getElementById('pseudo-form').addEventListener('submit', (event) => {
         event.preventDefault();
         changePseudo();
+    });
+    document.getElementById('verify-resend').addEventListener('click', () =>
+        resendVerification(text => setVerifyMessages(null, text), text => setVerifyMessages(text)));
+    document.getElementById('verify-refresh').addEventListener('click', () => location.reload());
+    document.getElementById('verify-resume').addEventListener('click', () => { location.href = PLAY_URL; });
+    document.getElementById('verify-fix-form').addEventListener('submit', (event) => {
+        event.preventDefault();
+        fixUnverifiedEmail();
+    });
+    document.getElementById('profile-pending-resend').addEventListener('click', () => {
+        const box = document.getElementById('profile-pending-message');
+        const showMessage = text => { box.textContent = text; box.classList.remove('hidden'); };
+        resendVerification(showMessage, showMessage);
     });
     document.getElementById('email-form').addEventListener('submit', (event) => {
         event.preventDefault();
@@ -284,13 +342,19 @@ async function changeEmail() {
     currentUser = result.body;
     showIdentity();
     document.getElementById('email-form').reset();
-    setFormMessages('email', null, `Votre adresse est maintenant ${currentUser.email}.`);
+    setFormMessages('email', null, `Un lien de confirmation a été envoyé à ${currentUser.pending_email}. `
+        + "Votre adresse actuelle reste active jusqu'à la confirmation.");
 }
 
 // Pseudo dans l'en-tête, adresse e-mail dans le profil
 function showIdentity() {
     document.getElementById('dashboard-pseudo').textContent = currentUser.pseudo;
     document.getElementById('profile-email').textContent = currentUser.email || "aucune";
+    const status = document.getElementById('profile-email-status');
+    status.textContent = currentUser.email ? (currentUser.email_verified ? "Vérifiée" : "Non vérifiée") : '';
+    status.dataset.verified = String(Boolean(currentUser.email_verified));
+    document.getElementById('profile-pending-email').textContent = currentUser.pending_email || '';
+    document.getElementById('profile-pending').classList.toggle('hidden', !currentUser.pending_email);
 }
 
 async function changePassword() {

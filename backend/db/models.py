@@ -72,6 +72,13 @@ class User(Base):
     email: Mapped[Optional[str]] = mapped_column(String(254))
     # Avertissement « compte bientôt supprimé pour inactivité » envoyé (remis à vide à la reconnexion)
     inactivity_warned_at: Mapped[Optional[datetime]]
+    # Adresse confirmée par le lien reçu par e-mail. Vide : compte en attente (pas de tableau de bord ni de
+    # partie avec ce compte, aucun autre e-mail envoyé), supprimé s'il n'est pas vérifié sous 72 heures.
+    email_verified_at: Mapped[Optional[datetime]]
+
+    @property
+    def email_verified(self) -> bool:
+        return self.email_verified_at is not None
 
     games: Mapped[list["GameRecord"]] = relationship(back_populates="user")
     achievements: Mapped[list["UnlockedAchievement"]] = relationship(back_populates="user")
@@ -128,6 +135,20 @@ class PasswordResetToken(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    expires_at: Mapped[datetime]
+    used_at: Mapped[Optional[datetime]]
+
+
+class EmailVerificationToken(Base):
+    """Lien de vérification d'adresse : à l'inscription, ou pour confirmer une nouvelle adresse (email : l'adresse
+    à confirmer, qui ne remplace l'ancienne qu'une fois confirmée). Usage unique ; seule l'empreinte est stockée."""
+    __tablename__ = "email_verification_tokens"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    email: Mapped[str] = mapped_column(String(254))
     token_hash: Mapped[str] = mapped_column(String(64), unique=True)
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
     expires_at: Mapped[datetime]

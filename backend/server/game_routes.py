@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from backend.db import User
 from backend.server import game_runner
-from backend.server.auth import current_user, optional_user
+from backend.server.auth import optional_user, verified_user
 from backend.server.protocol import send
 from backend.server.schemas import GameAbandoned
 from backend.server.session import current_session
@@ -42,7 +42,7 @@ def current_game(user: Optional[User] = Depends(optional_user)) -> CurrentGame:
 
 
 @router.post("/abandon", status_code=status.HTTP_204_NO_CONTENT)
-async def abandon(user: User = Depends(current_user)) -> None:
+async def abandon(user: User = Depends(verified_user)) -> None:
     """Abandon depuis le tableau de bord : défaite (abandon). Si l'écran de jeu est encore ouvert, il est prévenu."""
     session = current_session()
     if session is None or not session.running or session.user_id != user.id:

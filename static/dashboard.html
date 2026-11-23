@@ -43,6 +43,38 @@
         </div>
     </header>
 
+    <!-- Compte pas encore vérifié : seul cet écran est accessible (tableau de bord et parties après la confirmation) -->
+    <main id="verify-section" class="hidden max-w-2xl mx-auto w-full p-6">
+        <section class="dash-section space-y-4">
+            <h2 class="dash-section-title">Confirmez votre adresse e-mail</h2>
+            <p class="font-serif text-lg italic">
+                Un lien de confirmation a été envoyé à <strong id="verify-email" class="text-gold not-italic"></strong>.
+                Ouvrez-le pour activer votre compte (il est valable 24 heures).
+            </p>
+            <p class="text-sm opacity-75">
+                Sans confirmation sous 72 heures après l'inscription, le compte est supprimé et le pseudo comme l'adresse
+                redeviennent libres. En attendant, vous pouvez toujours jouer en invité.
+            </p>
+            <div class="flex flex-wrap gap-2">
+                <button type="button" id="verify-resend" class="btn-seal">Renvoyer le lien</button>
+                <button type="button" id="verify-refresh" class="btn-ghost">J'ai confirmé mon adresse</button>
+                <button type="button" id="verify-resume" class="btn-ghost hidden">Reprendre ma partie</button>
+            </div>
+            <p id="verify-message" role="status" class="form-success hidden text-sm"></p>
+            <p id="verify-error" role="alert" class="welcome-error hidden text-sm"></p>
+
+            <!-- Faute de frappe dans l'adresse : correction, et nouveau lien envoyé à la bonne adresse -->
+            <form id="verify-fix-form" class="space-y-3 pt-4 border-t border-[var(--border)]">
+                <p class="modal-kicker">Adresse incorrecte ?</p>
+                <label for="verify-fix-email" class="text-xs font-semibold uppercase tracking-wider block opacity-70">Bonne adresse</label>
+                <input type="email" id="verify-fix-email" maxlength="254" autocomplete="email" class="welcome-input w-full">
+                <label for="verify-fix-password" class="text-xs font-semibold uppercase tracking-wider block opacity-70">Mot de passe</label>
+                <input type="password" id="verify-fix-password" autocomplete="current-password" class="welcome-input w-full font-mono">
+                <button type="submit" id="verify-fix-submit" class="btn-ghost w-full">Corriger l'adresse et renvoyer le lien</button>
+            </form>
+        </section>
+    </main>
+
     <main id="dashboard-main" class="hidden max-w-6xl mx-auto w-full p-6 space-y-6">
 
         <!-- PARTIE : commencer, ou reprendre / abandonner celle en cours -->
@@ -110,7 +142,15 @@
         <!-- PROFIL -->
         <section id="section-profile" class="dash-section">
             <h2 class="dash-section-title">Profil</h2>
-            <p class="text-sm opacity-80 mb-4">Adresse e-mail du compte : <span id="profile-email" class="text-gold"></span></p>
+            <p class="text-sm opacity-80">Adresse e-mail du compte : <span id="profile-email" class="text-gold"></span>
+                <span id="profile-email-status" class="email-status"></span></p>
+            <!-- Changement d'adresse en attente : l'ancienne reste active jusqu'à la confirmation de la nouvelle -->
+            <p id="profile-pending" class="text-sm opacity-80 mt-1 hidden">
+                Nouvelle adresse en attente de confirmation : <span id="profile-pending-email" class="text-gold"></span>
+                <button type="button" id="profile-pending-resend" class="underline ml-1 opacity-80 hover:opacity-100">Renvoyer le lien</button>
+            </p>
+            <p id="profile-pending-message" role="status" class="form-success hidden text-sm mt-1"></p>
+            <div class="mb-4"></div>
             <div class="profile-grid">
                 <form id="pseudo-form" class="space-y-3">
                     <p class="modal-kicker">Changer de pseudo</p>
@@ -129,7 +169,7 @@
                         <label for="new-email" class="text-xs font-semibold uppercase tracking-wider block opacity-70">Nouvelle adresse</label>
                         <span class="info-tip">
                             <button type="button" class="info-tip-icon" aria-label="Pourquoi votre adresse e-mail ?" aria-describedby="new-email-tip">?</button>
-                            <span id="new-email-tip" role="tooltip" class="info-tip-text">Votre adresse sert uniquement à vous connecter, à recevoir un lien si vous oubliez votre mot de passe et à être prévenu un mois avant la suppression d'un compte inactif. Elle n'est jamais transmise à personne, ni utilisée pour de la publicité.</span>
+                            <span id="new-email-tip" role="tooltip" class="info-tip-text">Votre adresse sert uniquement à vous connecter, à recevoir un lien si vous oubliez votre mot de passe, à être prévenu de tout changement de votre adresse ou de votre mot de passe, et un mois avant la suppression d'un compte inactif. Elle n'est jamais transmise à personne, ni utilisée pour de la publicité.</span>
                         </span>
                     </div>
                     <input type="email" id="new-email" maxlength="254" autocomplete="email" class="welcome-input w-full" aria-describedby="new-email-tip">

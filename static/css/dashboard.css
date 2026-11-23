@@ -274,3 +274,16 @@
   padding-top: 1.25rem;
   border-top: 1px solid var(--border);
 }
+
+/* Statut de l'adresse e-mail dans le profil */
+.email-status {
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+}
+.email-status[data-verified="true"] { color: oklch(0.75 0.12 150); background-color: oklch(0.6 0.12 150 / 12%); }
+.email-status[data-verified="false"] { color: oklch(0.72 0.17 25); background-color: oklch(0.5 0.18 22 / 15%); }
+
+/* La barre de raccourcis a son propre display : .hidden doit la masquer (compte pas encore vérifié) */
+.dash-nav.hidden { display: none; }

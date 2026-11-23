@@ -6,7 +6,8 @@ from playwright.sync_api import expect
 
 from conftest import PLAYER, players
 
-USER = {"id": 1, "pseudo": PLAYER, "email": "vesper@exemple.fr", "is_admin": False}
+USER = {"id": 1, "pseudo": PLAYER, "email": "vesper@exemple.fr", "email_verified": True, "pending_email": None,
+        "is_admin": False}
 ACHIEVEMENT = {"code": "one_turn_win", "title": "Coup de maître", "description": "Gagner une partie en un seul tour.",
                "message": "Talents de détective surnaturels ou chance inouïe ?"}
 
@@ -370,3 +371,16 @@ def test_email_info_tooltip_on_hover_and_focus(page, static_url):
     page.focus("#register-form .info-tip-icon")  # au clavier (Tab) : visible aussi
     expect(tip).to_be_visible()
     expect(page.locator("#register-email")).to_have_attribute("aria-describedby", "register-email-tip")
+
+
+def test_in_game_signup_asks_to_confirm_the_address(page, server, static_url):
+    api = open_welcome(page, static_url)
+    join_as_guest(page, server)
+    api.set("POST", "/api/auth/register", 201, {**USER, "email_verified": False, "game_claimed": True, "achievements": []})
+    page.click("#menu-btn")
+    page.click("#menu-register")
+    page.fill("#account-email", "vesper@exemple.fr")
+    page.fill("#account-password", "mot-de-passe")
+    page.fill("#account-password-confirm", "mot-de-passe")
+    page.click("#account-submit")
+    expect(page.locator("#chat-messages")).to_contain_text("Un lien de confirmation a été envoyé à vesper@exemple.fr")

@@ -12,6 +12,7 @@ from backend.accounts import service
 from backend.db import get_session
 from backend.db.models import utcnow
 from backend.server.app import app
+from server_helpers import verify_account
 
 
 @pytest.fixture
@@ -20,8 +21,13 @@ def client(clean_server):
         yield client
 
 
-def register(client, pseudo="Vesper", email="vesper@exemple.fr", password="mot-de-passe"):
-    return client.post("/api/auth/register", json={"pseudo": pseudo, "email": email, "password": password})
+def register(client, pseudo="Vesper", email="vesper@exemple.fr", password="mot-de-passe", verified=True):
+    """Inscription ; verified : adresse confirmée comme si le lien reçu par e-mail avait été ouvert."""
+    response = client.post("/api/auth/register", json={"pseudo": pseudo, "email": email, "password": password})
+    if verified and response.status_code == 201:
+        verify_account(pseudo)
+        mail.OUTBOX.clear()  # e-mail de vérification de l'inscription : sans intérêt pour ces tests
+    return response
 
 
 def login(client, identifier="Vesper", password="mot-de-passe"):
@@ -99,7 +105,9 @@ def test_change_email_route(client):
     wrong = client.patch("/api/account/email", json={"current_password": "mauvais", "email": "n@exemple.fr"})
     assert wrong.status_code == 403
     response = client.patch("/api/account/email", json={"current_password": "mot-de-passe", "email": "N@Exemple.fr"})
-    assert response.status_code == 200 and response.json()["email"] == "n@exemple.fr"
+    body = response.json()
+    assert response.status_code == 200
+    assert (body["email"], body["pending_email"]) == ("vesper@exemple.fr", "n@exemple.fr")  # à confirmer
 
 
 def test_export_contains_the_email(client):

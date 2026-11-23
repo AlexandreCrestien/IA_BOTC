@@ -38,9 +38,9 @@ Provocateur, Parano, Bouffon, Stratège et Observateur (fichiers dans `skills/pe
 
 ### Comptes, statistiques et succès
 
-- **Invité ou compte.** On peut jouer en invité (pseudo seul, rien n'est enregistré) ou avec un compte (pseudo, adresse e-mail et mot de passe ; connexion avec le pseudo ou l'adresse). Un invité qui crée un compte, ou se connecte, pendant la partie ou sur l'écran de fin, y rattache la partie en cours.
+- **Invité ou compte.** On peut jouer en invité (pseudo seul, rien n'est enregistré) ou avec un compte (pseudo, adresse e-mail et mot de passe ; connexion avec le pseudo ou l'adresse). L'adresse doit être **confirmée** par le lien reçu à l'inscription (valable 24 heures) avant d'accéder au tableau de bord ou de lancer une partie avec le compte ; un compte non confirmé sous 72 heures est supprimé. Un changement d'adresse se confirme de la même façon, l'ancienne restant active jusque-là. Un invité qui crée un compte, ou se connecte, pendant la partie ou sur l'écran de fin, y rattache la partie en cours.
 - **Tableau de bord** (joueur connecté) : lancer, reprendre ou abandonner sa partie ; statistiques ; historique des parties ; succès ; changement de pseudo, d'adresse e-mail et de mot de passe ; export de ses données (fichier JSON : profil, parties, succès, statistiques) ; suppression du compte.
-- **Mot de passe oublié** : depuis l'accueil, un lien est envoyé par e-mail (usage unique, valable 30 minutes) vers la page `reset-password.html`. La réponse est la même que l'adresse ait un compte ou non, et les demandes sont limitées à 3 par adresse en 15 minutes.
+- **Mot de passe oublié** : depuis l'accueil, un lien est envoyé par e-mail, seulement à une adresse confirmée (usage unique, valable 30 minutes) vers la page `reset-password.html`. La réponse est la même que l'adresse ait un compte ou non, et les demandes sont limitées à 3 par adresse en 15 minutes.
 - **Suppression d'un compte**, la même par le joueur (tableau de bord, mot de passe demandé), par l'admin, ou automatiquement après **un an sans connexion**, un mois après un e-mail d'avertissement : le compte (pseudo, adresse e-mail, mot de passe) et ses succès sont effacés ; le résumé de ses parties est gardé de façon anonyme (détaché du compte, daté au jour près) pour les statistiques du jeu. Sa partie en cours est arrêtée. Le compte admin ne peut pas être supprimé.
 - **Statistiques :** parties jouées, part de victoires (au total, côté villageois, côté démons), nombre moyen de tours. Un abandon compte comme une défaite ; une partie interrompue par le serveur (arrêt, plantage) ne compte pas.
 - **Fermer l'onglet ne termine pas la partie :** elle attend le joueur, qui la reprend ou l'abandonne depuis l'accueil ou le tableau de bord.
@@ -105,6 +105,7 @@ backend/
     └── agent_whispers.py  Conversation simulée entre deux agents (tirage du duo, résumés)
 static/                Interface web servie par FastAPI : jeu (index.html), tableau de bord (dashboard.html),
                        administration (admin.html), nouveau mot de passe (reset-password.html),
+                       confirmation de l'adresse (verify-email.html),
                        page introuvable (not-found.html)
 skills/                Textes des prompts : règles générales, rôles, personnalités
 scripts/               Parties dans le terminal, simulations et test complet
@@ -174,7 +175,7 @@ alembic current           # version de la base
 
 ## E-mails
 
-Le jeu envoie deux sortes d'e-mails : le lien « mot de passe oublié » et l'avertissement un mois avant la suppression d'un compte inactif. Rien ne part vers une vraie boîte mail en local :
+Le jeu envoie quatre sortes d'e-mails : le lien de confirmation de l'adresse, le lien « mot de passe oublié », les notifications de sécurité (adresse remplacée, envoyée à l'ancienne adresse ; mot de passe modifié ou réinitialisé), avec l'adresse à contacter si la modification ne vient pas du joueur, et l'avertissement un mois avant la suppression d'un compte inactif. En dehors du lien de confirmation, rien n'est envoyé à une adresse non confirmée. Rien ne part vers une vraie boîte mail en local :
 - **`MAIL_MODE=console`** (par défaut, sans rien installer) : l'e-mail s'affiche dans la console du serveur ; on y copie le lien ;
 - **`MAIL_MODE=smtp`** : l'e-mail est envoyé à **Mailpit** (lancé par `docker compose up -d`) et s'affiche sur **http://localhost:8025**, comme dans une vraie boîte de réception.
 
@@ -193,6 +194,7 @@ Le fichier `.env.example`, copié en `.env` à l'installation, contient toutes l
 | `OPENROUTER_API_KEY` | Clé API OpenRouter |
 | `JWT_SECRET` | Clé qui signe les jetons de connexion. Absente : clé temporaire, les joueurs sont déconnectés à chaque redémarrage |
 | `ADMIN_PSEUDO`, `ADMIN_PASSWORD`, `ADMIN_EMAIL` | Compte administrateur, créé au premier démarrage s'il n'existe pas (mot de passe : 8 caractères au moins ; adresse facultative). Absents : pas de compte admin, panneau fermé |
+| `CONTACT_EMAIL` | Adresse à contacter, indiquée dans les e-mails de sécurité (à défaut : `ADMIN_EMAIL`) |
 | `MAIL_MODE` | `console` (par défaut) : les e-mails ne sont pas envoyés mais affichés dans la console du serveur, lien compris. `smtp` : envoyés à Mailpit (ou à un vrai serveur SMTP) |
 | `SMTP_HOST`, `SMTP_PORT`, `MAIL_FROM` | Serveur d'envoi en mode `smtp` (Mailpit : `localhost`, `1025`). Pour un vrai fournisseur : `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_STARTTLS=true` |
 | `APP_URL` | Adresse du jeu dans les liens des e-mails (par défaut `http://127.0.0.1:8000`) |
@@ -222,6 +224,7 @@ Une fois lancé (`python main.py`), le serveur répond sur `http://127.0.0.1:800
 | `ws://<serveur>/ws/{pseudo}` | WebSocket du joueur : lance ou reprend sa partie, reçoit et valide ses actions |
 | `/api/auth/*`, `/api/account/*` | Inscription, connexion, déconnexion, mot de passe oublié, profil |
 | `GET /reset-password.html` | Choix d'un nouveau mot de passe (lien reçu par e-mail) |
+| `GET /verify-email.html` | Confirmation de l'adresse e-mail (lien reçu par e-mail) |
 | `/api/game/*` | Partie en cours, abandon depuis le tableau de bord |
 | `/api/me/*` | Statistiques, historique des parties, succès |
 | `GET /admin` | Page d'administration (développeurs) |
@@ -302,7 +305,7 @@ ruff check .
 - Tour de jeu unique (`backend/engine/turn.py`), utilisé par le serveur, le terminal, les scripts et les tests
 - Serveur : WebSocket (une partie à la fois, reprise après rechargement, abandon), page et routes d'administration
 - Interface web reliée au moteur, et parties dans le terminal
-- Comptes (invité ou compte, connexion par cookie avec le pseudo ou l'e-mail), mot de passe oublié par e-mail, tableau de bord, statistiques, historique des parties, succès ; compte admin, réinitialisation des mots de passe et suppression des comptes
+- Comptes (invité ou compte, connexion par cookie avec le pseudo ou l'e-mail), adresse confirmée par e-mail, mot de passe oublié par e-mail, tableau de bord, statistiques, historique des parties, succès ; compte admin, réinitialisation des mots de passe et suppression des comptes
 - Page 404
 - Base PostgreSQL avec Docker Compose, migrations Alembic (SQLite toujours possible sans Docker)
 
@@ -313,7 +316,6 @@ ruff check .
 ## Axes d'amélioration
 
 - **Docker pour le serveur** : aujourd'hui seule la base tourne dans Docker, le serveur se lance avec `python main.py`. Une image du serveur, ajoutée au `docker-compose.yml`, permettrait de tout lancer en une commande.
-- **Vérification de l'adresse e-mail** : un lien de confirmation envoyé à l'inscription, pour s'assurer que l'adresse appartient bien au joueur avant de s'en servir.
 - **Une partie par joueur** : aujourd'hui une seule partie à la fois sur le serveur (une session globale), ce qui suffit en local. Il faudrait une session par joueur, et des messages publics limités à leur partie.
 - **Historique détaillé des parties dans le panel admin** : choisir un joueur, puis une de ses parties passées, et en voir tout le détail (chat, votes, nuits, mémoire des IA). Il faudrait enregistrer en base, à la fin de chaque partie, ce que le panel montre de la partie en cours (un bloc JSON par partie). RGPD : ce détail contient le pseudo et les messages libres du joueur, il ne peut pas être anonymisé ; il faudrait le **supprimer avec le compte**, le garder pour une **durée limitée** (par exemple 6 mois) et l'annoncer dans le Codex.
 - **Comparaison aux autres joueurs** dans le tableau de bord : moyennes calculées par partie (elles peuvent inclure les parties anonymisées) ou par joueur (comptes existants seulement) ; « x % des joueurs ont débloqué ce succès », affiché à partir d'un nombre minimum de joueurs (avec 3 joueurs, un pourcentage désigne presque quelqu'un).

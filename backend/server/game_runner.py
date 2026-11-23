@@ -36,6 +36,7 @@ REFUSED_PSEUDO = INVALID_PSEUDO
 REFUSED_BUSY = "Une partie est déjà en cours avec un autre joueur."
 REFUSED_ACCOUNT_PSEUDO = "Ce pseudo appartient à un joueur. Connectez-vous pour l'utiliser."
 REFUSED_OTHER_ACCOUNT = "Vous êtes connecté : jouez avec le pseudo de votre compte."
+REFUSED_UNVERIFIED = "Confirmez d'abord votre adresse e-mail pour jouer avec votre compte (lien envoyé à l'inscription)."
 REFUSED_OWNER = "Votre session a expiré : reconnectez-vous pour reprendre votre partie"
 
 
@@ -119,8 +120,11 @@ def can_join(player_id: str, user: Optional[User] = None) -> Optional[str]:
         if session.user_id is not None and (user is None or user.id != session.user_id):
             return REFUSED_OWNER
         return None  # reprise de sa propre partie
-    # Nouvelle partie : un compte joue sous son pseudo, un invité ne peut pas prendre celui d'un compte
+    # Nouvelle partie : un compte (adresse vérifiée) joue sous son pseudo, un invité ne peut pas prendre
+    # celui d'un compte. Un compte non vérifié peut seulement finir la partie rattachée à son inscription (plus haut).
     if user is not None:
+        if not user.email_verified and not user.is_admin:
+            return REFUSED_UNVERIFIED
         return None if pseudo_key(player_id) == user.pseudo_key else REFUSED_OTHER_ACCOUNT
     return REFUSED_ACCOUNT_PSEUDO if _is_account_pseudo(player_id) else None
 

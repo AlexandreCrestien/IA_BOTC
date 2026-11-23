@@ -13,6 +13,7 @@ from backend.server.schemas import NightHistoryEntry, VoteHistoryEntry
 from backend.server.session import GameSession, set_current_session
 from backend.accounts.service import ensure_admin, find_by_pseudo, register
 from backend.db import GameRecord
+from backend.db.models import utcnow
 from backend.server import game_records
 from backend.accounts.tokens import COOKIE_NAME
 from backend.db import get_session
@@ -106,7 +107,8 @@ def client(clean_server):
     with TestClient(app) as client:
         with get_session() as db:
             ensure_admin(db, "Gardien", "mot-de-passe-admin")
-            register(db, "Vesper", "mot-de-passe-joueur", "vesper@exemple.fr")
+            register(db, "Vesper", "mot-de-passe-joueur", "vesper@exemple.fr").email_verified_at = utcnow()
+            db.commit()
         yield client
 
 
@@ -143,7 +145,7 @@ def test_admin_lists_accounts_without_password_hash(client):
     log_in(client, "Gardien", "mot-de-passe-admin")
     users = client.get("/admin/users").json()
     assert [(u["pseudo"], u["is_admin"]) for u in users] == [("Gardien", True), ("Vesper", False)]
-    assert all(set(u) == {"id", "pseudo", "email", "is_admin", "created_at"} for u in users)
+    assert all(set(u) == {"id", "pseudo", "email", "email_verified", "is_admin", "created_at"} for u in users)
     assert all(u["created_at"].endswith("+00:00") for u in users)  # fuseau explicite pour le navigateur
 
 

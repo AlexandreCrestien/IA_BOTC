@@ -183,7 +183,7 @@ function renderAccounts(users) {
                 ${users.map(u => `
                     <tr>
                         <td class="font-semibold">${escapeHtml(u.pseudo)}${u.is_admin ? ' <span class="opacity-60 font-normal">(admin)</span>' : ''}</td>
-                        <td>${u.email ? escapeHtml(u.email) : '<span class="opacity-50">—</span>'}</td>
+                        <td>${u.email ? escapeHtml(u.email) + (u.email_verified ? '' : ' <span class="opacity-60">(non vérifiée)</span>') : '<span class="opacity-50">—</span>'}</td>
                         <td>${escapeHtml(formatDate(u.created_at))}</td>
                         <td>${u.is_admin ? '<span class="opacity-50">—</span>' : `
                             <div class="flex flex-wrap gap-2">

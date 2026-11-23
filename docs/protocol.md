@@ -81,19 +81,21 @@ Une action hors de son moment, ou avec un choix non proposé, reçoit un message
 
 ## Routes HTTP
 
-Réponses en JSON. Une erreur renvoie `{"detail": "<message en français>"}`, affiché tel quel par le front. Sans connexion, une route réservée renvoie **401** ; un compte joueur sur une route admin, **403**.
+Réponses en JSON. Une erreur renvoie `{"detail": "<message en français>"}`, affiché tel quel par le front. Sans connexion, une route réservée renvoie **401** ; un compte joueur sur une route admin, **403**. Tant que l'adresse n'est pas confirmée (sauf compte admin), les routes du tableau de bord (`/api/me/stats`, `games`, `achievements`), l'abandon et le changement de pseudo ou de mot de passe renvoient **403** ; restent possibles : `/api/auth/me`, la correction de l'adresse, le renvoi du lien, l'export et la suppression du compte. Le WebSocket refuse une nouvelle partie avec ce compte (seule la partie rattachée à l'inscription peut être reprise).
 
 ### Comptes (`backend/server/auth.py`)
 
 | Route | Corps | Réponse |
 |---|---|---|
-| `POST /api/auth/register` | `pseudo`, `email`, `password`, `guest_token` (facultatif) | Compte créé et connecté (cookie) : `id`, `pseudo`, `email`, `is_admin`, `game_claimed`, `achievements`. 409 si le pseudo ou l'adresse est déjà pris |
+| `POST /api/auth/register` | `pseudo`, `email`, `password`, `guest_token` (facultatif) | Compte créé et connecté (cookie), lien de confirmation envoyé à l'adresse : `id`, `pseudo`, `email`, `email_verified`, `pending_email`, `is_admin`, `game_claimed`, `achievements`. 409 si le pseudo ou l'adresse est déjà pris |
+| `POST /api/auth/verify-email` | `token` | Adresse confirmée (lien de `verify-email.html?token=…`, usage unique, 24 heures ; sans besoin d'être connecté). 400 si le lien a déjà servi ou a expiré |
+| `POST /api/account/verification-email` | — | Nouveau lien de confirmation (adresse non confirmée, ou nouvelle adresse en attente). 3 au plus en 15 minutes ; 400 si rien n'est à confirmer |
 | `POST /api/auth/login` | `login` (pseudo ou adresse e-mail), `password`, `guest_token` (facultatif) | Comme l'inscription. 401 si l'identifiant ou le mot de passe est faux (même message dans les deux cas) ; 429 après 5 échecs en 5 minutes pour un même compte |
 | `POST /api/auth/forgot-password` | `email` | Toujours la même réponse (`message`), que l'adresse ait un compte ou non. Si oui : e-mail avec un lien `reset-password.html?token=…` (usage unique, 30 minutes). 3 demandes au plus par adresse en 15 minutes |
 | `POST /api/auth/reset-password` | `token`, `new_password` | Nouveau mot de passe ; tous les appareils sont déconnectés. 400 si le lien a déjà servi ou a expiré |
 | `POST /api/auth/logout` | — | 204, cookie effacé |
-| `GET /api/auth/me` | — | Compte connecté : `id`, `pseudo`, `email`, `is_admin` |
-| `PATCH /api/account/email` | `current_password`, `email` | 409 si l'adresse est déjà prise |
+| `GET /api/auth/me` | — | Compte connecté : `id`, `pseudo`, `email`, `email_verified`, `pending_email` (nouvelle adresse à confirmer), `is_admin` |
+| `PATCH /api/account/email` | `current_password`, `email` | Lien de confirmation envoyé à la nouvelle adresse. Adresse actuelle confirmée : elle reste en place jusqu'à la confirmation (`pending_email`) ; sinon (faute de frappe à l'inscription), elle est remplacée. 409 si l'adresse est déjà prise |
 | `PATCH /api/account/pseudo` | `current_password`, `pseudo` | 409 pendant une partie en cours du compte |
 | `PATCH /api/account/password` | `current_password`, `new_password` | Les autres appareils sont déconnectés ; celui-ci reçoit un nouveau cookie |
 | `DELETE /api/account` | `current_password` | 204 : compte et succès supprimés, parties gardées anonymement, partie en cours arrêtée, cookie effacé. 403 si le mot de passe est faux, 400 pour le compte admin |

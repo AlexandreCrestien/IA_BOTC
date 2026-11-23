@@ -13,6 +13,7 @@ from backend.rules import get_role
 from backend.server import game_records, game_runner as gr
 from backend.server.app import app
 from backend.server.session import GameSession, set_current_session
+from server_helpers import verify_account
 
 PLAYERS = {"h": "medium", "p1": "reaper", "p2": "apothecary", "p3": "watchman"}  # humain : Médium (bien)
 
@@ -34,7 +35,10 @@ def client():
 
 def account(client=None, pseudo="Vesper") -> int:
     with get_session() as db:
-        user_id = service.register(db, pseudo, "mot-de-passe", f"{pseudo.lower()}@exemple.fr").id
+        user = service.register(db, pseudo, "mot-de-passe", f"{pseudo.lower()}@exemple.fr")
+        user.email_verified_at = user.created_at  # adresse confirmée (lien ouvert)
+        db.commit()
+        user_id = user.id
     if client is not None:
         client.post("/api/auth/login", json={"login": pseudo, "password": "mot-de-passe"})
     return user_id
@@ -106,6 +110,8 @@ def test_signup_from_end_screen_returns_the_achievements(client, monkeypatch):
     body = response.json()
     assert body["game_claimed"] is True
     assert [a["code"] for a in body["achievements"]] == ["win_medium", "executioner", "quick_win", "one_turn_win"]
+    assert client.get("/api/me/games").status_code == 403  # tableau de bord après la vérification de l'adresse
+    verify_account("Vesper")
     games = client.get("/api/me/games").json()
     assert [(g["status"], g["turns"]) for g in games] == [("won", 1)]
 

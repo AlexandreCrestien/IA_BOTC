@@ -2,6 +2,7 @@
 from backend.db.database import get_session, init_db
 from backend.db.models import (
     COUNTED_STATUSES,
+    EmailVerificationToken,
     GameRecord,
     GameStatus,
     PasswordResetToken,
@@ -13,6 +14,7 @@ from backend.db.models import (
 
 __all__ = [
     "COUNTED_STATUSES",
+    "EmailVerificationToken",
     "GameRecord",
     "GameStatus",
     "PasswordResetToken",
