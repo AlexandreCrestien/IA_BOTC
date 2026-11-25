@@ -5,7 +5,6 @@ import random
 from datetime import timedelta
 
 import pytest
-from fastapi.testclient import TestClient
 
 from backend.accounts import service
 from backend.ai.llm_client import LLMText
@@ -13,34 +12,12 @@ from backend.db import AgentReport, GameDetail, get_session
 from backend.db.models import utcnow
 from backend.engine.setup import setup_game
 from backend.server import game_records, protocol, reports
-from backend.server.app import app
 from backend.server.reports import MAX_REPORTS_PER_GAME, save_report, without_pseudo
 from backend.server.session import GameSession, set_current_session
 
 NAMES = {"Vesper": "Vesper", "p1": "marIA", "p2": "tobIAs", "p3": "mAIsie", "p4": "adrIAn", "p5": "dIAne"}
 PERSONALITIES = ["agitator", "clown", "observer", "paranoid", "strategist"]
 MODEL = "groq/openai/gpt-oss-20b"
-
-
-@pytest.fixture
-def client(clean_server, monkeypatch):
-    monkeypatch.setenv("ADMIN_PSEUDO", "Gardien")
-    monkeypatch.setenv("ADMIN_PASSWORD", "mot-de-passe-admin")
-    monkeypatch.setenv("ADMIN_EMAIL", "gardien@exemple.fr")
-    with TestClient(app) as client:
-        yield client
-
-
-@pytest.fixture
-def sent(monkeypatch):
-    """Messages envoyés au front pendant le test."""
-    messages = []
-
-    async def fake_send(player_id, message):
-        messages.append(message)
-
-    monkeypatch.setattr(protocol.manager, "send_to_player", fake_send)
-    return messages
 
 
 def account(pseudo="Vesper") -> int:

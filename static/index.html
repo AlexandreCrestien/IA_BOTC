@@ -484,6 +484,10 @@
                                 <p class="text-sm leading-relaxed opacity-85">Avec un compte, vous pouvez signaler un message d'un personnage (drapeau au survol du message) : information qu'il ne devrait pas connaître, incohérence, sortie de son personnage, contenu inapproprié… Votre signalement aide l'équipe à améliorer les personnages ; il n'est jamais transmis aux IA. Il garde le message (votre pseudo y est remplacé par « [joueur] »), le personnage, le modèle d'IA qui l'a écrit, le problème choisi et votre commentaire éventuel.</p>
                                 <p class="text-sm leading-relaxed opacity-85 mt-1">Un signalement traité est supprimé 6 mois après son traitement. Si vous supprimez votre compte, vos signalements sont gardés sans lien avec vous et sans votre commentaire : ils ne concernent plus que l'IA. Les invités ne peuvent pas signaler de message : rien n'est collecté sur eux.</p>
                             </article>
+                            <article class="codex-card rounded-lg p-3">
+                                <h4 class="font-display text-lg text-gold mb-1">Évaluer les personnages</h4>
+                                <p class="text-sm leading-relaxed opacity-85">Avec un compte, à la fin d'une partie gagnée ou perdue, vous pouvez noter chaque personnage de 1 à 5 et ajouter un commentaire. Comme les signalements, vos notes servent uniquement à améliorer les personnages et ne sont jamais transmises aux IA. Le commentaire (votre pseudo y est remplacé par « [joueur] ») est effacé au bout de 6 mois, ou à la suppression de votre compte ; la note est gardée, sans lien avec vous, pour les moyennes.</p>
+                            </article>
                         </div>
                     </div>
 
@@ -664,9 +668,42 @@
                 <button type="button" data-action="open-account" data-mode="login" class="btn-ghost w-full mt-2">J'ai déjà un compte</button>
             </div>
 
+            <!-- Joueur connecté, partie terminée : évaluer les agents IA (une fois par partie) -->
+            <div id="gameover-rate" class="modal-notice notice-night hidden">
+                <p class="mb-3">Ces personnages vous ont-ils semblé crédibles ? Aidez-nous à les améliorer.</p>
+                <button type="button" data-action="open-rating" class="btn-seal w-full">Évaluer les agents IA</button>
+                <p class="text-xs italic opacity-70 mt-2">Ça ne prendra que 2 minutes.</p>
+            </div>
+
             <div class="flex gap-2 mt-6">
                 <button type="button" data-action="new-game" class="btn-seal flex-1">Nouvelle partie</button>
                 <a href="/dashboard.html" id="gameover-dashboard" class="btn-ghost flex-1 hidden">Tableau de bord</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Évaluation des agents IA en fin de partie (joueur connecté) : une note et un commentaire par agent -->
+    <div id="modal-rating" class="modal-backdrop hidden">
+        <div class="modal-card w-[520px] max-h-[90vh] flex flex-col" data-tone="gold" role="dialog" aria-modal="true" aria-labelledby="rating-title">
+            <form id="rating-form" class="flex flex-col min-h-0">
+                <p class="modal-kicker ornament text-center">Évaluer les agents IA</p>
+                <h3 id="rating-title" class="modal-title my-2 text-center">Ces personnages étaient-ils crédibles ?</h3>
+                <p class="font-serif text-sm italic opacity-80 text-center">De 1 (pas du tout) à 5 (tout à fait). Notez ceux que vous voulez ; le commentaire est facultatif. Vos notes ne sont jamais transmises aux IA.</p>
+                <div id="rating-agents" class="flex flex-col gap-3 mt-4 overflow-y-auto min-h-0 pr-1"></div>
+                <p id="rating-error" role="alert" class="welcome-error hidden text-sm text-center mt-3"></p>
+                <div class="flex gap-2 pt-4 shrink-0">
+                    <button type="button" data-action="close-rating" class="btn-ghost flex-1">Retour</button>
+                    <button type="submit" id="rating-submit" class="btn-seal flex-1">Envoyer</button>
+                </div>
+            </form>
+            <div id="rating-thanks" class="hidden text-center">
+                <p class="modal-kicker ornament">Évaluation envoyée</p>
+                <h3 class="modal-title my-2">Merci !</h3>
+                <p class="font-serif text-base italic leading-relaxed opacity-90">Vos notes aident l'équipe à améliorer les personnages. Une nouvelle partie ?</p>
+                <div class="flex gap-2 mt-6">
+                    <button type="button" data-action="new-game" class="btn-seal flex-1">Nouvelle partie</button>
+                    <a href="/dashboard.html" class="btn-ghost flex-1">Tableau de bord</a>
+                </div>
             </div>
         </div>
     </div>

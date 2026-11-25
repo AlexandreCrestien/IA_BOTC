@@ -1,4 +1,4 @@
-"""Tables de la base : comptes, parties jouées, succès débloqués, signalements des messages des IA.
+"""Tables de la base : comptes, parties jouées, succès débloqués, signalements et évaluations des agents IA.
 
 Les valeurs stockées sont en anglais (clés de rôle, camps, statuts) ; le front les traduit à l'affichage.
 """
@@ -202,3 +202,25 @@ class AgentReport(Base):
     category: Mapped[str] = mapped_column(String(20))          # clé de REPORT_CATEGORIES (backend/server/reports.py)
     comment: Mapped[Optional[str]] = mapped_column(String(500))
     handled_at: Mapped[Optional[datetime]]
+
+
+class AgentRating(Base):
+    """Évaluation d'un agent IA par un joueur connecté, sur l'écran de fin d'une partie terminée : une note de 1 à 5
+    (« ce personnage était-il crédible ? ») et un commentaire facultatif. Panel admin : moyennes par personnalité et
+    par modèle, pour améliorer les prompts à la main (jamais renvoyée aux agents).
+
+    model : le modèle qui a écrit le plus de messages de l'agent dans la partie (vide s'il n'a rien dit).
+    À la suppression du compte : détachée du compte (user_id vide) et commentaire effacé. Commentaire effacé aussi
+    au bout de RATING_COMMENT_LIFETIME (backend/accounts/service.py) ; la note est gardée pour les moyennes."""
+    __tablename__ = "agent_ratings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), index=True)
+    game_id: Mapped[Optional[int]] = mapped_column(ForeignKey("games.id"))
+    agent: Mapped[str] = mapped_column(String(40))
+    personality: Mapped[str] = mapped_column(String(40))
+    role: Mapped[RoleKey] = mapped_column(_enum(RoleKey))
+    model: Mapped[Optional[str]] = mapped_column(String(120))
+    score: Mapped[int]
+    comment: Mapped[Optional[str]] = mapped_column(String(300))

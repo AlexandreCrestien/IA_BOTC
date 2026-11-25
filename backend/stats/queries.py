@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from backend.db import (
     COUNTED_STATUSES,
     AccountEvent,
+    AgentRating,
     AgentReport,
     GameDetail,
     GameRecord,
@@ -115,7 +116,7 @@ ALIGNMENT_LABELS = {Alignment.GOOD: "Villageois", Alignment.EVIL: "Démons"}
 def export_account(db: Session, user: User) -> dict:
     """Copie de toutes les données du compte (droit d'accès du RGPD), lisible par une personne :
     compte, registre de ses modifications, parties (partie en cours comprise, avec leur détail tant qu'il est
-    gardé), succès débloqués, statistiques et signalements de messages des IA.
+    gardé), succès débloqués, statistiques, signalements de messages des IA et évaluations des agents.
     Ni le mot de passe (seule son empreinte est stockée, jamais exportée) ni la version de jeton."""
     from backend.accounts.service import ACCOUNT_EVENTS  # import local : le service des comptes importe ce module
     from backend.server.reports import REPORT_CATEGORIES
@@ -129,6 +130,8 @@ def export_account(db: Session, user: User) -> dict:
                           .order_by(UnlockedAchievement.unlocked_at, UnlockedAchievement.id))
     reports = db.scalars(select(AgentReport).where(AgentReport.user_id == user.id)
                          .order_by(AgentReport.created_at, AgentReport.id))
+    ratings = db.scalars(select(AgentRating).where(AgentRating.user_id == user.id)
+                         .order_by(AgentRating.created_at, AgentRating.id))
     return {
         "export": {
             "service": "Lantern Hollow",
@@ -136,8 +139,9 @@ def export_account(db: Session, user: User) -> dict:
             "contents": "Toutes les données enregistrées pour votre compte. Les dates sont en UTC.",
             "retention": "Le détail de chaque partie (messages, votes, actions, mémoire des personnages) est gardé "
                          "6 mois pour le service client ; le registre des modifications du compte, un an. Un signalement "
-                         "traité est supprimé 6 mois après son traitement ; si vous supprimez votre compte, vos "
-                         "signalements sont gardés sans lien avec vous et sans votre commentaire. Votre mot "
+                         "traité est supprimé 6 mois après son traitement, le commentaire d'une évaluation des personnages "
+                         "est effacé au bout de 6 mois ; si vous supprimez votre compte, vos signalements et vos "
+                         "évaluations sont gardés sans lien avec vous et sans votre commentaire. Votre mot "
                          "de passe n'est pas stocké : seule une empreinte chiffrée l'est, et elle n'est pas exportée.",
         },
         "account": {
@@ -183,6 +187,10 @@ def export_account(db: Session, user: User) -> dict:
                 "handled": r.handled_at is not None,
             }
             for r in reports
+        ],
+        "agent_ratings": [
+            {"date": iso_utc(r.created_at), "agent": r.agent, "score": r.score, "comment": r.comment}
+            for r in ratings
         ],
     }
 

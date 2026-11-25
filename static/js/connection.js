@@ -124,6 +124,9 @@ function handleServerMessage(data) {
         case "chat":
             receiveChatMessage(data.channel_id || "public", data.sender, data.content, data.message_id, data.reported);
             break;
+        case "rating_result":
+            handleRatingResult(data.error);
+            break;
         case "report_result":
             handleReportResult(data.message_id, data.error);
             break;

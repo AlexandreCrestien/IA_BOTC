@@ -41,7 +41,10 @@ const CLICK_ACTIONS = {
     'new-game':          () => startNewGame(),
     // Signalement d'un message d'IA (chat.js)
     'open-report':       el => openReportModal(el.dataset.message),
-    'close-report':      () => closeReportModal()
+    'close-report':      () => closeReportModal(),
+    // Évaluation des agents en fin de partie (modals.js)
+    'open-rating':       () => openRatingModal(),
+    'close-rating':      () => closeRatingModal()
 };
 
 document.addEventListener('click', (event) => {
@@ -85,6 +88,11 @@ document.getElementById('forgot-form').addEventListener('submit', (event) => {
 document.getElementById('account-form').addEventListener('submit', (event) => {
     event.preventDefault();
     submitGameAccount();
+});
+
+document.getElementById('rating-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    submitRatings();
 });
 
 document.getElementById('report-form').addEventListener('submit', (event) => {

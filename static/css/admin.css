@@ -216,3 +216,4 @@
   font-size: 1rem;
 }
 .report-problem { color: oklch(0.72 0.17 25); font-weight: 600; }
+.rating-score { color: var(--gold); letter-spacing: 0.1em; }

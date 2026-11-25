@@ -29,8 +29,10 @@ from backend.server.schemas import (
     GameAbandoned,
     GuestSession,
     NightActionAck,
+    RatingResult,
     ReportResult,
 )
+from backend.server.ratings import save_ratings
 from backend.server.reports import save_report
 from backend.server.session import WHISPER_MESSAGES, GameSession, current_session
 
@@ -183,6 +185,12 @@ async def on_report_message(session: GameSession, payload) -> None:
     await send(session.human_id, ReportResult(message_id=payload.message_id, error=error))
 
 
+async def on_rate_agents(session: GameSession, payload) -> None:
+    """Évaluation des agents IA sur l'écran de fin (joueur connecté, partie terminée)."""
+    error = save_ratings(session, payload.ratings)
+    await send(session.human_id, RatingResult(error=error))
+
+
 ACTIONS: dict[str, Callable[[GameSession, BaseModel], Awaitable[None]]] = {
     "send_chat": on_send_chat,
     "request_whisper": on_request_whisper,
@@ -193,6 +201,7 @@ ACTIONS: dict[str, Callable[[GameSession, BaseModel], Awaitable[None]]] = {
     "skip_turn": on_skip_turn,
     "abandon_game": on_abandon_game,
     "report_message": on_report_message,
+    "rate_agents": on_rate_agents,
 }
 
 

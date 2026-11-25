@@ -451,3 +451,43 @@ def test_report_links_to_its_game(page, static_url):
     page.locator(".report-card", has_text="Lord Ashcombe").locator(".report-game-btn").click()
     expect(page.locator("#viewing-past-game")).to_be_visible()
     expect(page.locator("#public-history-container")).to_contain_text("Message d'une partie passée")
+
+
+# --- Évaluations des agents (fin de partie) ---------------------------------------------------------
+
+RATINGS = {
+    "count": 4, "average": 3.25,
+    "by_personality": [{"key": "agitator", "count": 2, "average": 4.5}, {"key": "clown", "count": 2, "average": 2.0}],
+    "by_model": [{"key": "groq/openai/gpt-oss-20b", "count": 3, "average": 3.67}, {"key": None, "count": 1, "average": 2.0}],
+    "comments": [{"id": 1, "date": "2026-11-24T20:00:00+00:00", "agent": "Lord Ashcombe", "personality": "agitator",
+                  "role_name": "Médium", "model": "groq/openai/gpt-oss-20b", "score": 4,
+                  "comment": "<i>Très</i> crédible", "author": None, "game_id": 7, "game_link": "detail"}],
+}
+
+
+def test_ratings_show_averages_and_comments(page, static_url):
+    mock_api(page)
+    mock_history(page)
+    page.route("**/admin/ratings", lambda route: fulfill(route, body=RATINGS))
+    login(page, static_url)
+
+    expect(page.locator("#ratings-summary")).to_have_text("(3,25 / 5, 4 notes)")
+    personality = page.locator("#ratings-personality tbody tr")
+    expect(personality.nth(0)).to_contain_text("agitator")
+    expect(personality.nth(0)).to_contain_text("4,5 / 5")
+    expect(page.locator("#ratings-model")).to_contain_text("aucun message")
+    comment = page.locator("#ratings-comments .report-card")
+    expect(comment).to_contain_text("★★★★☆")
+    expect(comment).to_contain_text("« <i>Très</i> crédible »")
+    expect(comment).to_contain_text("compte supprimé")
+    comment.locator(".report-game-btn").click()
+    expect(page.locator("#viewing-past-game")).to_be_visible()
+
+
+def test_no_rating_yet(page, static_url):
+    mock_api(page)
+    page.route("**/admin/ratings", lambda route: fulfill(route, body={
+        "count": 0, "average": None, "by_personality": [], "by_model": [], "comments": []}))
+    login(page, static_url)
+    expect(page.locator("#ratings-personality")).to_contain_text("Aucune évaluation.")
+    expect(page.locator("#ratings-comments")).to_contain_text("Aucun commentaire.")

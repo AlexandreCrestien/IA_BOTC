@@ -66,6 +66,7 @@ class GameSession:
     # ({agent, model, turn, phase, channel, message : le ChatMessage envoyé}) ; signalements envoyés
     ai_messages: dict[str, dict] = field(default_factory=dict)
     reports_sent: int = 0
+    rated: bool = False  # agents déjà évalués sur l'écran de fin (une seule fois par partie, ratings.py)
 
     # IA qui n'ont pas répondu : [{turn, phase, agent, step}] (panel admin), et bandeau déjà affiché
     agent_failures: list[dict] = field(default_factory=list)

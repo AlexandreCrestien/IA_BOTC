@@ -1,6 +1,6 @@
 """Routes du panneau d'administration, réservées au compte admin (cookie de connexion, voir auth.py) :
 état complet de la partie en cours, comptes (réinitialisation du mot de passe, suppression), parties passées
-d'un joueur avec leur détail, registre des modifications d'un compte, signalements des messages des IA."""
+d'un joueur avec leur détail, registre des modifications d'un compte, signalements des messages des IA, évaluations des agents."""
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from backend.accounts import service
 from backend.accounts.service import AccountError
-from backend.db import AccountEvent, AgentReport, GameDetail, GameRecord, User, iso_utc
+from backend.db import AccountEvent, AgentRating, AgentReport, GameDetail, GameRecord, User, iso_utc
 from backend.db.models import utcnow
 from backend.rules import get_role
 from backend.server.auth import admin_user, db_session, notify_password_changed
@@ -155,6 +155,40 @@ def set_report_status(report_id: int, body: ReportStatus, db: Session = Depends(
     db.commit()
     return {"id": report.id, "handled": body.handled,
             "handled_at": iso_utc(report.handled_at) if report.handled_at else None}
+
+
+def _averages(ratings: list[AgentRating], field: str) -> list[dict]:
+    """Note moyenne et nombre de notes par valeur de `field` (personnalité, modèle), de la meilleure à la moins bonne."""
+    groups: dict = {}
+    for rating in ratings:
+        groups.setdefault(getattr(rating, field), []).append(rating.score)
+    rows = [{"key": key, "count": len(scores), "average": round(sum(scores) / len(scores), 2)}
+            for key, scores in groups.items()]
+    return sorted(rows, key=lambda row: (-row["average"], -row["count"], str(row["key"])))
+
+
+@router.get("/ratings")
+def list_ratings(db: Session = Depends(db_session)) -> dict:
+    """Évaluations des agents en fin de partie : moyennes par personnalité et par modèle (model vide : agent qui
+    n'a rien dit), et notes avec commentaire, de la plus récente à la plus ancienne."""
+    ratings = db.scalars(select(AgentRating).order_by(AgentRating.created_at.desc(), AgentRating.id.desc())).all()
+    commented = [r for r in ratings if r.comment]
+    game_ids = {r.game_id for r in commented if r.game_id is not None}
+    with_detail = set(db.scalars(select(GameDetail.game_id).where(GameDetail.game_id.in_(game_ids))))
+    pseudos = dict(db.execute(select(User.id, User.pseudo).where(
+        User.id.in_({r.user_id for r in commented if r.user_id is not None}))).all())
+    return {
+        "count": len(ratings),
+        "average": round(sum(r.score for r in ratings) / len(ratings), 2) if ratings else None,
+        "by_personality": _averages(ratings, "personality"),
+        "by_model": _averages(ratings, "model"),
+        "comments": [
+            {"id": r.id, "date": iso_utc(r.created_at), "agent": r.agent, "personality": r.personality,
+             "role_name": get_role(r.role).name_FR, "model": r.model, "score": r.score, "comment": r.comment,
+             "author": pseudos.get(r.user_id), "game_id": r.game_id, "game_link": _game_link(r.game_id, with_detail)}
+            for r in commented
+        ],
+    }
 
 
 @router.get("/debug/all-states")

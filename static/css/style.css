@@ -211,6 +211,33 @@ body {
 }
 .report-comment:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 2px oklch(0.76 0.115 80 / 25%); }
 
+/* Évaluation des agents en fin de partie : une carte par agent, 5 étoiles.
+   Les boutons radio sont dans l'ordre 5 → 1, affichés de droite à gauche : l'étoile choisie (ou survolée)
+   et celles qui la précèdent sont dorées. */
+.rating-agent {
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 0.5rem 0.75rem 0.75rem;
+  background-color: color-mix(in oklab, var(--secondary) 45%, transparent);
+}
+.rating-stars {
+  display: inline-flex;
+  flex-direction: row-reverse;
+  gap: 0.15rem;
+}
+.rating-stars label {
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+  color: color-mix(in oklab, var(--foreground) 25%, transparent);
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+.rating-stars input:checked ~ label,
+.rating-stars label:hover,
+.rating-stars label:hover ~ label { color: var(--gold); }
+.rating-stars label:hover { transform: scale(1.1); }
+.rating-stars input:focus-visible + label { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: 0.25rem; }
+
 /* Historique des nuits (onglet Nuits) */
 .night-history-turn { color: var(--gold); }
 .night-history-item.is-result {

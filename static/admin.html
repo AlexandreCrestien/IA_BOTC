@@ -173,6 +173,26 @@
                 </div>
             </section>
 
+            <!-- ÉVALUATIONS : notes des agents données par les joueurs connectés en fin de partie -->
+            <section class="admin-section rounded-2xl p-6 space-y-4">
+                <h2 class="admin-section-title">Évaluations des agents <span id="ratings-summary" class="opacity-60 text-base"></span></h2>
+                <p class="text-xs opacity-60">« Ce personnage était-il crédible ? », de 1 à 5. Le modèle d'un agent est celui qui a écrit le plus de ses messages dans la partie. Commentaires effacés au bout de 6 mois, et à la suppression du compte (la note est gardée).</p>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="space-y-2">
+                        <h3 class="modal-kicker">Par personnalité</h3>
+                        <div id="ratings-personality" class="overflow-x-auto text-sm"></div>
+                    </div>
+                    <div class="space-y-2">
+                        <h3 class="modal-kicker">Par modèle</h3>
+                        <div id="ratings-model" class="overflow-x-auto text-sm"></div>
+                    </div>
+                </div>
+                <div class="space-y-2">
+                    <h3 class="modal-kicker">Commentaires</h3>
+                    <div id="ratings-comments" class="flex flex-col gap-3 text-sm"></div>
+                </div>
+            </section>
+
             <!-- JOUEURS : rôles, camps, personnalités (tout est visible dans l'admin) -->
             <section class="admin-section rounded-2xl p-6 space-y-4">
                 <h2 class="admin-section-title">Joueurs</h2>

@@ -124,6 +124,8 @@ function triggerGameOver(winner, details, achievements = []) {
 
     showUnlockedAchievements(achievements);
     offerAccountAfterGame(true); // invité : s'inscrire pour garder la partie
+    gameFinished = true;
+    refreshRatingOffer(); // joueur connecté : évaluer les agents
     openModal('modal-gameover');
 }
 
@@ -136,7 +138,90 @@ function showGameInterrupted(text) {
     document.getElementById('gameover-card').dataset.tone = 'blood';
     showUnlockedAchievements([]);
     offerAccountAfterGame(false); // une partie interrompue n'est jamais enregistrée
+    gameFinished = false;         // ni évaluée
+    refreshRatingOffer();
     openModal('modal-gameover');
+}
+
+// ================= ÉVALUATION DES AGENTS IA (fin de partie) =================
+// Joueur connecté dont la partie, terminée par une victoire ou une défaite, est rattachée au compte ;
+// une seule fois par partie. Règles côté serveur : backend/server/ratings.py.
+const RATING_COMMENT_MAX = 300;
+let gameFinished = false; // partie terminée normalement (pas interrompue)
+let agentsRated = false;
+
+function canRateAgents() {
+    return gameFinished && !agentsRated && canReport();
+}
+
+function refreshRatingOffer() {
+    document.getElementById('gameover-rate').classList.toggle('hidden', !canRateAgents());
+}
+
+function ratingAgents() {
+    return (gameState.players || []).filter(p => p.id !== playerId);
+}
+
+function openRatingModal() {
+    if (!canRateAgents()) return;
+    document.getElementById('rating-agents').innerHTML = ratingAgents().map(agent => {
+        const id = escapeHtml(agent.id);
+        const name = escapeHtml(agent.name);
+        // Étoiles : boutons radio de 5 à 1 affichés de droite à gauche (le survol colore les précédentes)
+        const stars = [5, 4, 3, 2, 1].map(score => `
+            <input type="radio" id="rating-${id}-${score}" name="rating-${id}" value="${score}" class="sr-only">
+            <label for="rating-${id}-${score}" title="${score} sur 5">★<span class="sr-only">${score} sur 5</span></label>
+        `).join('');
+        return `
+            <fieldset class="rating-agent" data-agent="${id}">
+                <legend class="font-display text-lg text-gold">${name}</legend>
+                <div class="rating-stars" role="radiogroup" aria-label="Note de ${name}">${stars}</div>
+                <textarea rows="2" maxlength="${RATING_COMMENT_MAX}" class="report-comment w-full mt-2"
+                    aria-label="Commentaire sur ${name} (facultatif)" placeholder="Commentaire (facultatif)"></textarea>
+            </fieldset>
+        `;
+    }).join('');
+    setFormError('rating-error', null);
+    document.getElementById('rating-submit').disabled = false;
+    document.getElementById('rating-form').classList.remove('hidden');
+    document.getElementById('rating-thanks').classList.add('hidden');
+    closeModal('modal-gameover');
+    openModal('modal-rating');
+}
+
+// Retour à l'écran de fin, sans rien envoyer
+function closeRatingModal() {
+    closeModal('modal-rating');
+    if (gameIsOver) {
+        refreshRatingOffer();
+        openModal('modal-gameover');
+    }
+}
+
+function submitRatings() {
+    const ratings = [...document.querySelectorAll('#rating-agents .rating-agent')].flatMap(box => {
+        const checked = box.querySelector('input:checked');
+        const comment = box.querySelector('textarea').value.trim();
+        return checked ? [{ agent_id: box.dataset.agent, score: Number(checked.value), comment: comment || null }] : [];
+    });
+    if (!ratings.length) return setFormError('rating-error', "Donnez une note à au moins un personnage.");
+    if (!sendAction("rate_agents", { ratings })) {
+        return setFormError('rating-error', "Connexion perdue : l'évaluation n'a pas été envoyée.");
+    }
+    setFormError('rating-error', null);
+    document.getElementById('rating-submit').disabled = true; // en attente de la réponse du serveur
+}
+
+// Réponse du serveur : « Merci » et proposition d'une nouvelle partie, ou motif du refus
+function handleRatingResult(error) {
+    if (error) {
+        setFormError('rating-error', error);
+        document.getElementById('rating-submit').disabled = false;
+        return;
+    }
+    agentsRated = true;
+    document.getElementById('rating-form').classList.add('hidden');
+    document.getElementById('rating-thanks').classList.remove('hidden');
 }
 
 // ================= ABANDON =================

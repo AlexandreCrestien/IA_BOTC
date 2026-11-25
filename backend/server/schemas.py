@@ -103,6 +103,20 @@ class ReportMessageAction(BaseAction):
     payload: ReportMessagePayload
 
 
+class AgentRatingIn(StrictInput):
+    agent_id: str = Field(..., description="Identifiant de l'agent évalué (p1…p5)")
+    score: int = Field(..., ge=1, le=5, description="Ce personnage était-il crédible ? De 1 à 5")
+    comment: Optional[str] = Field(default=None, max_length=300, description="Commentaire facultatif")
+
+class RateAgentsPayload(StrictInput):
+    ratings: List[AgentRatingIn] = Field(..., min_length=1, max_length=5, description="Un agent au moins, une fois chacun")
+
+class RateAgentsAction(BaseAction):
+    """Évaluer les agents IA sur l'écran de fin (joueur connecté, partie terminée, une seule fois)."""
+    action: Literal["rate_agents"] = "rate_agents"
+    payload: RateAgentsPayload
+
+
 # Le type d'action est choisi uniquement d'après le champ "action" (obligatoire dans le paquet reçu).
 ClientActionPacket = Annotated[
     Union[
@@ -115,6 +129,7 @@ ClientActionPacket = Annotated[
         SkipTurnAction,
         AbandonGameAction,
         ReportMessageAction,
+        RateAgentsAction,
     ],
     Field(discriminator="action"),
 ]
@@ -273,6 +288,12 @@ class ReportResult(OutMessage):
     type: Literal["report_result"] = "report_result"
     message_id: str
     error: Optional[str] = Field(default=None, description="Motif du refus ; vide si le signalement est enregistré")
+
+
+class RatingResult(OutMessage):
+    """Réponse à l'évaluation des agents en fin de partie."""
+    type: Literal["rating_result"] = "rating_result"
+    error: Optional[str] = Field(default=None, description="Motif du refus ; vide si l'évaluation est enregistrée")
 
 
 class Error(OutMessage):

@@ -16,6 +16,7 @@ La connexion à un compte est un **jeton JWT dans un cookie `HttpOnly`** (`lh_se
 |---|---|
 | `backend/server/session.py` | `GameSession` : la partie en cours (tâches, port du moteur, état, demande en attente, chat, salons, historiques, messages des IA signalables). `current_session()` |
 | `backend/server/reports.py` | Signalements des messages des IA : règles, enregistrement (pseudo retiré, modèle gardé) |
+| `backend/server/ratings.py` | Évaluation des agents en fin de partie : règles, enregistrement (modèle principal de chaque agent) |
 | `backend/server/protocol.py` | Traduction des demandes du moteur en messages, envoi, reprise après reconnexion |
 | `backend/server/websocket_endpoint.py` | Endpoint `/ws/{pseudo}` et un traitement par action du front |
 | `backend/server/game_runner.py` | Boucle de partie, lancement, refus, abandon |
@@ -54,6 +55,7 @@ Format : `{"action": "<nom>", "payload": {...}}`.
 | `skip_turn` | `kind` : `public_message`, `private_message` ou `private_partners` | Passer une étape facultative |
 | `abandon_game` | — | Abandon : le front revient à l'accueil |
 | `report_message` | `message_id`, `category` (`knowledge`, `rules`, `character`, `inappropriate`, `other`), `comment` (facultatif, 200 caractères ; obligatoire pour `other`, 500 caractères) | Signalement d'un message d'agent IA, joueur connecté seulement (10 par partie, un par message). Réponse : `report_result` |
+| `rate_agents` | `ratings` : 1 à 5 éléments `{agent_id, score (1 à 5), comment (facultatif, 300 caractères)}`, un par agent | Évaluation des agents sur l'écran de fin : joueur connecté, partie gagnée ou perdue, une fois par partie. Réponse : `rating_result` |
 
 Une action hors de son moment, ou avec un choix non proposé, reçoit un message `error`.
 
@@ -80,6 +82,7 @@ Une action hors de son moment, ou avec un choix non proposé, reçoit un message
 | `game_over` | `winner` (`good` / `evil`), `details`, `achievements` [`code`, `title`, `description`, `message`] | Fin de partie ; succès débloqués par la partie (joueur connecté) |
 | `game_abandoned` | — | Abandon confirmé |
 | `report_result` | `message_id`, `error` (motif du refus, `null` si le signalement est enregistré) | Réponse à `report_message`, à part des `error` : la demande en cours n'est pas touchée |
+| `rating_result` | `error` (motif du refus, `null` si l'évaluation est enregistrée) | Réponse à `rate_agents` |
 | `game_interrupted` | `text` | La partie a planté : le front propose d'en relancer une |
 
 ## Routes HTTP
@@ -130,6 +133,7 @@ Réponses en JSON. Une erreur renvoie `{"detail": "<message en français>"}`, af
 | `DELETE /admin/users/{id}` | 204 : même suppression que `DELETE /api/account` ; sa partie en cours est arrêtée (l'écran de jeu reçoit `game_abandoned`). Refusé pour le compte admin |
 | `GET /admin/reports` | Signalements des messages des IA, du plus récent au plus ancien : agent, personnalité, rôle, modèle, moment, canal, message (pseudo remplacé par « [joueur] »), problème, commentaire, auteur (`null` : compte supprimé), statut, `game_link` (`"detail"`, `"current"` ou `null`) |
 | `PUT /admin/reports/{id}/status` | `{handled}` : signalement traité (supprimé 6 mois plus tard) ou remis en attente |
+| `GET /admin/ratings` | Évaluations des agents : `count`, `average`, moyennes `by_personality` et `by_model` (`{key, count, average}`, de la meilleure à la moins bonne ; `key` vide pour un agent qui n'a rien dit), et `comments` (notes avec commentaire, avec `author` et `game_link`) |
 
 ### Adresse inconnue
 

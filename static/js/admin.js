@@ -5,6 +5,7 @@ const ADMIN_API_URL = "/admin/debug/all-states";
 const USERS_API_URL = "/admin/users";
 const GAMES_API_URL = "/admin/games";
 const REPORTS_API_URL = "/admin/reports";
+const RATINGS_API_URL = "/admin/ratings";
 const STATUS_LABELS = { won: "Victoire", lost: "Défaite", abandoned: "Défaite (abandon)",
                         interrupted: "Interrompue", in_progress: "En cours" };
 const SIDE_LABELS = { good: "Villageois", evil: "Démons" };
@@ -158,7 +159,7 @@ async function fetchAdminData({ silent = false } = {}) {
         `Mis à jour à ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
 
     renderDashboard(data);
-    await Promise.all([fetchAccounts(), fetchReports()]);
+    await Promise.all([fetchAccounts(), fetchReports(), fetchRatings()]);
 }
 
 // ================= COMPTES =================
@@ -337,6 +338,69 @@ async function setReportStatus(reportId, handled) {
         console.error(err);
         showNotice("Impossible de joindre le serveur.");
     }
+}
+
+// ================= ÉVALUATIONS DES AGENTS (fin de partie) =================
+async function fetchRatings() {
+    const result = await getJson(RATINGS_API_URL);
+    if (!result) return;
+    renderRatings(result.ok && result.body ? result.body : null);
+}
+
+function formatScore(value) {
+    return value === null || value === undefined ? '—' : `${String(value).replace('.', ',')} / 5`;
+}
+
+function renderAverages(containerId, rows, label, emptyKey) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = rows.length ? `
+        <table class="admin-table w-full">
+            <thead><tr><th>${label}</th><th>Moyenne</th><th>Notes</th></tr></thead>
+            <tbody>
+                ${rows.map(row => `
+                    <tr>
+                        <td>${row.key ? escapeHtml(row.key) : `<span class="opacity-60">${emptyKey}</span>`}</td>
+                        <td class="font-semibold text-gold">${escapeHtml(formatScore(row.average))}</td>
+                        <td>${escapeHtml(row.count)}</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    ` : emptyLine("Aucune évaluation.");
+}
+
+function renderRatings(data) {
+    const summary = document.getElementById('ratings-summary');
+    if (data === null) {
+        summary.textContent = '';
+        ['ratings-personality', 'ratings-model', 'ratings-comments'].forEach(id => {
+            document.getElementById(id).innerHTML = emptyLine("Impossible de charger les évaluations.");
+        });
+        return;
+    }
+    summary.textContent = data.count ? `(${formatScore(data.average)}, ${data.count} note${data.count > 1 ? 's' : ''})` : '';
+    renderAverages('ratings-personality', data.by_personality, "Personnalité", "inconnue");
+    renderAverages('ratings-model', data.by_model, "Modèle", "aucun message");
+    const comments = document.getElementById('ratings-comments');
+    comments.innerHTML = data.comments.length ? data.comments.map(c => `
+        <article class="report-card">
+            <div class="flex flex-wrap items-baseline justify-between gap-2">
+                <div>
+                    <span class="font-semibold">${escapeHtml(c.agent)}</span>
+                    <span class="opacity-70">· ${escapeHtml(c.personality)} · ${escapeHtml(c.role_name)}</span>
+                    <span class="opacity-70">· modèle : ${c.model ? `<code>${escapeHtml(c.model)}</code>` : 'aucun message'}</span>
+                </div>
+                <span class="text-xs opacity-60">${escapeHtml(formatDateTime(c.date))}</span>
+            </div>
+            <p class="mt-1"><span class="rating-score">${'★'.repeat(c.score)}${'☆'.repeat(5 - c.score)}</span>
+                <span class="opacity-70 text-xs ml-2">par ${c.author ? escapeHtml(c.author) : '<span class="italic">compte supprimé</span>'}</span></p>
+            <p class="report-message">« ${escapeHtml(c.comment)} »</p>
+            <div class="mt-2">${renderReportGameLink(c)}</div>
+        </article>
+    `).join('') : emptyLine("Aucun commentaire.");
+    comments.querySelectorAll('.report-game-btn').forEach(btn => {
+        btn.addEventListener('click', () => btn.dataset.link === 'current' ? backToCurrentGame() : showPastGame(btn.dataset.gameId));
+    });
 }
 
 // ================= HISTORIQUE D'UN JOUEUR =================

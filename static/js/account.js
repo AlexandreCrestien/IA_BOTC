@@ -332,6 +332,7 @@ async function submitGameAccount() {
     } else if (gameIsOver) {
         appendSystemMessage(`${welcome} La partie est enregistrée dans votre compte.`);
         showUnlockedAchievements(body.achievements || []);
+        refreshRatingOffer(); // les agents peuvent maintenant être évalués
     } else {
         appendSystemMessage(`${welcome} Cette partie sera enregistrée dans votre compte.`);
     }
