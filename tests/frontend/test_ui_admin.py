@@ -491,3 +491,35 @@ def test_no_rating_yet(page, static_url):
     login(page, static_url)
     expect(page.locator("#ratings-personality")).to_contain_text("Aucune évaluation.")
     expect(page.locator("#ratings-comments")).to_contain_text("Aucun commentaire.")
+
+
+# --- Raccourcis de l'en-tête ---------------------------------------------------------------------
+
+def test_header_shortcuts_scroll_to_sections(page, static_url):
+    mock_api(page)
+    page.route("**/admin/reports", lambda route: fulfill(route, body=REPORTS))
+    login(page, static_url)
+    nav = page.locator("#admin-nav")
+    expect(nav.locator(".dash-nav-link")).to_have_text(["Accueil", "Signalements", "Partie"])
+    expect(nav.locator(".dash-nav-link.is-active")).to_have_text("Accueil")  # en haut de la page
+
+    nav.locator("a", has_text="Signalements").click()
+    # La section s'arrête juste sous l'en-tête collant (quelle que soit sa hauteur), sans passer dessous
+    page.wait_for_function("""Math.abs(document.getElementById('admin-reports').getBoundingClientRect().top
+        - document.querySelector('.admin-header').getBoundingClientRect().bottom - 16) < 2""")
+    expect(nav.locator(".dash-nav-link.is-active")).to_have_text("Signalements")
+
+    nav.locator("a", has_text="Accueil").click()
+    page.wait_for_function("window.scrollY === 0")
+    expect(nav.locator(".dash-nav-link.is-active")).to_have_text("Accueil")
+
+
+def test_header_shortcuts_wrap_on_a_medium_screen(page, static_url):
+    page.set_viewport_size({"width": 900, "height": 800})
+    mock_api(page)
+    login(page, static_url)
+    nav = page.locator("#admin-nav")
+    expect(nav).to_be_visible()
+    title_bottom = page.evaluate("document.querySelector('.admin-header > div').getBoundingClientRect().bottom")
+    assert nav.bounding_box()["y"] >= title_bottom - 1  # deuxième ligne de l'en-tête
+    assert page.evaluate("document.documentElement.scrollWidth") <= 900  # pas de défilement horizontal

@@ -23,56 +23,7 @@
   background-color: color-mix(in oklab, var(--background) 80%, transparent);
 }
 
-/* Raccourcis vers les sections, au centre de l'en-tête */
-.dash-nav {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-.dash-nav-link {
-  position: relative;
-  padding: 0.25rem 0.15rem;
-  font-family: "IM Fell English SC", "Cormorant Garamond", Georgia, serif;
-  font-size: 1.05rem;
-  letter-spacing: 0.04em;
-  color: color-mix(in oklab, var(--foreground) 75%, transparent);
-  transition: color 0.2s ease;
-}
-/* Filet doré qui se déploie sous le raccourci survolé ou de la section affichée */
-.dash-nav-link::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -0.1rem;
-  height: 1px;
-  background: var(--gradient-gilt);
-  transform: scaleX(0);
-  transition: transform 0.25s ease;
-}
-.dash-nav-link:hover,
-.dash-nav-link:focus-visible,
-.dash-nav-link.is-active {
-  color: var(--gold);
-  outline: none;
-}
-.dash-nav-link:hover::after,
-.dash-nav-link:focus-visible::after,
-.dash-nav-link.is-active::after {
-  transform: scaleX(1);
-}
-.dash-nav-sep {
-  font-size: 0.8rem;
-  color: var(--gold-dim);
-  opacity: 0.8;
-}
-
-/* Défilement doux vers la section (sauf si le système demande moins d'animations),
-   qui s'arrête sous l'en-tête collant au lieu de passer dessous */
-@media (prefers-reduced-motion: no-preference) {
-  html { scroll-behavior: smooth; }
-}
-.dash-section { scroll-margin-top: 5rem; }
+/* Raccourcis vers les sections (.dash-nav, défilement doux) : css/style.css, communs avec le panneau admin */
 
 /* Petit écran : le titre et le pseudo s'effacent, les raccourcis et la déconnexion restent */
 @media (max-width: 640px) {

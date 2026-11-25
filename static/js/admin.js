@@ -17,6 +17,7 @@ const NOT_ADMIN = "Ce compte n'a pas accès au panneau d'administration.";
 let currentAdminData = null;
 let selectedAgentId = null;
 let allReports = []; // signalements chargés, filtrés à l'affichage
+let refreshAdminNav = () => {}; // met à jour le raccourci de l'en-tête mis en valeur (js/section-nav.js)
 
 // Au chargement : branchement des événements, puis connexion directe si un jeton est mémorisé
 window.addEventListener('DOMContentLoaded', () => {
@@ -34,6 +35,8 @@ window.addEventListener('DOMContentLoaded', () => {
     });
     document.getElementById('logout-btn').addEventListener('click', logout);
     document.getElementById('reports-filters').addEventListener('change', renderReports);
+    // Raccourcis de l'en-tête (js/section-nav.js) : « Accueil » mis en valeur en haut de la page
+    refreshAdminNav = watchSections(document.getElementById('admin-nav'), { activeAtTop: true });
 
     // Déjà connecté (cookie) : panneau directement ; sinon l'écran de connexion reste affiché, sans erreur
     fetchAdminData({ silent: true });
@@ -160,6 +163,7 @@ async function fetchAdminData({ silent = false } = {}) {
 
     renderDashboard(data);
     await Promise.all([fetchAccounts(), fetchReports(), fetchRatings()]);
+    refreshAdminNav(); // panneau affiché et sections remplies
 }
 
 // ================= COMPTES =================

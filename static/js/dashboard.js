@@ -114,37 +114,8 @@ document.addEventListener('visibilitychange', () => {
     }
 });
 
-// Raccourcis de l'en-tête : le lien de la section affichée est mis en valeur pendant le défilement.
-// Section affichée : la dernière dont le haut est passé sous l'en-tête. En haut de la page : aucune.
-// En bas de la page (après avoir défilé) : la dernière, même si son haut n'atteint pas l'en-tête.
-const HEADER_OFFSET = 96; // en-tête collant (4rem) + marge
-
-function currentSectionId(links) {
-    const ids = [...links].map(link => link.dataset.section);
-    if (window.scrollY <= 0) return null;
-    if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2) return ids[ids.length - 1];
-    return ids.filter(id => document.getElementById(id)?.getBoundingClientRect().top <= HEADER_OFFSET).pop() ?? null;
-}
-
-function watchSections() {
-    const links = document.querySelectorAll('.dash-nav-link');
-    let scheduled = false;
-    const update = () => {
-        scheduled = false;
-        const current = currentSectionId(links);
-        links.forEach(link => link.classList.toggle('is-active', link.dataset.section === current));
-    };
-    window.addEventListener('scroll', () => {
-        if (!scheduled) {
-            scheduled = true;
-            requestAnimationFrame(update);
-        }
-    }, { passive: true });
-    update();
-}
-
 function bindEvents() {
-    watchSections();
+    watchSections(document.getElementById('dashboard-nav')); // raccourcis de l'en-tête (js/section-nav.js)
     document.getElementById('start-game-btn').addEventListener('click', () => { location.href = PLAY_URL; });
     document.getElementById('resume-game-btn').addEventListener('click', () => { location.href = PLAY_URL; });
     document.getElementById('abandon-game-btn').addEventListener('click', () => toggleAbandonModal(true));

@@ -266,9 +266,9 @@ Ouvrir `http://127.0.0.1:8000/`, puis jouer en invité (un pseudo suffit), se co
 - un Codex (rôles, règles, et un onglet « IA & données » : le joueur sait qu'il joue contre des IA, quelles données sont envoyées et à qui) ;
 - une annonce quand l'IA d'un personnage ne répond pas (sauf la nuit, pour ne rien révéler de son rôle).
 
-Le tableau de bord (`static/dashboard.html`, `static/js/dashboard.js`) a des raccourcis vers ses sections : statistiques et historique, succès, profil.
+Le tableau de bord (`static/dashboard.html`, `static/js/dashboard.js`) a des raccourcis vers ses sections : statistiques et historique, succès, profil (`static/js/section-nav.js`, commun avec le panel admin).
 
-La page d'administration (`http://127.0.0.1:8000/admin`) demande le compte admin (`ADMIN_PSEUDO` / `ADMIN_PASSWORD` du `.env`). Elle montre :
+La page d'administration (`http://127.0.0.1:8000/admin`) demande le compte admin (`ADMIN_PSEUDO` / `ADMIN_PASSWORD` du `.env`, à saisir sur l'écran de connexion). Son en-tête a des raccourcis vers l'accueil, les signalements (et évaluations) et le détail de la partie. Elle montre :
 - la partie présente sur le serveur (en cours, ou la dernière terminée), sans rien cacher : rôles, personnalités, historique public et historique personnel de chaque agent, actions de nuit, votes, IA indisponibles ;
 - la liste des comptes, avec pour chacun :
   - un bouton pour réinitialiser le mot de passe d'un joueur qui l'a oublié (mot de passe temporaire affiché une seule fois, à lui transmettre) ;

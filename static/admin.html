@@ -66,25 +66,37 @@
     <div id="dashboard-section" class="hidden min-h-screen flex flex-col">
 
         <!-- HEADER ADMIN -->
-        <header class="panel border-b px-6 h-16 shrink-0 flex items-center justify-between gap-4 sticky top-0 z-10 admin-header">
+        <!-- 3 colonnes : titre | raccourcis vers les sections | actualisation et déconnexion.
+             Écran moyen : les raccourcis passent sur une deuxième ligne (css/admin.css) -->
+        <header class="panel border-b px-6 shrink-0 admin-header">
             <div class="flex items-center gap-3 min-w-0">
                 <span class="modal-icon admin-header-icon" aria-hidden="true">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="size-5"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"></path><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"></circle></svg>
                 </span>
                 <div class="min-w-0">
                     <h1 class="font-display text-lg leading-tight text-gilt uppercase tracking-wider truncate">Panneau de contrôle &amp; Debug</h1>
-                    <p class="font-serif text-sm italic opacity-70 truncate">Suivi des historiques LLM et états internes du serveur</p>
+                    <p class="font-serif text-sm italic opacity-70 truncate hidden 2xl:block">Suivi des historiques LLM et états internes du serveur</p>
                 </div>
             </div>
-            <div class="flex items-center gap-2 shrink-0">
-                <span id="last-refresh" class="hidden md:inline text-xs opacity-50 mr-2"></span>
+
+            <!-- Raccourcis : défilement doux vers la section, section visible mise en valeur (js/section-nav.js) -->
+            <nav id="admin-nav" class="dash-nav" aria-label="Sections du panneau">
+                <a href="#admin-home" class="dash-nav-link" data-section="admin-home">Accueil</a>
+                <span class="dash-nav-sep" aria-hidden="true">✠</span>
+                <a href="#admin-reports" class="dash-nav-link" data-section="admin-reports">Signalements</a>
+                <span class="dash-nav-sep" aria-hidden="true">✠</span>
+                <a href="#admin-game" class="dash-nav-link" data-section="admin-game">Partie</a>
+            </nav>
+
+            <div class="flex items-center gap-2 shrink-0 justify-self-end">
+                <span id="last-refresh" class="hidden 2xl:inline text-xs opacity-50 mr-2"></span>
                 <button type="button" id="refresh-btn" class="btn-seal admin-btn">Rafraîchir</button>
                 <button type="button" id="logout-btn" class="btn-ghost admin-btn">Déconnexion</button>
             </div>
         </header>
 
         <!-- CONTENU PRINCIPAL -->
-        <main class="flex-1 p-6 max-w-7xl mx-auto w-full space-y-6">
+        <main id="admin-home" class="flex-1 p-6 max-w-7xl mx-auto w-full space-y-6">
 
             <!-- Partie passée affichée à la place de la partie en cours (historique d'un joueur) -->
             <div id="viewing-past-game" class="modal-notice notice-night hidden flex flex-wrap items-center justify-between gap-3">
@@ -150,7 +162,7 @@
             </section>
 
             <!-- SIGNALEMENTS : messages des IA signalés par les joueurs connectés -->
-            <section class="admin-section rounded-2xl p-6 space-y-4">
+            <section id="admin-reports" class="admin-section rounded-2xl p-6 space-y-4">
                 <div class="flex flex-wrap items-center justify-between gap-3">
                     <h2 class="admin-section-title flex-1">Signalements <span id="reports-count" class="opacity-60 text-base"></span></h2>
                 </div>
@@ -193,9 +205,9 @@
                 </div>
             </section>
 
-            <!-- JOUEURS : rôles, camps, personnalités (tout est visible dans l'admin) -->
-            <section class="admin-section rounded-2xl p-6 space-y-4">
-                <h2 class="admin-section-title">Joueurs</h2>
+            <!-- JOUEURS de la partie affichée : rôles, camps, personnalités (tout est visible dans l'admin) -->
+            <section id="admin-game" class="admin-section rounded-2xl p-6 space-y-4">
+                <h2 class="admin-section-title">Partie en cours</h2>
                 <div id="players-container" class="overflow-x-auto text-sm">
                     <span class="italic opacity-60">Aucune partie en cours.</span>
                 </div>
@@ -280,6 +292,7 @@
     </div>
 
     <!-- Script JS -->
+    <script src="/js/section-nav.js"></script>
     <script src="/js/admin.js"></script>
 </body>
 </html>
