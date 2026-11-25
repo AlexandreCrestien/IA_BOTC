@@ -174,7 +174,9 @@ def test_export_contains_all_account_data(client, monkeypatch):
     titles = {a["title"] for a in data["achievements"]}
     assert {"Victoire : Médium", "Coup de maître"} <= titles  # les succès cachés débloqués sont révélés
     assert data["statistics"]["played"] == 1
-    assert "not_stored" in data["export"]
+    assert "retention" in data["export"]
+    assert "detail" in data["games"][0]  # déroulé de la partie (vide ici : partie factice sans mémoire)
+    assert [e["event"] for e in data["account_history"]] == ["Compte créé"]
 
 
 def test_export_never_contains_the_password_hash(client):

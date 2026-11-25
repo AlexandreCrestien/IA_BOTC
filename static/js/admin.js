@@ -3,6 +3,10 @@
 // Routes réservées au compte admin : le cookie de connexion (HttpOnly) est envoyé automatiquement
 const ADMIN_API_URL = "/admin/debug/all-states";
 const USERS_API_URL = "/admin/users";
+const GAMES_API_URL = "/admin/games";
+const STATUS_LABELS = { won: "Victoire", lost: "Défaite", abandoned: "Défaite (abandon)",
+                        interrupted: "Interrompue", in_progress: "En cours" };
+const SIDE_LABELS = { good: "Villageois", evil: "Démons" };
 const LOGIN_API_URL = "/api/auth/login";
 const LOGOUT_API_URL = "/api/auth/logout";
 const NOT_ADMIN = "Ce compte n'a pas accès au panneau d'administration.";
@@ -17,7 +21,9 @@ window.addEventListener('DOMContentLoaded', () => {
         event.preventDefault();
         login();
     });
-    document.getElementById('refresh-btn').addEventListener('click', fetchAdminData);
+    document.getElementById('refresh-btn').addEventListener('click', backToCurrentGame);
+    document.getElementById('back-to-current-game').addEventListener('click', backToCurrentGame);
+    document.getElementById('close-player-history').addEventListener('click', closePlayerHistory);
     document.getElementById('delete-account-cancel').addEventListener('click', closeDeleteModal);
     document.getElementById('delete-account-confirm').addEventListener('click', confirmDeleteAccount);
     document.addEventListener('keydown', (event) => {
@@ -185,8 +191,12 @@ function renderAccounts(users) {
                         <td class="font-semibold">${escapeHtml(u.pseudo)}${u.is_admin ? ' <span class="opacity-60 font-normal">(admin)</span>' : ''}</td>
                         <td>${u.email ? escapeHtml(u.email) + (u.email_verified ? '' : ' <span class="opacity-60">(non vérifiée)</span>') : '<span class="opacity-50">—</span>'}</td>
                         <td>${escapeHtml(formatDate(u.created_at))}</td>
-                        <td>${u.is_admin ? '<span class="opacity-50">—</span>' : `
+                        <td>${`
                             <div class="flex flex-wrap gap-2">
+                                <button type="button" class="btn-ghost admin-btn history-btn"
+                                    data-user-id="${escapeHtml(u.id)}" data-pseudo="${escapeHtml(u.pseudo)}">
+                                    Historique
+                                </button>${u.is_admin ? '' : `
                                 <button type="button" class="btn-ghost admin-btn reset-password-btn"
                                     data-user-id="${escapeHtml(u.id)}" data-pseudo="${escapeHtml(u.pseudo)}">
                                     Réinitialiser le mot de passe
@@ -194,7 +204,7 @@ function renderAccounts(users) {
                                 <button type="button" class="btn-ghost admin-btn admin-btn-danger delete-account-btn"
                                     data-user-id="${escapeHtml(u.id)}" data-pseudo="${escapeHtml(u.pseudo)}">
                                     Supprimer le compte
-                                </button>
+                                </button>`}
                             </div>`}</td>
                     </tr>
                 `).join('')}
@@ -207,6 +217,120 @@ function renderAccounts(users) {
     container.querySelectorAll('.delete-account-btn').forEach(btn => {
         btn.addEventListener('click', () => openDeleteModal(btn.dataset.userId, btn.dataset.pseudo));
     });
+    container.querySelectorAll('.history-btn').forEach(btn => {
+        btn.addEventListener('click', () => openPlayerHistory(btn.dataset.userId, btn.dataset.pseudo));
+    });
+}
+
+// ================= HISTORIQUE D'UN JOUEUR =================
+async function getJson(url) {
+    try {
+        const response = await fetch(url);
+        if (response.status === 401) {
+            showLoginScreen("Votre session a expiré. Reconnectez-vous.");
+            return null;
+        }
+        return { ok: response.ok, body: await response.json().catch(() => null) };
+    } catch (err) {
+        console.error(err);
+        return { ok: false, body: null };
+    }
+}
+
+async function openPlayerHistory(userId, pseudo) {
+    const section = document.getElementById('player-history');
+    document.getElementById('player-history-title').textContent = `Historique de ${pseudo}`;
+    section.classList.remove('hidden');
+    const [games, events] = await Promise.all([
+        getJson(`${USERS_API_URL}/${encodeURIComponent(userId)}/games`),
+        getJson(`${USERS_API_URL}/${encodeURIComponent(userId)}/events`),
+    ]);
+    if (!games || !events) return;
+    renderPlayerGames(games.ok && Array.isArray(games.body) ? games.body : null);
+    renderPlayerEvents(events.ok && Array.isArray(events.body) ? events.body : null);
+    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function renderPlayerGames(games) {
+    const container = document.getElementById('player-games-container');
+    if (games === null) {
+        container.innerHTML = emptyLine("Impossible de charger les parties.");
+        return;
+    }
+    if (!games.length) {
+        container.innerHTML = emptyLine("Aucune partie enregistrée.");
+        return;
+    }
+    container.innerHTML = `
+        <table class="admin-table w-full">
+            <thead><tr><th>Date</th><th>Rôle</th><th>Résultat</th><th>Tours</th><th>Détail</th></tr></thead>
+            <tbody>
+                ${games.map(g => `
+                    <tr>
+                        <td>${escapeHtml(formatDateTime(g.date))}</td>
+                        <td>${escapeHtml(g.role_name)} <span class="opacity-60">(${escapeHtml(SIDE_LABELS[g.alignment] || g.alignment)})</span></td>
+                        <td>${escapeHtml(STATUS_LABELS[g.status] || g.status)}</td>
+                        <td>${escapeHtml(g.turns)}</td>
+                        <td>${g.has_detail
+                            ? `<button type="button" class="btn-ghost admin-btn game-detail-btn" data-game-id="${escapeHtml(g.id)}">Voir le détail</button>`
+                            : '<span class="opacity-50">effacé (plus de 6 mois)</span>'}</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+    container.querySelectorAll('.game-detail-btn').forEach(btn => {
+        btn.addEventListener('click', () => showPastGame(btn.dataset.gameId));
+    });
+}
+
+function renderPlayerEvents(events) {
+    const container = document.getElementById('player-events-container');
+    if (events === null) {
+        container.innerHTML = emptyLine("Impossible de charger le registre.");
+        return;
+    }
+    container.innerHTML = events.length
+        ? events.map(e => `
+            <div class="history-line">
+                <span class="memory-role mr-2">${escapeHtml(formatDateTime(e.date))}</span>
+                <span class="memory-content">${escapeHtml(e.label)}</span>
+            </div>
+        `).join('')
+        : emptyLine("Aucune modification enregistrée.");
+}
+
+// Partie passée : affichée dans les mêmes sections que la partie en cours, avec un bandeau pour revenir
+async function showPastGame(gameId) {
+    const result = await getJson(`${GAMES_API_URL}/${encodeURIComponent(gameId)}`);
+    if (!result) return;
+    if (!result.ok || !result.body?.detail) {
+        showNotice(result.body?.detail && typeof result.body.detail === 'string' ? result.body.detail : "Détail introuvable.");
+        return;
+    }
+    const { game, detail } = result.body;
+    selectedAgentId = null;
+    renderDashboard(detail);
+    document.getElementById('viewing-past-game-text').textContent =
+        `Partie de ${game.pseudo} du ${formatDateTime(game.date)} — ${game.role_name}, ${STATUS_LABELS[game.status] || game.status}, ${game.turns} tour(s)`;
+    document.getElementById('viewing-past-game').classList.remove('hidden');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function closePlayerHistory() {
+    document.getElementById('player-history').classList.add('hidden');
+}
+
+async function backToCurrentGame() {
+    document.getElementById('viewing-past-game').classList.add('hidden');
+    selectedAgentId = null;
+    await fetchAdminData();
+}
+
+function formatDateTime(iso) {
+    const date = new Date(iso);
+    return Number.isNaN(date.getTime()) ? '—'
+        : date.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 // ================= SUPPRESSION D'UN COMPTE (confirmation en modale) =================

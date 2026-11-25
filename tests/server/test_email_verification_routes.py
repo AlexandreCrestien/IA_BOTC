@@ -152,7 +152,7 @@ def test_old_address_is_told_when_the_email_changes(client, outbox, monkeypatch)
     notice = outbox[-1]
     assert notice.to == "vesper@exemple.fr" and "a changé" in notice.subject
     assert "n***@exemple.fr" in notice.body and "nouveau@exemple.fr" not in notice.body  # nouvelle adresse masquée
-    assert "contactez l'administrateur : support@lantern-hollow.fr" in notice.body
+    assert "Contactez l'administrateur : support@lantern-hollow.fr" in notice.body
 
 
 def test_password_change_is_notified(client, outbox):
@@ -160,7 +160,7 @@ def test_password_change_is_notified(client, outbox):
     client.patch("/api/account/password", json={"current_password": "mot-de-passe", "new_password": "nouveau-mdp"})
     assert [m.to for m in outbox] == ["vesper@exemple.fr"]
     assert "depuis votre profil" in outbox[0].body and "déconnectés" in outbox[0].body
-    assert "contactez l'administrateur du jeu" in outbox[0].body  # pas d'adresse de contact configurée
+    assert "Contactez l'administrateur du jeu." in outbox[0].body  # pas d'adresse de contact configurée
 
 
 def test_password_reset_by_link_is_notified(client, outbox):
@@ -180,7 +180,7 @@ def test_admin_reset_is_notified_with_the_admin_email_as_contact(monkeypatch, cl
         admin.post("/api/auth/login", json={"login": "Gardien", "password": "mot-de-passe-admin"})
         admin.post(f"/admin/users/{user().id}/reset-password")
     assert "par l'administrateur" in outbox[-1].body
-    assert "contactez l'administrateur : gardien@exemple.fr" in outbox[-1].body
+    assert "Contactez l'administrateur : gardien@exemple.fr" in outbox[-1].body
 
 
 def test_unverified_address_gets_no_notification(client, outbox):

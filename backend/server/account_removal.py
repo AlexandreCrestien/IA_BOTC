@@ -64,6 +64,7 @@ def purge_inactive_accounts() -> list[str]:
     warn_inactive_accounts()
     with get_session() as db:
         service.delete_stale_reset_tokens(db)
+        service.delete_expired_records(db)  # détail des parties (6 mois), registre des modifications (1 an)
     session = current_session()
     keep = [session.user_id] if session is not None and session.running and session.user_id else []
     with get_session() as db:

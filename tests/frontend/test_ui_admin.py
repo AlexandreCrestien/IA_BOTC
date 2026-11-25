@@ -285,3 +285,72 @@ def test_admin_account_has_no_delete_button(page, static_url):
     mock_api(page)
     login(page, static_url)
     expect(page.locator("#accounts-container tr", has_text="Gardien").locator(".delete-account-btn")).to_have_count(0)
+
+
+# --- Historique d'un joueur -------------------------------------------------------------------
+
+PLAYER_GAMES = [
+    {"id": 7, "date": "2026-11-24T20:00:00+00:00", "role_name": "Médium", "alignment": "good", "status": "won",
+     "turns": 3, "has_detail": True},
+    {"id": 3, "date": "2026-04-01T20:00:00+00:00", "role_name": "Faucheur", "alignment": "evil", "status": "lost",
+     "turns": 5, "has_detail": False},
+]
+PLAYER_EVENTS = [
+    {"kind": "password_changed", "label": "Mot de passe modifié (profil)", "date": "2026-11-24T21:00:00+00:00"},
+    {"kind": "account_created", "label": "Compte créé", "date": "2026-11-20T10:00:00+00:00"},
+]
+PAST_DETAIL = {**ADMIN_DATA, "status": "victoire", "turn": 3, "game_in_progress": False,
+               "public_history": [{"moment": "Jour 1", "sender": "Vesper", "content": "Message d'une partie passée"}]}
+
+
+def mock_history(page):
+    page.route("**/admin/users/*/games", lambda route: fulfill(route, body=PLAYER_GAMES))
+    page.route("**/admin/users/*/events", lambda route: fulfill(route, body=PLAYER_EVENTS))
+    page.route("**/admin/games/7", lambda route: fulfill(route, body={
+        "game": {**PLAYER_GAMES[0], "pseudo": "Vesper"}, "detail": PAST_DETAIL}))
+
+
+def open_history(page, static_url):
+    mock_api(page)
+    mock_history(page)
+    login(page, static_url)
+    page.locator("#accounts-container tr", has_text="Vesper").locator(".history-btn").click()
+    expect(page.locator("#player-history")).to_be_visible()
+
+
+def test_history_button_for_every_account(page, static_url):
+    mock_api(page)
+    login(page, static_url)
+    expect(page.locator("#accounts-container .history-btn")).to_have_count(2)  # admin compris
+
+
+def test_player_history_lists_games_and_account_log(page, static_url):
+    open_history(page, static_url)
+    expect(page.locator("#player-history-title")).to_have_text("Historique de Vesper")
+    rows = page.locator("#player-games-container tbody tr")
+    expect(rows).to_have_count(2)
+    expect(rows.nth(0)).to_contain_text("Médium")
+    expect(rows.nth(0).locator(".game-detail-btn")).to_have_count(1)
+    expect(rows.nth(1)).to_contain_text("effacé (plus de 6 mois)")
+    events = page.locator("#player-events-container")
+    expect(events).to_contain_text("Mot de passe modifié (profil)")
+    expect(events).to_contain_text("Compte créé")
+
+
+def test_past_game_is_shown_then_back_to_current(page, static_url):
+    open_history(page, static_url)
+    page.locator(".game-detail-btn").click()
+    banner = page.locator("#viewing-past-game")
+    expect(banner).to_be_visible()
+    expect(banner).to_contain_text("Partie de Vesper")
+    expect(page.locator("#public-history-container")).to_contain_text("Message d'une partie passée")
+
+    page.click("#back-to-current-game")
+    expect(banner).to_be_hidden()
+    expect(page.locator("#public-history-container")).not_to_contain_text("Message d'une partie passée")
+
+
+def test_close_player_history(page, static_url):
+    open_history(page, static_url)
+    page.click("#close-player-history")
+    expect(page.locator("#player-history")).to_be_hidden()

@@ -15,7 +15,16 @@ from sqlalchemy.orm import Session
 from backend.accounts.passwords import hash_password, password_error, spend_verification_time, verify_password
 from backend.accounts.pseudo import INVALID_PSEUDO, normalize_pseudo, pseudo_is_valid
 from backend.accounts.tokens import read_token
-from backend.db import EmailVerificationToken, GameRecord, PasswordResetToken, UnlockedAchievement, User, pseudo_key
+from backend.db import (
+    AccountEvent,
+    EmailVerificationToken,
+    GameDetail,
+    GameRecord,
+    PasswordResetToken,
+    UnlockedAchievement,
+    User,
+    pseudo_key,
+)
 from backend.db.models import utcnow
 
 logger = logging.getLogger(__name__)
@@ -32,6 +41,22 @@ RESET_TOKEN_LIFETIME = timedelta(minutes=30)
 VERIFY_TOKEN_LIFETIME = timedelta(hours=24)
 # Compte jamais vérifié : supprimé après ce délai (adresse peut-être saisie par erreur, pseudo et adresse libérés)
 UNVERIFIED_ACCOUNT_LIFETIME = timedelta(hours=72)
+# Durées de conservation (RGPD) : détail des parties (panel admin) et registre des modifications des comptes
+GAME_DETAIL_LIFETIME = timedelta(days=183)   # 6 mois
+ACCOUNT_EVENT_LIFETIME = timedelta(days=365)  # 1 an
+
+# Registre des modifications : type d'événement -> libellé affiché dans le panel admin
+ACCOUNT_EVENTS = {
+    "account_created": "Compte créé",
+    "email_verified": "Adresse e-mail confirmée",
+    "email_corrected": "Adresse e-mail corrigée (avant confirmation)",
+    "email_change_requested": "Changement d'adresse e-mail demandé",
+    "email_changed": "Adresse e-mail remplacée",
+    "pseudo_changed": "Pseudo modifié",
+    "password_changed": "Mot de passe modifié (profil)",
+    "password_reset_link": "Mot de passe réinitialisé (lien par e-mail)",
+    "password_reset_admin": "Mot de passe réinitialisé par l'admin",
+}
 
 PSEUDO_TAKEN = "Ce pseudo est déjà pris."
 EMAIL_TAKEN = "Cette adresse e-mail est déjà utilisée par un autre compte."
@@ -56,6 +81,13 @@ class AccountError(Exception):
         super().__init__(message)
         self.message = message
         self.status = status
+
+
+def log_event(db: Session, user: User, kind: str) -> None:
+    """Ajoute une ligne au registre des modifications du compte : le type et la date, jamais les valeurs."""
+    assert kind in ACCOUNT_EVENTS, kind
+    db.add(AccountEvent(user_id=user.id, kind=kind, created_at=utcnow()))
+    db.commit()
 
 
 def find_by_pseudo(db: Session, pseudo: str) -> Optional[User]:
@@ -129,7 +161,9 @@ def register(db: Session, pseudo: str, password: str, email: str) -> User:
     L'adresse reste à vérifier : l'appelant envoie le lien (create_verification_token)."""
     if not email or not email.strip():
         raise AccountError("Veuillez indiquer une adresse e-mail.")
-    return _create_user(db, pseudo, password, email)
+    user = _create_user(db, pseudo, password, email)
+    log_event(db, user, "account_created")
+    return user
 
 
 def authenticate(db: Session, login: str, password: str) -> Optional[User]:
@@ -181,6 +215,7 @@ def change_pseudo(db: Session, user: User, current_password: str, new_pseudo: st
     _require_current_password(user, current_password)
     user.pseudo = _check_pseudo(db, new_pseudo, current=user)
     _commit(db)
+    log_event(db, user, "pseudo_changed")
     return user
 
 
@@ -196,6 +231,9 @@ def change_email(db: Session, user: User, current_password: str, new_email: str)
     if not user.email_verified:
         user.email = email
         _commit(db)
+        log_event(db, user, "email_corrected")
+    else:
+        log_event(db, user, "email_change_requested")
     return create_verification_token(db, user, email)
 
 
@@ -206,6 +244,7 @@ def change_password(db: Session, user: User, current_password: str, new_password
     user.password_hash = hash_password(new_password)
     user.token_version += 1
     _commit(db)
+    log_event(db, user, "password_changed")
     return user
 
 
@@ -217,6 +256,7 @@ def reset_password(db: Session, user: User) -> str:
     user.password_hash = hash_password(temporary)
     user.token_version += 1
     _commit(db)
+    log_event(db, user, "password_reset_admin")
     logger.info("Mot de passe réinitialisé par l'admin pour %s", user.pseudo)
     return temporary
 
@@ -296,6 +336,7 @@ def verify_email(db: Session, token: str) -> EmailVerified:
     user.email_verified_at = now
     entry.used_at = now
     _commit(db)
+    log_event(db, user, "email_changed" if previous else "email_verified")
     logger.info("Adresse e-mail vérifiée pour %s", user.pseudo)
     return EmailVerified(user, previous)
 
@@ -317,6 +358,16 @@ def delete_unverified_accounts(db: Session, keep: Iterable[int] = (), now: Optio
         deleted.append(user.pseudo)
         delete_account(db, user, reason="adresse jamais vérifiée")
     return deleted
+
+
+def delete_expired_records(db: Session, now: Optional[datetime] = None) -> int:
+    """Durées de conservation : efface le détail des parties de plus de 6 mois et le registre des
+    modifications de plus d'un an. Renvoie le nombre de lignes effacées."""
+    now = now or utcnow()
+    count = db.execute(delete(GameDetail).where(GameDetail.created_at < now - GAME_DETAIL_LIFETIME)).rowcount
+    count += db.execute(delete(AccountEvent).where(AccountEvent.created_at < now - ACCOUNT_EVENT_LIFETIME)).rowcount
+    db.commit()
+    return count
 
 
 def delete_stale_reset_tokens(db: Session, now: Optional[datetime] = None) -> int:
@@ -341,13 +392,15 @@ def reset_password_with_token(db: Session, token: str, new_password: str) -> Use
     user.token_version += 1
     entry.used_at = utcnow()
     mark_active(db, user, force=True)
+    log_event(db, user, "password_reset_link")
     logger.info("Mot de passe réinitialisé par lien pour %s", user.pseudo)
     return user
 
 
 def delete_account(db: Session, user: User, reason: str = "à sa demande") -> None:
     """Suppression d'un compte, la même par le joueur, par l'admin ou pour inactivité :
-    - supprimés : le compte (pseudo, adresse e-mail, mot de passe), ses succès et ses liens envoyés par e-mail ;
+    - supprimés : le compte (pseudo, adresse e-mail, mot de passe), ses succès, ses liens envoyés par e-mail,
+      le registre de ses modifications et le détail de ses parties (chat, mémoire des IA) ;
     - gardées, anonymisées : ses parties, détachées du compte et datées au jour près (sans l'heure), pour les
       statistiques du jeu. Elles ne permettent plus de retrouver le joueur.
     Le compte admin ne peut pas être supprimé. L'appelant arrête d'abord la partie en cours du compte."""
@@ -357,6 +410,9 @@ def delete_account(db: Session, user: User, reason: str = "à sa demande") -> No
     db.execute(delete(UnlockedAchievement).where(UnlockedAchievement.user_id == user.id))
     db.execute(delete(PasswordResetToken).where(PasswordResetToken.user_id == user.id))
     db.execute(delete(EmailVerificationToken).where(EmailVerificationToken.user_id == user.id))
+    db.execute(delete(AccountEvent).where(AccountEvent.user_id == user.id))
+    game_ids = select(GameRecord.id).where(GameRecord.user_id == user.id)
+    db.execute(delete(GameDetail).where(GameDetail.game_id.in_(game_ids)))
     for game in db.scalars(select(GameRecord).where(GameRecord.user_id == user.id)):
         game.user_id = None
         game.started_at = _as_utc(game.started_at).replace(hour=0, minute=0, second=0, microsecond=0)

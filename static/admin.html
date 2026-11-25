@@ -86,6 +86,12 @@
         <!-- CONTENU PRINCIPAL -->
         <main class="flex-1 p-6 max-w-7xl mx-auto w-full space-y-6">
 
+            <!-- Partie passée affichée à la place de la partie en cours (historique d'un joueur) -->
+            <div id="viewing-past-game" class="modal-notice notice-night hidden flex flex-wrap items-center justify-between gap-3">
+                <span id="viewing-past-game-text" class="font-serif italic text-base"></span>
+                <button type="button" id="back-to-current-game" class="btn-ghost admin-btn">Revenir à la partie en cours</button>
+            </div>
+
             <!-- Message du serveur (aucune partie lancée) ou réponse inattendue -->
             <div id="no-data-notice" class="modal-notice notice-night hidden font-serif italic text-base text-center"></div>
 
@@ -121,6 +127,25 @@
                 <p id="reset-result" role="status" class="modal-notice notice-night hidden text-sm"></p>
                 <div id="accounts-container" class="overflow-x-auto text-sm">
                     <span class="italic opacity-60">Aucun compte.</span>
+                </div>
+            </section>
+
+            <!-- HISTORIQUE D'UN JOUEUR : ses parties (détail gardé 6 mois) et le registre de son compte (1 an) -->
+            <section id="player-history" class="admin-section rounded-2xl p-6 space-y-4 hidden">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <h2 id="player-history-title" class="admin-section-title flex-1">Historique</h2>
+                    <button type="button" id="close-player-history" class="btn-ghost admin-btn">Fermer</button>
+                </div>
+                <p class="text-xs opacity-60">Détail des parties gardé 6 mois, registre des modifications du compte gardé un an ; tout est supprimé avec le compte.</p>
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-2 space-y-2">
+                        <h3 class="modal-kicker">Parties</h3>
+                        <div id="player-games-container" class="overflow-x-auto text-sm"></div>
+                    </div>
+                    <div class="space-y-2">
+                        <h3 class="modal-kicker">Modifications du compte</h3>
+                        <div id="player-events-container" class="flex flex-col gap-2 text-sm"></div>
+                    </div>
                 </div>
             </section>
 
@@ -198,7 +223,7 @@
             <h3 id="delete-account-title" class="modal-title my-2">Supprimer le compte ?</h3>
             <p id="delete-account-text" class="font-serif text-base italic leading-relaxed opacity-90"></p>
             <div class="modal-notice notice-blood text-left">
-                Le compte (pseudo, adresse e-mail, mot de passe) et ses succès seront <strong>définitivement</strong> supprimés.
+                Le compte (pseudo, adresse e-mail, mot de passe), ses succès, le déroulé de ses parties et le registre de son compte seront <strong>définitivement</strong> supprimés.
                 Ses parties restent dans les statistiques, de façon anonyme (détachées du compte, datées au jour près).
                 Si le joueur a une partie en cours, elle sera arrêtée.
             </div>

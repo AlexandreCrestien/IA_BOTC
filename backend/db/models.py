@@ -7,7 +7,7 @@ from enum import StrEnum
 from typing import Optional
 
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint
+from sqlalchemy import JSON, DateTime, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, validates
 
 from backend.models import Alignment, RoleKey
@@ -153,3 +153,27 @@ class EmailVerificationToken(Base):
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
     expires_at: Mapped[datetime]
     used_at: Mapped[Optional[datetime]]
+
+
+class GameDetail(Base):
+    """Détail complet d'une partie d'un compte (chat, votes, nuits, mémoire des IA), enregistré à sa fin pour le
+    panel admin (débogage, service client). Contient le pseudo et les messages libres du joueur : impossible à
+    anonymiser, donc supprimé avec le compte, et au bout de GAME_DETAIL_LIFETIME (backend/accounts/service.py)."""
+    __tablename__ = "game_details"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    game_id: Mapped[int] = mapped_column(ForeignKey("games.id"), unique=True)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    data: Mapped[dict] = mapped_column(JSON)
+
+
+class AccountEvent(Base):
+    """Registre des modifications d'un compte (sécurité, service client) : le type d'événement et sa date,
+    jamais les valeurs (ni ancienne adresse, ni mot de passe). Supprimé avec le compte, et au bout de
+    ACCOUNT_EVENT_LIFETIME (backend/accounts/service.py)."""
+    __tablename__ = "account_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(40))
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)

@@ -58,7 +58,7 @@ def email_verification(pseudo: str, token: str, hours: int, change: bool) -> tup
 def _contact_line() -> str:
     """Qui prévenir si la modification ne vient pas du joueur : CONTACT_EMAIL, sinon ADMIN_EMAIL (.env)."""
     contact = os.getenv("CONTACT_EMAIL") or os.getenv("ADMIN_EMAIL")
-    where = f": {contact}" if contact else " du jeu"
+    where = f": {contact}" if contact else "du jeu"
     return ("Si vous n'êtes pas à l'origine de cette modification, quelqu'un a peut-être accès à votre compte. "
             f"Contactez l'administrateur {where}.")
 

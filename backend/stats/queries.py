@@ -9,7 +9,16 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.db import COUNTED_STATUSES, GameRecord, GameStatus, UnlockedAchievement, User, iso_utc
+from backend.db import (
+    COUNTED_STATUSES,
+    AccountEvent,
+    GameDetail,
+    GameRecord,
+    GameStatus,
+    UnlockedAchievement,
+    User,
+    iso_utc,
+)
 from backend.db.models import utcnow
 from backend.models import Alignment
 from backend.rules import get_role
@@ -104,10 +113,16 @@ ALIGNMENT_LABELS = {Alignment.GOOD: "Villageois", Alignment.EVIL: "Démons"}
 
 def export_account(db: Session, user: User) -> dict:
     """Copie de toutes les données du compte (droit d'accès du RGPD), lisible par une personne :
-    compte, parties (partie en cours comprise), succès débloqués et statistiques.
+    compte, registre de ses modifications, parties (partie en cours comprise, avec leur détail tant qu'il est
+    gardé), succès débloqués et statistiques.
     Ni le mot de passe (seule son empreinte est stockée, jamais exportée) ni la version de jeton."""
-    games = db.scalars(select(GameRecord).where(GameRecord.user_id == user.id)
-                       .order_by(GameRecord.started_at, GameRecord.id))
+    from backend.accounts.service import ACCOUNT_EVENTS  # import local : le service des comptes importe ce module
+    games = list(db.scalars(select(GameRecord).where(GameRecord.user_id == user.id)
+                            .order_by(GameRecord.started_at, GameRecord.id)))
+    details = {d.game_id: d.data for d in db.scalars(
+        select(GameDetail).where(GameDetail.game_id.in_([g.id for g in games])))}
+    events = db.scalars(select(AccountEvent).where(AccountEvent.user_id == user.id)
+                        .order_by(AccountEvent.created_at, AccountEvent.id))
     unlocked = db.scalars(select(UnlockedAchievement).where(UnlockedAchievement.user_id == user.id)
                           .order_by(UnlockedAchievement.unlocked_at, UnlockedAchievement.id))
     return {
@@ -115,9 +130,9 @@ def export_account(db: Session, user: User) -> dict:
             "service": "Lantern Hollow",
             "generated_at": iso_utc(utcnow()),
             "contents": "Toutes les données enregistrées pour votre compte. Les dates sont en UTC.",
-            "not_stored": "Le déroulé des parties (messages, votes, actions) n'est jamais enregistré : il n'existe "
-                          "que pendant la partie, dans la mémoire du serveur. Votre mot de passe n'est pas stocké : "
-                          "seule une empreinte chiffrée l'est, et elle n'est pas exportée.",
+            "retention": "Le détail de chaque partie (messages, votes, actions, mémoire des personnages) est gardé "
+                         "6 mois pour le service client ; le registre des modifications du compte, un an. Votre mot "
+                         "de passe n'est pas stocké : seule une empreinte chiffrée l'est, et elle n'est pas exportée.",
         },
         "account": {
             "pseudo": user.pseudo,
@@ -127,6 +142,9 @@ def export_account(db: Session, user: User) -> dict:
             "created_at": iso_utc(user.created_at),
             "last_activity_at": iso_utc(user.last_seen_at),
         },
+        "account_history": [
+            {"event": ACCOUNT_EVENTS.get(e.kind, e.kind), "date": iso_utc(e.created_at)} for e in events
+        ],
         "games": [
             {
                 "started_at": iso_utc(g.started_at),
@@ -135,6 +153,7 @@ def export_account(db: Session, user: User) -> dict:
                 "side": ALIGNMENT_LABELS[g.alignment],
                 "result": STATUS_LABELS[g.status],
                 "turns": g.turns,
+                "detail": details.get(g.id),  # déroulé complet, tant qu'il est gardé (6 mois)
             }
             for g in games
         ],

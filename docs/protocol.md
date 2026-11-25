@@ -110,7 +110,7 @@ Réponses en JSON. Une erreur renvoie `{"detail": "<message en français>"}`, af
 | `POST /api/game/abandon` | Abandon de sa partie (défaite). Si l'écran de jeu est ouvert, il reçoit `game_abandoned` |
 | `GET /api/me/stats` | `played`, `wins`, `win_rate`, `good` et `evil` (`played`, `wins`, `win_rate`), `average_turns` |
 | `GET /api/me/games` | Parties terminées ou interrompues, de la plus récente à la plus ancienne : `date`, `role`, `role_name`, `alignment`, `status` (`won` / `lost` / `abandoned` / `interrupted`), `counted`, `turns` |
-| `GET /api/me/export` | Fichier JSON à télécharger (`Content-Disposition: attachment`) : `export`, `account`, `games` (partie en cours comprise), `achievements` (débloqués), `statistics`. Jamais l'empreinte du mot de passe |
+| `GET /api/me/export` | Fichier JSON à télécharger (`Content-Disposition: attachment`) : `export`, `account`, `account_history` (registre des modifications), `games` (partie en cours comprise, avec `detail` tant qu'il est gardé), `achievements` (débloqués), `statistics`. Jamais l'empreinte du mot de passe |
 | `GET /api/me/achievements` | Les 14 succès : `code`, `title`, `description`, `message`, `hidden`, `unlocked`, `unlocked_at`. Caché et non débloqué : `title` « ??? », sans message |
 
 ### Administration (`backend/server/admin.py`, compte admin uniquement)
@@ -120,6 +120,9 @@ Réponses en JSON. Une erreur renvoie `{"detail": "<message en français>"}`, af
 | `GET /admin/debug/all-states` | État complet de la partie présente sur le serveur (rien n'est caché) |
 | `GET /admin/users` | Comptes : `id`, `pseudo`, `email`, `is_admin`, `created_at` |
 | `POST /admin/users/{id}/reset-password` | `pseudo`, `temporary_password` (affiché une seule fois). Refusé pour le compte admin |
+| `GET /admin/users/{id}/games` | Parties du joueur, de la plus récente à la plus ancienne : `id`, `date`, `role_name`, `alignment`, `status`, `turns`, `has_detail` (détail encore gardé) |
+| `GET /admin/games/{id}` | `game` (résumé et `pseudo`) et `detail` (même forme que `/admin/debug/all-states`). 404 si le détail a été effacé (plus de 6 mois) |
+| `GET /admin/users/{id}/events` | Registre des modifications du compte, du plus récent au plus ancien : `kind`, `label`, `date` |
 | `DELETE /admin/users/{id}` | 204 : même suppression que `DELETE /api/account` ; sa partie en cours est arrêtée (l'écran de jeu reçoit `game_abandoned`). Refusé pour le compte admin |
 
 ### Adresse inconnue
