@@ -237,11 +237,14 @@ async def _handle(player_id: str, raw_data: str) -> None:
         await manager.send_to_player(player_id, Error(data="Format JSON invalide.").model_dump())
         return
     except ValidationError as e:
-        logger.warning("Action non valide reçue de %s : %s", player_id, e.errors())
+        # Champ et type d'erreur seulement, sans la valeur reçue (contenu d'un message)
+        logger.warning("Action non valide reçue de %s : %s", player_id,
+                       [(err["loc"], err["type"]) for err in e.errors()])
         await manager.send_to_player(player_id, Error(data=f"Action non valide : {e.errors()}").model_dump())
         return
 
-    logger.info("Action reçue de %s -> %s | %s", player_id, packet.action, packet.payload)
+    # Seulement le type d'action : jamais son contenu (messages, commentaires), qui peut contenir des données personnelles
+    logger.info("Action reçue de %s -> %s", player_id, packet.action)
     session = current_session()
     if session is None or session.human_id != player_id:
         await manager.send_to_player(player_id, Error(data="Aucune partie en cours.").model_dump())

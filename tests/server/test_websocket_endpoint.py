@@ -135,6 +135,18 @@ def test_unknown_field_refused():
     assert session.port.answers.empty()
 
 
+def test_logs_never_contain_what_the_player_wrote(caplog):
+    """Journal du serveur : le type d'action, jamais son contenu (messages, commentaires), même refusé."""
+    waiting("public_message")
+    secret = "Je m'appelle Jean Dupont"
+    with caplog.at_level("INFO"), make_client().websocket_connect("/ws/h") as conn:
+        connect(conn)
+        act(conn, "send_chat", channel_id="public", content=secret)
+        act(conn, "send_chat", channel_id="public", content=secret + "x" * 500)  # trop long : refusé
+    assert "send_chat" in caplog.text
+    assert "Jean Dupont" not in caplog.text
+
+
 def test_action_without_game_refused():
     with make_client().websocket_connect("/ws/h") as conn:
         connect(conn)

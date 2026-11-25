@@ -144,9 +144,11 @@ Arborescence détaillée, fichier par fichier : [docs/architecture.md](docs/arch
 
 ## TODO
 
-- **Suivi des coûts** : financiers, tokens consommés et impact écologique des appels aux LLM.
+- **Suivi des coûts** : financiers, tokens consommés et impact écologique des appels aux LLM. Mettredans une nouvelle section du panel admin.
 - **Résumé de la mémoire des agents** au fil des jours : leur contexte grandit à chaque événement (voir [docs/ai.md](docs/ai.md)).
-- **Tailwind compilé** : il est aujourd'hui chargé depuis son CDN, ce qui n'est pas adapté à la production.
+- **Opinions des agents sur les autres joueurs** : aujourd'hui, un agent relit tout l'historique à chaque appel sans rien retenir de ses déductions. À la fin de chaque journée, chaque agent pourrait noter en une phrase ses soupçons sur chaque joueur, dans sa mémoire personnelle (5 appels de plus par jour), pour des accusations et des votes plus cohérents.
+- **Mesurer la réactivité** : les appels aux LLM passent un par un, avec une pause de 2 secondes après chacun (`CALL_PAUSE_SECONDS`) pour respecter les limites des offres gratuites, soit au moins 30 secondes pour une discussion de 10 messages. Chronométrer une partie, puis ajuster la pause par fournisseur.
+- **Tailwind compilé** : il est aujourd'hui chargé depuis son CDN, ce qui n'est pas adapté à la production. (A faire en tout dernier, quand il n'y a plus aucune modification du code.)
 
 ## Axes d'amélioration
 

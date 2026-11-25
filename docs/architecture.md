@@ -154,7 +154,7 @@ Format : `{"action": "<nom>", "payload": {...}}`.
 
 | Action | Payload | Quand |
 |---|---|---|
-| `send_chat` | `channel_id`, `content` | Message public (`"public"`) ou privé (salon ouvert), seulement quand le moteur l'attend |
+| `send_chat` | `channel_id`, `content` (500 caractères au plus) | Message public (`"public"`) ou privé (salon ouvert), seulement quand le moteur l'attend |
 | `request_whisper` | `targets` : 1 ou 2 ids | Choix des interlocuteurs du salon privé |
 | `discussion_timeout` | — | 10 s sans choix de salon privé : un agent va proposer un entretien |
 | `respond_whisper_invitation` | `target_agent_id`, `accepted` | Réponse à la proposition d'un agent (refus : place au vote) |

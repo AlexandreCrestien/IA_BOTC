@@ -14,9 +14,13 @@ class BaseAction(StrictInput):
     action: str
 
 
+# Longueur maximale d'un message du joueur : chaque message entre dans le contexte des agents (tokens)
+CHAT_MESSAGE_MAX = 500
+
+
 class SendChatPayload(StrictInput):
     channel_id: str = Field(..., description="ID du salon (ex: 'public' ou ID d'un salon privé)")
-    content: str = Field(..., min_length=1, description="Contenu du message")
+    content: str = Field(..., min_length=1, max_length=CHAT_MESSAGE_MAX, description="Contenu du message (500 caractères au plus)")
 
 class SendChatAction(BaseAction):
     """Poster un message dans un canal public ou privé."""

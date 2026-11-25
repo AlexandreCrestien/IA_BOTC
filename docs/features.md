@@ -75,5 +75,5 @@ Réservés aux joueurs connectés. Ils servent à améliorer les prompts à la m
 - Rien n'est collecté sur les invités (pas de signalement ni d'évaluation).
 - Le pseudo du joueur, que les agents citent souvent, est remplacé par « [joueur] » dans les signalements et commentaires enregistrés.
 - Le joueur télécharge toutes ses données depuis son tableau de bord (droit d'accès), et les supprime en supprimant son compte.
-- L'usage de l'adresse e-mail est expliqué là où elle est demandée (icône « ? ») ; les adresses sont masquées dans les journaux du serveur.
+- L'usage de l'adresse e-mail est expliqué là où elle est demandée (icône « ? ») ; les adresses sont masquées dans les journaux du serveur, qui ne contiennent jamais le contenu des messages ni des commentaires.
 - Un seul cookie, nécessaire à la connexion (7 jours), sans suivi ni publicité.
