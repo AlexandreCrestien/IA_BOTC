@@ -25,7 +25,7 @@ LLM_CONCURRENCY = 1
 CALL_PAUSE_SECONDS = 2.0
 _llm_slot = asyncio.Semaphore(LLM_CONCURRENCY)
 
-# Ordre de priorité : voir docs/model_choices.md
+# Ordre de priorité : voir docs/ai.md (Choix des modèles)
 # Mistral en direct (clé MISTRAL_API_KEY) : essai d'un collègue, désactivé. Décommenter les deux lignes
 # « mistral/mistral-small-latest » ci-dessous pour le remettre en tête (et ajouter la clé au .env).
 FAST_MODELS = [

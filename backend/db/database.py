@@ -32,7 +32,7 @@ DEFAULT_URL = "sqlite:///data/lantern_hollow.db"
 ALEMBIC_INI = Path(__file__).resolve().parents[2] / "alembic.ini"
 
 LEGACY_DATABASE = ("La base {url} a été créée par une version précédente du jeu, avant les migrations Alembic. "
-                   "Supprimez-la (elle sera recréée au démarrage) ou utilisez PostgreSQL (voir le README).")
+                   "Supprimez-la (elle sera recréée au démarrage) ou utilisez PostgreSQL (voir docs/configuration.md).")
 
 DATABASE_UNREACHABLE = ("Base de données injoignable ({url}). Si elle tourne avec Docker, lancez-la : "
                         "`docker compose up -d` (état : `docker compose ps`), puis relancez le serveur.")
