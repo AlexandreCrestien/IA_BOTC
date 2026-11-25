@@ -17,6 +17,7 @@ const SIDE_LABELS = { good: "Villageois", evil: "Démons" };
 const SIDE_TAGS = { good: "tag-good", evil: "tag-demon" };
 
 let currentUser = null;
+let comparison = null; // moyennes de tous les joueurs (/api/me/comparison), null si indisponibles
 
 // ================= APPELS AU SERVEUR =================
 async function api(url, { method = 'GET', data } = {}) {
@@ -191,7 +192,39 @@ function bindEvents() {
 }
 
 async function refreshAll() {
+    comparison = await fetchComparison();
     await Promise.all([refreshGame(), refreshStats(), refreshHistory(), refreshAchievements()]);
+}
+
+// ================= COMPARAISON AUX AUTRES JOUEURS =================
+async function fetchComparison() {
+    const result = await api('/api/me/comparison');
+    const body = result.ok ? result.body : null;
+    const notice = document.getElementById('comparison-notice');
+    if (body && !body.available) {
+        notice.textContent = `La comparaison aux autres joueurs apparaîtra quand au moins ${body.min_players} joueurs `
+            + `auront joué (${body.players} pour l'instant).`;
+    }
+    notice.classList.toggle('hidden', !(body && !body.available));
+    return body?.available ? body : null;
+}
+
+// Ligne « Tous les joueurs : … » sous une statistique, avec une flèche si le joueur fait mieux ou moins bien
+function setComparison(id, mine, average, format, higherIsBetter = true) {
+    const el = document.getElementById(id);
+    if (average == null) {
+        el.innerHTML = '';
+        return;
+    }
+    let trend = '';
+    if (mine != null && mine !== average) {
+        const above = (mine > average) === higherIsBetter;
+        el.dataset.trend = above ? 'above' : 'below';
+        trend = ` <span class="trend" aria-label="${above ? 'au-dessus' : 'en dessous'} de la moyenne">${above ? '▲' : '▼'}</span>`;
+    } else {
+        delete el.dataset.trend;
+    }
+    el.innerHTML = `Tous les joueurs : ${escapeHtml(format(average))}${trend}`;
 }
 
 // ================= PARTIE =================
@@ -256,6 +289,14 @@ async function refreshStats() {
     setText('stat-evil-rate', percent(stats.evil?.win_rate));
     setText('stat-evil-wins', winsText(stats.evil));
     setText('stat-turns', stats.average_turns ?? '—');
+
+    const avg = comparison?.averages || {};
+    setComparison('cmp-played', stats.played, avg.played, v => `${v} parties en moyenne`);
+    setComparison('cmp-win-rate', stats.win_rate, avg.win_rate, percent);
+    setComparison('cmp-good-rate', stats.good?.win_rate, avg.good_win_rate, percent);
+    setComparison('cmp-evil-rate', stats.evil?.win_rate, avg.evil_win_rate, percent);
+    // Tours par partie : ni mieux ni moins bien, simple repère (pas de flèche)
+    setComparison('cmp-turns', null, avg.average_turns, v => `${v} tours`);
 }
 
 // ================= HISTORIQUE =================
@@ -304,6 +345,7 @@ async function refreshAchievements() {
                 <div class="achievement-title">${escapeHtml(a.title)}</div>
                 <div class="achievement-description">${escapeHtml(a.description)}</div>
                 ${a.message ? `<div class="achievement-message">${escapeHtml(a.message)}</div>` : ''}
+                ${comparison ? `<div class="achievement-rarity">Débloqué par ${escapeHtml(comparison.achievements[a.code] ?? 0)} % des joueurs</div>` : ''}
             </div>
         </div>
     `).join('');

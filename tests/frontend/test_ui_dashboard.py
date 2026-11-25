@@ -354,3 +354,43 @@ def test_pending_email_change_is_shown_in_the_profile(page, static_url):
     expect(page.locator("#profile-pending")).to_contain_text("nouveau@exemple.fr")
     page.click("#profile-pending-resend")
     expect(page.locator("#profile-pending-message")).to_have_text("Lien renvoyé.")
+
+
+# --- Comparaison aux autres joueurs ------------------------------------------------------------
+
+COMPARISON = {"available": True, "players": 12, "min_players": 10,
+              "averages": {"played": 8.4, "win_rate": 0.5, "good_win_rate": 0.8, "evil_win_rate": 0.3,
+                           "average_turns": 4.2},
+              "achievements": {"win_reaper": 25, "executed": 40, "one_turn_win": 5}}
+
+
+def test_comparison_with_other_players(page, static_url):
+    api = FakeApi(page, me=USER)
+    api.set("GET", "/api/me/stats", 200, STATS)  # 75 % de victoires, 67 % côté villageois, 100 % côté démons
+    api.set("GET", "/api/me/games", 200, GAMES)
+    api.set("GET", "/api/me/achievements", 200, ACHIEVEMENTS)
+    api.set("GET", "/api/me/comparison", 200, COMPARISON)
+    page.goto(f"{static_url}/dashboard.html")
+
+    expect(page.locator("#cmp-win-rate")).to_contain_text("Tous les joueurs : 50 %")
+    expect(page.locator("#cmp-win-rate")).to_have_attribute("data-trend", "above")
+    expect(page.locator("#cmp-good-rate")).to_have_attribute("data-trend", "below")  # 67 % contre 80 %
+    expect(page.locator("#cmp-played")).to_contain_text("8.4 parties en moyenne")
+    expect(page.locator("#cmp-turns")).to_contain_text("4.2 tours")
+    expect(page.locator("#cmp-turns .trend")).to_have_count(0)  # pas de « mieux » pour le nombre de tours
+    expect(page.locator(".achievement[data-code='win_reaper']")).to_contain_text("Débloqué par 25 % des joueurs")
+    expect(page.locator(".achievement[data-code='one_turn_win']")).to_contain_text("Débloqué par 5 % des joueurs")
+    expect(page.locator("#comparison-notice")).to_be_hidden()
+
+
+def test_comparison_needs_10_players(page, static_url):
+    api = FakeApi(page, me=USER)
+    api.set("GET", "/api/me/stats", 200, STATS)
+    api.set("GET", "/api/me/games", 200, GAMES)
+    api.set("GET", "/api/me/achievements", 200, ACHIEVEMENTS)
+    api.set("GET", "/api/me/comparison", 200, {"available": False, "players": 4, "min_players": 10})
+    page.goto(f"{static_url}/dashboard.html")
+    expect(page.locator("#comparison-notice")).to_have_text(
+        "La comparaison aux autres joueurs apparaîtra quand au moins 10 joueurs auront joué (4 pour l'instant).")
+    expect(page.locator(".stat-compare:not(:empty)")).to_have_count(0)
+    expect(page.locator(".achievement-rarity")).to_have_count(0)

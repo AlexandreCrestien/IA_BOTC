@@ -100,29 +100,36 @@
                 <div class="stat-card">
                     <div class="stat-label">Parties jouées</div>
                     <div id="stat-played" class="stat-value">—</div>
+                    <div id="cmp-played" class="stat-compare"></div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-label">Victoires</div>
                     <div id="stat-win-rate" class="stat-value">—</div>
                     <div id="stat-wins" class="stat-detail"></div>
+                    <div id="cmp-win-rate" class="stat-compare"></div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-label">Côté villageois</div>
                     <div id="stat-good-rate" class="stat-value">—</div>
                     <div id="stat-good-wins" class="stat-detail"></div>
+                    <div id="cmp-good-rate" class="stat-compare"></div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-label">Côté démons</div>
                     <div id="stat-evil-rate" class="stat-value">—</div>
                     <div id="stat-evil-wins" class="stat-detail"></div>
+                    <div id="cmp-evil-rate" class="stat-compare"></div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-label">Tours par partie</div>
                     <div id="stat-turns" class="stat-value">—</div>
                     <div class="stat-detail">en moyenne</div>
+                    <div id="cmp-turns" class="stat-compare"></div>
                 </div>
             </div>
             <p class="text-xs opacity-60 mt-3">Un abandon compte comme une défaite. Les parties interrompues par le serveur ne comptent pas.</p>
+            <!-- Comparaison aux autres joueurs : seulement à partir de 10 joueurs (sinon une moyenne désigne presque quelqu'un) -->
+            <p id="comparison-notice" class="text-xs opacity-60 mt-1 hidden"></p>
         </section>
 
         <!-- HISTORIQUE -->

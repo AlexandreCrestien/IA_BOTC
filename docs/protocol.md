@@ -111,6 +111,7 @@ Réponses en JSON. Une erreur renvoie `{"detail": "<message en français>"}`, af
 | `GET /api/me/stats` | `played`, `wins`, `win_rate`, `good` et `evil` (`played`, `wins`, `win_rate`), `average_turns` |
 | `GET /api/me/games` | Parties terminées ou interrompues, de la plus récente à la plus ancienne : `date`, `role`, `role_name`, `alignment`, `status` (`won` / `lost` / `abandoned` / `interrupted`), `counted`, `turns` |
 | `GET /api/me/export` | Fichier JSON à télécharger (`Content-Disposition: attachment`) : `export`, `account`, `account_history` (registre des modifications), `games` (partie en cours comprise, avec `detail` tant qu'il est gardé), `achievements` (débloqués), `statistics`. Jamais l'empreinte du mot de passe |
+| `GET /api/me/comparison` | `available`, `players`, `min_players` (10). Si disponible : `averages` (`played` par joueur ; `win_rate`, `good_win_rate`, `evil_win_rate`, `average_turns` par partie) et `achievements` (code → % des joueurs). Comptes admin exclus |
 | `GET /api/me/achievements` | Les 14 succès : `code`, `title`, `description`, `message`, `hidden`, `unlocked`, `unlocked_at`. Caché et non débloqué : `title` « ??? », sans message |
 
 ### Administration (`backend/server/admin.py`, compte admin uniquement)

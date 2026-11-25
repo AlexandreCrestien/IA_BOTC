@@ -287,3 +287,20 @@
 
 /* La barre de raccourcis a son propre display : .hidden doit la masquer (compte pas encore vérifié) */
 .dash-nav.hidden { display: none; }
+
+/* Comparaison aux autres joueurs, sous chaque statistique et chaque succès */
+.stat-compare {
+  margin-top: 0.35rem;
+  padding-top: 0.35rem;
+  border-top: 1px dashed color-mix(in oklab, var(--border) 80%, transparent);
+  font-size: 0.8rem;
+  opacity: 0.8;
+}
+.stat-compare:empty { display: none; }
+.stat-compare[data-trend="above"] .trend { color: oklch(0.75 0.12 150); }
+.stat-compare[data-trend="below"] .trend { color: oklch(0.72 0.17 25); }
+.achievement-rarity {
+  margin-top: 0.3rem;
+  font-size: 0.75rem;
+  opacity: 0.7;
+}

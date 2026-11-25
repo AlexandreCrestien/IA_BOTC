@@ -168,3 +168,48 @@ def export_account(db: Session, user: User) -> dict:
         "statistics": player_stats(db, user.id),
     }
 
+
+
+# --- Comparaison aux autres joueurs ---------------------------------------------------------------------
+
+# En dessous, pas de comparaison : avec trop peu de joueurs, une moyenne ou un pourcentage désigne presque
+# quelqu'un (avec 3 joueurs, « 33 % ont débloqué ce succès » revient à montrer qui l'a fait).
+MIN_PLAYERS_FOR_COMPARISON = 10
+
+
+def community_comparison(db: Session) -> dict:
+    """Moyennes de tous les joueurs, à comparer à ses propres statistiques, et part des joueurs qui ont
+    débloqué chaque succès. Joueurs comptés : comptes (hors admin) ayant au moins une partie comptée.
+    - moyennes calculées par partie, sur toutes les parties comptées (y compris celles, anonymisées, des comptes
+      supprimés) ; « parties jouées » : moyenne par joueur ;
+    - rien n'est renvoyé sous MIN_PLAYERS_FOR_COMPARISON joueurs."""
+    admins = select(User.id).where(User.is_admin.is_(True))
+    player_ids = set(db.scalars(select(GameRecord.user_id).where(
+        GameRecord.status.in_(COUNTED_STATUSES), GameRecord.user_id.is_not(None),
+        GameRecord.user_id.not_in(admins)).distinct()))
+    players = len(player_ids)
+    if players < MIN_PLAYERS_FOR_COMPARISON:
+        return {"available": False, "players": players, "min_players": MIN_PLAYERS_FOR_COMPARISON}
+
+    games = list(db.scalars(select(GameRecord).where(
+        GameRecord.status.in_(COUNTED_STATUSES),
+        GameRecord.user_id.is_(None) | GameRecord.user_id.not_in(admins))))
+    account_games = sum(1 for g in games if g.user_id is not None)
+    holders: dict[str, set[int]] = {}
+    for code, user_id in db.execute(select(UnlockedAchievement.code, UnlockedAchievement.user_id)
+                                    .where(UnlockedAchievement.user_id.in_(player_ids))):
+        holders.setdefault(code, set()).add(user_id)
+    return {
+        "available": True,
+        "players": players,
+        "min_players": MIN_PLAYERS_FOR_COMPARISON,
+        "averages": {
+            "played": round(account_games / players, 1),
+            "win_rate": _summary(games)["win_rate"],
+            "good_win_rate": _summary([g for g in games if g.alignment == Alignment.GOOD])["win_rate"],
+            "evil_win_rate": _summary([g for g in games if g.alignment == Alignment.EVIL])["win_rate"],
+            "average_turns": round(sum(g.turns for g in games) / len(games), 1) if games else None,
+        },
+        # Part des joueurs (en %) qui ont débloqué chaque succès, caché compris (sans en révéler le titre)
+        "achievements": {a.code: round(100 * len(holders.get(a.code, ())) / players) for a in ACHIEVEMENTS},
+    }

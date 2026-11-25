@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from backend.db import User
 from backend.server.auth import current_user, db_session, verified_user
-from backend.stats.queries import achievements_of, export_account, game_history, player_stats
+from backend.stats.queries import achievements_of, community_comparison, export_account, game_history, player_stats
 
 router = APIRouter(prefix="/api/me", tags=["Statistiques"])
 
@@ -30,6 +30,12 @@ def games(user: User = Depends(verified_user), db: Session = Depends(db_session)
 def achievements(user: User = Depends(verified_user), db: Session = Depends(db_session)) -> list[dict]:
     """Tous les succès ; un succès caché non débloqué est renvoyé sans titre ni description (« ??? »)."""
     return achievements_of(db, user.id)
+
+
+@router.get("/comparison")
+def comparison(user: User = Depends(verified_user), db: Session = Depends(db_session)) -> dict:
+    """Moyennes de tous les joueurs et part des joueurs ayant débloqué chaque succès (à partir de 10 joueurs)."""
+    return community_comparison(db)
 
 
 @router.get("/export")

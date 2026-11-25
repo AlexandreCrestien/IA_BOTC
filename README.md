@@ -43,6 +43,7 @@ Provocateur, Parano, Bouffon, Stratège et Observateur (fichiers dans `skills/pe
 - **Mot de passe oublié** : depuis l'accueil, un lien est envoyé par e-mail, seulement à une adresse confirmée (usage unique, valable 30 minutes) vers la page `reset-password.html`. La réponse est la même que l'adresse ait un compte ou non, et les demandes sont limitées à 3 par adresse en 15 minutes.
 - **Suppression d'un compte**, la même par le joueur (tableau de bord, mot de passe demandé), par l'admin, ou automatiquement après **un an sans connexion**, un mois après un e-mail d'avertissement : le compte (pseudo, adresse e-mail, mot de passe), ses succès, le détail de ses parties et le registre de ses modifications sont effacés ; le résumé de ses parties est gardé de façon anonyme (détaché du compte, daté au jour près) pour les statistiques du jeu. Sa partie en cours est arrêtée. Le compte admin ne peut pas être supprimé.
 - **Statistiques :** parties jouées, part de victoires (au total, côté villageois, côté démons), nombre moyen de tours. Un abandon compte comme une défaite ; une partie interrompue par le serveur (arrêt, plantage) ne compte pas.
+- **Comparaison aux autres joueurs** (à partir de 10 joueurs, sinon une moyenne désigne presque quelqu'un) : sous chaque statistique, la moyenne de tous les joueurs (▲ / ▼ selon qu'on fait mieux ou moins bien), et sous chaque succès, la part des joueurs qui l'ont débloqué. Moyennes calculées par partie, y compris les parties anonymisées des comptes supprimés ; comptes admin exclus.
 - **Fermer l'onglet ne termine pas la partie :** elle attend le joueur, qui la reprend ou l'abandonne depuis l'accueil ou le tableau de bord.
 - **Succès** (14), calculés à la fin d'une partie gagnée ou perdue (pas d'un abandon) :
 
@@ -266,7 +267,10 @@ python scripts/play_ai_game.py      # les IA jouent seules (le 6e joueur s'absti
 python scripts/check_nights.py      # les IA jouent seulement des nuits : contrôle de leurs cibles
 python scripts/simulate_game.py     # partie simulée, sans LLM : affiche chaque message reçu par le front
 python scripts/check_full_game.py   # partie simulée, sans LLM, avec des centaines de vérifications
+python scripts/demo_players.py      # 10 joueurs de démonstration (comparaison du tableau de bord) ; --remove pour les retirer
 ```
+
+Les joueurs de démonstration ont une adresse en `@demo.lantern-hollow.invalid` (domaine réservé : aucun e-mail ne peut y partir) et un mot de passe aléatoire jamais affiché. `--remove` les efface entièrement, parties comprises, pour ne rien laisser dans les statistiques.
 
 `scripts/recording.py` est un module utilitaire (historiques des joueurs pour `play_with_human.py`), pas un script à lancer.
 
@@ -320,7 +324,6 @@ ruff check .
 
 - **Docker pour le serveur** : aujourd'hui seule la base tourne dans Docker, le serveur se lance avec `python main.py`. Une image du serveur, ajoutée au `docker-compose.yml`, permettrait de tout lancer en une commande.
 - **Une partie par joueur** : aujourd'hui une seule partie à la fois sur le serveur (une session globale), ce qui suffit en local. Il faudrait une session par joueur, et des messages publics limités à leur partie.
-- **Comparaison aux autres joueurs** dans le tableau de bord : moyennes calculées par partie (elles peuvent inclure les parties anonymisées) ou par joueur (comptes existants seulement) ; « x % des joueurs ont débloqué ce succès », affiché à partir d'un nombre minimum de joueurs (avec 3 joueurs, un pourcentage désigne presque quelqu'un).
 - **Journaux du serveur** : aujourd'hui affichés dans la console seulement. S'ils sont un jour écrits dans des fichiers, limiter leur durée de conservation : ils contiennent des pseudos et des heures.
 
 ## Documentation
