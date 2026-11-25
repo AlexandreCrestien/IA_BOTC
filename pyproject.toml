@@ -1,12 +1,51 @@
-# Configuration des outils du projet (les dépendances sont dans requirements.txt).
+# Projet et configuration des outils.
+#
+# Dépendances : ce fichier est la référence. Installation avec uv (recommandé) :  uv sync
+# requirements.txt en est une copie pour pip, avec toutes les versions figées. Après un ajout ou une mise à jour
+# (uv add …, uv lock), le régénérer :
+#   uv export --format requirements-txt --no-hashes --no-emit-project --all-groups -o requirements.txt
+
+[project]
+name = "lantern-hollow"
+version = "1.0.0"
+description = "Lantern Hollow : un joueur humain contre cinq agents IA, dans un jeu de déduction sociale inspiré du loup-garou."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi==0.162.0",          # serveur HTTP + WebSocket
+    "uvicorn==0.54.0",           # serveur ASGI qui fait tourner FastAPI
+    "websockets==17.4",          # implémentation WebSocket utilisée par uvicorn
+    "pydantic==2.14.2",          # validation des messages et modèles du jeu
+    "python-dotenv==1.2.4",      # lecture du fichier .env
+    "litellm==1.108.0",          # appels aux LLM des agents
+    "sqlalchemy==2.1.9",         # base de données : PostgreSQL, ou SQLite sans Docker
+    "alembic==1.20.1",           # migrations de la base (backend/db/migrations)
+    "psycopg[binary]==3.3.9",    # driver PostgreSQL
+    "bcrypt==5.0.0",             # hachage des mots de passe
+    "pyjwt==2.15.1",             # jetons de connexion (JWT, dans un cookie HttpOnly)
+]
+
+# Outils de développement, installés par défaut par uv sync (uv sync --no-dev pour s'en passer)
+[dependency-groups]
+dev = [
+    "pytest==9.2.0",
+    "httpx==0.28.1",             # requis par le TestClient de FastAPI (tests du serveur)
+    "pytest-playwright==0.10.0", # tests du frontend (tests/frontend/)
+    "playwright==1.65.1",        # après installation : uv run playwright install chromium
+    "ruff==0.17.6",              # linter : uv run ruff check .
+]
+
+[tool.uv]
+package = false  # application, pas une bibliothèque : rien à construire ni à publier
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]  # le projet importable (backend, scripts) que pytest soit lancé seul ou avec python -m
 # Les tests du frontend (Playwright) passent après les autres : voir tests/frontend/conftest.py
 
 [tool.ruff]
 line-length = 120
-extend-exclude = ["venv"]
+extend-exclude = ["venv", ".venv"]
 
 [tool.ruff.lint]
 # Seulement les vraies erreurs, sans imposer de style ni reformater :

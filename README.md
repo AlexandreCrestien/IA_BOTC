@@ -65,7 +65,7 @@ Un succès caché s'affiche « ??? » tant qu'il n'est pas débloqué. Titres et
 
 ## Stack technique
 
-- **Python** (3.12 ou plus)
+- **Python** (3.12 ou plus), dépendances gérées avec **uv** (`pyproject.toml`, `uv.lock`), ou pip (`requirements.txt`)
 - **FastAPI** + **Uvicorn** : serveur HTTP et WebSocket
 - **Pydantic** : modèles de données et validation
 - **PostgreSQL** (lancé avec **Docker Compose**), **SQLAlchemy** et **Alembic** (migrations) : comptes, parties jouées et succès. Sans Docker, le jeu peut utiliser un fichier **SQLite** à la place
@@ -119,20 +119,38 @@ data/                  Base SQLite, seulement sans Docker (ignorée par git)
 main.py                Lance le serveur
 docker-compose.yml     Base PostgreSQL locale
 alembic.ini            Configuration des migrations
-pyproject.toml         Configuration de pytest et ruff
+pyproject.toml         Dépendances du projet, configuration de pytest et ruff
+uv.lock                Versions exactes de toutes les dépendances (uv)
+requirements.txt       Les mêmes versions, pour pip (généré depuis uv.lock)
+.python-version        Version de Python utilisée par uv
 ```
 
 ## Installation
 
+Avec **[uv](https://docs.astral.sh/uv/)** (recommandé) : il installe tout seul la bonne version de Python (3.14, voir `.python-version` ; 3.12 au minimum) et exactement les versions de dépendances testées (`uv.lock`).
+
 ```bash
 git clone https://github.com/AlexandreCrestien/IA_BOTC.git
 cd IA_BOTC
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-python -m playwright install chromium   # navigateur des tests du frontend
+uv sync                                 # Python et dépendances, dans .venv
+uv run playwright install chromium      # navigateur des tests du frontend
 cp .env.example .env                    # puis remplir les clés (voir ci-dessous)
 ```
+
+Installer uv une fois pour toutes : `curl -LsSf https://astral.sh/uv/install.sh | sh` (Linux, macOS) ou `powershell -c "irm https://astral.sh/uv/install.ps1 | iex"` (Windows).
+
+Sans uv, avec pip (Python 3.12 ou plus déjà installé) : `requirements.txt` contient les mêmes versions.
+
+```bash
+python -m venv venv
+source venv/bin/activate                # Windows : venv\Scripts\activate
+pip install -r requirements.txt
+python -m playwright install chromium
+```
+
+Avec pip, remplacer `uv run` par `python` dans les commandes de ce README (environnement activé), et `uv run pytest` par `python -m pytest`.
+
+Les dépendances sont déclarées dans `pyproject.toml`. Pour en ajouter une : `uv add <paquet>` (ou `uv add --dev <paquet>` pour un outil de test), puis régénérer `requirements.txt` avec la commande indiquée en tête de `pyproject.toml`.
 
 Docker (avec Docker Compose) doit être installé. Il fait tourner, accessibles depuis cet ordinateur seulement :
 - la base **PostgreSQL** (`127.0.0.1:5432`) ;
@@ -144,16 +162,16 @@ Docker (avec Docker Compose) doit être installé. Il fait tourner, accessibles 
 
 ```bash
 docker compose up -d   # 1. démarrer la base PostgreSQL et Mailpit (en arrière-plan)
-python main.py         # 2. démarrer le serveur du jeu
+uv run main.py         # 2. démarrer le serveur du jeu
 ```
 
 **Les fois suivantes, une seule commande suffit** : la base reste lancée en arrière-plan, et Docker la redémarre tout seul, même après un redémarrage de l'ordinateur, tant qu'elle n'a pas été arrêtée.
 
 ```bash
-python main.py
+uv run main.py
 ```
 
-Si la base n'est pas lancée, `python main.py` s'arrête aussitôt avec ce message : « Base de données injoignable… lancez-la : `docker compose up -d` ».
+Si la base n'est pas lancée, `uv run main.py` s'arrête aussitôt avec ce message : « Base de données injoignable… lancez-la : `docker compose up -d` ».
 
 **Arrêter :** `Ctrl+C` arrête le serveur du jeu. Pour arrêter aussi la base :
 
@@ -208,7 +226,7 @@ Le fichier `.env.example`, copié en `.env` à l'installation, contient toutes l
 `JWT_SECRET` doit être une **longue chaîne aléatoire** (au moins 32 caractères), jamais un mot ou une phrase : qui la connaît peut se faire passer pour n'importe quel compte, admin compris. Pour en obtenir une, lancer une fois dans le terminal l'une de ces commandes et coller le résultat dans `.env` :
 
 ```bash
-python -c "import secrets; print(secrets.token_hex(32))"
+uv run python -c "import secrets; print(secrets.token_hex(32))"
 openssl rand -hex 32
 ```
 
@@ -216,7 +234,7 @@ Le fichier `.env` ne doit jamais être commité.
 
 ## Adresses du serveur
 
-Une fois lancé (`python main.py`), le serveur répond sur `http://127.0.0.1:8000` :
+Une fois lancé (`uv run main.py`), le serveur répond sur `http://127.0.0.1:8000` :
 
 | Adresse | Rôle |
 |---|---|
@@ -269,12 +287,12 @@ Signalements (RGPD) : réservés aux comptes, pour ne rien collecter sur les inv
 À lancer depuis la racine du projet. Les trois premiers appellent les vrais modèles (clés d'API nécessaires, plus lents) :
 
 ```bash
-python scripts/play_with_human.py   # tu joues contre les 5 IA dans le terminal
-python scripts/play_ai_game.py      # les IA jouent seules (le 6e joueur s'abstient et ne parle pas)
-python scripts/check_nights.py      # les IA jouent seulement des nuits : contrôle de leurs cibles
-python scripts/simulate_game.py     # partie simulée, sans LLM : affiche chaque message reçu par le front
-python scripts/check_full_game.py   # partie simulée, sans LLM, avec des centaines de vérifications
-python scripts/demo_players.py      # 10 joueurs de démonstration (comparaison du tableau de bord) ; --remove pour les retirer
+uv run scripts/play_with_human.py   # tu joues contre les 5 IA dans le terminal
+uv run scripts/play_ai_game.py      # les IA jouent seules (le 6e joueur s'abstient et ne parle pas)
+uv run scripts/check_nights.py      # les IA jouent seulement des nuits : contrôle de leurs cibles
+uv run scripts/simulate_game.py     # partie simulée, sans LLM : affiche chaque message reçu par le front
+uv run scripts/check_full_game.py   # partie simulée, sans LLM, avec des centaines de vérifications
+uv run scripts/demo_players.py      # 10 joueurs de démonstration (comparaison du tableau de bord) ; --remove pour les retirer
 ```
 
 Les joueurs de démonstration ont une adresse en `@demo.lantern-hollow.invalid` (domaine réservé : aucun e-mail ne peut y partir) et un mot de passe aléatoire jamais affiché. `--remove` les efface entièrement, parties comprises, pour ne rien laisser dans les statistiques.
@@ -284,15 +302,15 @@ Les joueurs de démonstration ont une adresse en `@demo.lantern-hollow.invalid` 
 **Mode simulation** : avec `SIMULATE_LLM=1`, aucun appel aux modèles (réponses fictives tirées parmi les choix légaux). Pratique pour essayer l'interface sans clé ni quota :
 
 ```bash
-SIMULATE_LLM=1 python main.py
+SIMULATE_LLM=1 uv run main.py
 ```
 
 ## Tests
 
 ```bash
-python -m pytest tests/ -q                     # tout (backend + frontend)
-python -m pytest tests/ -q --ignore=tests/frontend   # backend seul
-python -m pytest tests/frontend -q             # frontend seul (ajouter --headed pour voir le navigateur)
+uv run pytest -q                               # tout (backend + frontend)
+uv run pytest -q --ignore=tests/frontend       # backend seul
+uv run pytest tests/frontend -q                # frontend seul (ajouter --headed pour voir le navigateur)
 ```
 
 Les tests n'appellent jamais de vrai LLM : ils utilisent de faux agents, ou le mode simulation. Ils n'utilisent jamais la base du jeu : chaque test a sa base SQLite en mémoire (`tests/conftest.py`), et le compte admin du `.env` est ignoré. Les migrations sont testées : elles créent exactement les tables de `models.py` et peuvent être annulées puis rejouées.
@@ -300,7 +318,7 @@ Les tests n'appellent jamais de vrai LLM : ils utilisent de faux agents, ou le m
 Pour lancer les tests du backend sur PostgreSQL, sur une base dédiée créée au premier `docker compose up` et vidée avant chaque test :
 
 ```bash
-TEST_DATABASE_URL=postgresql+psycopg://lantern:lantern@localhost:5432/lantern_hollow_test python -m pytest tests/ -q --ignore=tests/frontend
+TEST_DATABASE_URL=postgresql+psycopg://lantern:lantern@localhost:5432/lantern_hollow_test uv run pytest -q --ignore=tests/frontend
 ``` `tests/integration/test_full_game.py` joue des parties complètes avec `scripts/check_full_game.py`. À lancer depuis la racine du projet.
 
 Les tests du frontend (`tests/frontend/`) pilotent un vrai navigateur avec Playwright. Ils ne demandent ni serveur lancé ni connexion internet : le dossier `static/` est servi localement, et le serveur (WebSocket et routes `/api`) est simulé.
@@ -308,7 +326,7 @@ Les tests du frontend (`tests/frontend/`) pilotent un vrai navigateur avec Playw
 Vérification du code (erreurs réelles uniquement, sans reformatage) :
 
 ```bash
-ruff check .
+uv run ruff check .
 ```
 
 ## État d'avancement
@@ -331,7 +349,7 @@ ruff check .
 
 ## Axes d'amélioration
 
-- **Docker pour le serveur** : aujourd'hui seule la base tourne dans Docker, le serveur se lance avec `python main.py`. Une image du serveur, ajoutée au `docker-compose.yml`, permettrait de tout lancer en une commande.
+- **Docker pour le serveur** : aujourd'hui seule la base tourne dans Docker, le serveur se lance avec `uv run main.py`. Une image du serveur, ajoutée au `docker-compose.yml`, permettrait de tout lancer en une commande.
 - **Une partie par joueur** : aujourd'hui une seule partie à la fois sur le serveur (une session globale), ce qui suffit en local. Il faudrait une session par joueur, et des messages publics limités à leur partie.
 - **Journaux du serveur** : aujourd'hui affichés dans la console seulement. S'ils sont un jour écrits dans des fichiers, limiter leur durée de conservation : ils contiennent des pseudos et des heures.
 

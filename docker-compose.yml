@@ -1,5 +1,5 @@
 # Services locaux du jeu : base PostgreSQL et faux serveur d'e-mails Mailpit
-# (le serveur du jeu, lui, se lance avec `python main.py`).
+# (le serveur du jeu, lui, se lance avec `uv run main.py`).
 #   docker compose up -d      démarrer
 #   docker compose ps         état des services
 #   docker compose down       arrêter (les données sont gardées dans le volume pgdata)

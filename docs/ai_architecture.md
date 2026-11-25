@@ -342,7 +342,7 @@ Aucun pour l'instant (voir les limites connues ci-dessous).
 ## 9. Tests
 
 ```
-python -m pytest tests/ -q
+uv run pytest -q
 ```
 
 | Fichier | Vérifie surtout |
