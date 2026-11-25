@@ -44,6 +44,7 @@ Provocateur, Parano, Bouffon, Stratège et Observateur (fichiers dans `skills/pe
 - **Suppression d'un compte**, la même par le joueur (tableau de bord, mot de passe demandé), par l'admin, ou automatiquement après **un an sans connexion**, un mois après un e-mail d'avertissement : le compte (pseudo, adresse e-mail, mot de passe), ses succès, le détail de ses parties et le registre de ses modifications sont effacés ; le résumé de ses parties est gardé de façon anonyme (détaché du compte, daté au jour près) pour les statistiques du jeu. Sa partie en cours est arrêtée. Le compte admin ne peut pas être supprimé.
 - **Statistiques :** parties jouées, part de victoires (au total, côté villageois, côté démons), nombre moyen de tours. Un abandon compte comme une défaite ; une partie interrompue par le serveur (arrêt, plantage) ne compte pas.
 - **Comparaison aux autres joueurs** (à partir de 10 joueurs, sinon une moyenne désigne presque quelqu'un) : sous chaque statistique, la moyenne de tous les joueurs (▲ / ▼ selon qu'on fait mieux ou moins bien), et sous chaque succès, la part des joueurs qui l'ont débloqué. Moyennes calculées par partie, y compris les parties anonymisées des comptes supprimés ; comptes admin exclus.
+- **Signaler un message d'une IA** (joueur connecté) : un drapeau apparaît au survol de chaque message d'un agent, sur la place publique comme en salon privé. Le joueur choisit le problème (révèle une information qu'il ne devrait pas connaître, incohérent ou contraire aux règles, sort de son personnage, contenu inapproprié, autre) et peut ajouter un commentaire (200 caractères ; obligatoire pour « Autre », jusqu'à 500). Un signalement par message, 10 par partie. Les signalements servent à améliorer les prompts à la main : ils ne sont **jamais renvoyés aux agents** (un commentaire de joueur dans un prompt ouvrirait la porte à la manipulation).
 - **Fermer l'onglet ne termine pas la partie :** elle attend le joueur, qui la reprend ou l'abandonne depuis l'accueil ou le tableau de bord.
 - **Succès** (14), calculés à la fin d'une partie gagnée ou perdue (pas d'un abandon) :
 
@@ -238,7 +239,7 @@ Une adresse inconnue affiche la page 404 du jeu ; les routes de l'API gardent le
 Ouvrir `http://127.0.0.1:8000/`, puis jouer en invité (un pseudo suffit), se connecter ou créer un compte. Une seule partie à la fois sur le serveur. L'interface (`static/index.html`, `static/js/`, `static/css/style.css`, avec Tailwind CSS) contient :
 
 - une table ronde et la liste des joueurs, avec une note de soupçon pour chacun ;
-- un chat par salon (public et privés), avec des onglets pour l'historique des nuits et des votes ;
+- un chat par salon (public et privés), avec des onglets pour l'historique des nuits et des votes, et un bouton pour signaler un message d'IA (joueur connecté) ;
 - un panneau d'actions qui change selon la phase (discussion, vote, nuit) ;
 - des fenêtres pour le rôle, le réveil du village, la proposition d'entretien d'un agent et la fin de partie ;
 - un menu : tableau de bord (nouvel onglet) et déconnexion pour un joueur connecté, création de compte ou connexion pour un invité, abandon de la partie. Après un rechargement de la page, la partie reprend où elle en était ;
@@ -255,7 +256,11 @@ La page d'administration (`http://127.0.0.1:8000/admin`) demande le compte admin
   - un bouton pour supprimer le compte à la demande du joueur, après confirmation (même suppression que depuis le tableau de bord). Le compte admin ne peut être ni réinitialisé ni supprimé ;
   - un bouton « Historique » : les parties du joueur, dont on peut afficher le **détail complet** (chat, votes, nuits, mémoire des IA) dans les sections du panel, et le **registre des modifications** de son compte (type et date : compte créé, adresse confirmée ou remplacée, pseudo ou mot de passe modifiés…).
 
+- les **signalements** des messages des IA, filtrables par statut (en attente par défaut), agent, personnalité, modèle et problème. Chacun montre le message, le modèle qui l'a écrit (bascule comprise), le moment, le commentaire et son auteur, avec un lien vers la partie quand son détail existe encore, et un bouton « Marquer comme traité ».
+
 Le détail d'une partie est enregistré à sa fin, pour les comptes seulement, et gardé **6 mois** ; le registre des modifications, **un an**. Tous deux sont supprimés avec le compte, et effacés automatiquement à échéance par la tâche de nettoyage quotidienne. Le joueur les retrouve dans l'export de ses données.
+
+Signalements (RGPD) : réservés aux comptes, pour ne rien collecter sur les invités. Le pseudo du joueur, que les agents citent souvent, est remplacé par « [joueur] » dans le message enregistré. À la suppression du compte, ses signalements sont gardés sans lien avec lui et **sans son commentaire** (texte libre) ; un signalement traité est supprimé **6 mois** après son traitement. Le joueur les retrouve dans l'export de ses données.
 
 ## Scripts
 
@@ -314,6 +319,7 @@ ruff check .
 - Interface web reliée au moteur, et parties dans le terminal
 - Comptes (invité ou compte, connexion par cookie avec le pseudo ou l'e-mail), adresse confirmée par e-mail, mot de passe oublié par e-mail, tableau de bord, statistiques, historique des parties, succès ; compte admin, réinitialisation des mots de passe et suppression des comptes
 - Page 404
+- Signalement des messages des IA par les joueurs connectés, suivi dans le panel admin (modèle qui a écrit le message)
 - Base PostgreSQL avec Docker Compose, migrations Alembic (SQLite toujours possible sans Docker)
 
 **À faire :**

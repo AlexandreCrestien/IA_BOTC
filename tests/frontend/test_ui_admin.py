@@ -354,3 +354,100 @@ def test_close_player_history(page, static_url):
     open_history(page, static_url)
     page.click("#close-player-history")
     expect(page.locator("#player-history")).to_be_hidden()
+
+
+# --- Signalements des messages des IA ---------------------------------------------------------------
+
+def report(id, agent, model, category, label, handled=False, game_link="detail", reporter="Vesper", comment=None,
+           personality="agitator"):
+    return {"id": id, "date": "2026-11-24T20:00:00+00:00", "agent": agent, "personality": personality,
+            "role_name": "Médium", "model": model, "channel": "public", "moment": "Jour 2",
+            "message": "<b>[joueur]</b> ment.", "category": category, "category_label": label, "comment": comment,
+            "reporter": reporter, "handled": handled, "handled_at": "2026-11-25T08:00:00+00:00" if handled else None,
+            "game_id": 7, "game_link": game_link}
+
+
+REPORTS = [
+    report(1, "Lord Ashcombe", "groq/openai/gpt-oss-20b", "knowledge", "Révèle une information qu'il ne devrait pas connaître",
+           comment="Il connaît mon rôle"),
+    report(2, "Mère Grimsby", "gemini/gemini-3.1-flash-lite", "character", "Sort de son personnage", game_link=None,
+           reporter=None, personality="clown"),
+    report(3, "Lord Ashcombe", None, "rules", "Incohérent ou contraire aux règles", handled=True,
+           game_link="current"),
+]
+
+
+class FakeReports:
+    def __init__(self, page):
+        self.statuses = []
+        page.route("**/admin/reports", lambda route: fulfill(route, body=REPORTS))
+        page.route("**/admin/reports/*/status", self._status)
+
+    def _status(self, route):
+        report_id = int(route.request.url.split("/")[-2])
+        handled = route.request.post_data_json["handled"]
+        self.statuses.append((report_id, handled))
+        fulfill(route, body={"id": report_id, "handled": handled,
+                             "handled_at": "2026-11-25T09:00:00+00:00" if handled else None})
+
+
+def open_reports(page, static_url):
+    mock_api(page)
+    mock_history(page)
+    fake = FakeReports(page)
+    login(page, static_url)
+    expect(page.locator("#reports-count")).to_have_text("(2 en attente)")
+    return fake
+
+
+def test_pending_reports_are_shown_by_default(page, static_url):
+    open_reports(page, static_url)
+    cards = page.locator("#reports-container .report-card")
+    expect(cards).to_have_count(2)
+    first = cards.nth(0)
+    expect(first).to_contain_text("Lord Ashcombe")
+    expect(first).to_contain_text("gpt-oss-20b")
+    expect(first).to_contain_text("Révèle une information qu'il ne devrait pas connaître — Il connaît mon rôle")
+    expect(first).to_contain_text("« <b>[joueur]</b> ment. »")  # texte des IA jamais interprété
+    expect(cards.nth(1)).to_contain_text("compte supprimé")
+    expect(cards.nth(1)).to_contain_text("Partie plus disponible")
+
+
+def test_reports_can_be_filtered(page, static_url):
+    open_reports(page, static_url)
+    page.select_option("#filter-status", "")
+    expect(page.locator("#reports-container .report-card")).to_have_count(3)
+    page.select_option("#filter-model", "gemini/gemini-3.1-flash-lite")
+    expect(page.locator("#reports-container .report-card")).to_have_count(1)
+    expect(page.locator("#reports-container")).to_contain_text("Mère Grimsby")
+
+    page.select_option("#filter-model", "*")
+    page.select_option("#filter-agent", "Lord Ashcombe")
+    page.select_option("#filter-category", "rules")
+    expect(page.locator("#reports-container .report-card")).to_have_count(1)
+    expect(page.locator("#reports-container")).to_contain_text("modèle : inconnu")
+
+    page.select_option("#filter-personality", "clown")
+    expect(page.locator("#reports-container")).to_contain_text("Aucun signalement pour ces filtres.")
+
+
+def test_report_can_be_marked_as_handled(page, static_url):
+    fake = open_reports(page, static_url)
+    page.locator(".report-card", has_text="Mère Grimsby").locator(".report-status-btn").click()
+    expect(page.locator("#reports-count")).to_have_text("(1 en attente)")
+    expect(page.locator("#reports-container .report-card")).to_have_count(1)
+    assert fake.statuses == [(2, True)]
+
+    page.select_option("#filter-status", "handled")
+    handled = page.locator(".report-card", has_text="Mère Grimsby")
+    expect(handled).to_contain_text("Traité le")
+    handled.locator(".report-status-btn").click()
+    expect(page.locator("#reports-count")).to_have_text("(2 en attente)")
+    assert fake.statuses == [(2, True), (2, False)]
+
+
+def test_report_links_to_its_game(page, static_url):
+    open_reports(page, static_url)
+    page.locator(".report-card", has_text="Lord Ashcombe").locator(".report-game-btn").click()
+    expect(page.locator("#viewing-past-game")).to_be_visible()
+    expect(page.locator("#public-history-container")).to_contain_text("Message d'une partie passée")

@@ -1,8 +1,9 @@
-"""Base de données : comptes, parties jouées et succès débloqués."""
+"""Base de données : comptes, parties jouées, succès débloqués et signalements."""
 from backend.db.database import get_session, init_db
 from backend.db.models import (
     COUNTED_STATUSES,
     AccountEvent,
+    AgentReport,
     EmailVerificationToken,
     GameDetail,
     GameRecord,
@@ -17,6 +18,7 @@ from backend.db.models import (
 __all__ = [
     "COUNTED_STATUSES",
     "AccountEvent",
+    "AgentReport",
     "EmailVerificationToken",
     "GameDetail",
     "GameRecord",

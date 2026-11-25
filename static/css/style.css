@@ -159,6 +159,58 @@ body {
   color: var(--foreground);
 }
 
+/* Signalement d'un message d'IA : petit drapeau qui apparaît au survol du message (toujours visible au toucher) */
+.report-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.25rem;
+  border-radius: 0.25rem;
+  color: var(--foreground);
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+.chat-message:hover .report-btn,
+.report-btn:focus-visible { opacity: 0.6; }
+.report-btn:hover,
+.report-btn:focus-visible { opacity: 1; color: oklch(0.72 0.17 25); outline: none; }
+@media (hover: none) { .report-btn { opacity: 0.5; } }
+.report-done {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  color: oklch(0.72 0.17 25);
+  opacity: 0.75;
+}
+.report-quote {
+  margin-top: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-left: 2px solid var(--gold-dim);
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-style: italic;
+  font-size: 0.95rem;
+  max-height: 6rem;
+  overflow-y: auto;
+  opacity: 0.9;
+}
+.report-category {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+.report-category input { margin-top: 0.2rem; accent-color: var(--gold); }
+.report-comment {
+  background-color: oklch(0 0 0 / 40%);
+  border: 1px solid var(--gold-dim);
+  border-radius: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  color: oklch(0.9 0.01 85);
+  resize: vertical;
+}
+.report-comment:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 2px oklch(0.76 0.115 80 / 25%); }
+
 /* Historique des nuits (onglet Nuits) */
 .night-history-turn { color: var(--gold); }
 .night-history-item.is-result {

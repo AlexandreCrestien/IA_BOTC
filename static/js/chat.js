@@ -79,9 +79,10 @@ function skipTurnPrompt() {
     hideTurnPrompt();
 }
 
-function receiveChatMessage(channelId, sender, content) {
+// messageId : message d'un agent IA, que le joueur connecté peut signaler ; reported : déjà signalé (reconnexion)
+function receiveChatMessage(channelId, sender, content, messageId = null, reported = false) {
     if (!gameState.messages[channelId]) gameState.messages[channelId] = [];
-    gameState.messages[channelId].push({ sender, content, time: currentTime() });
+    gameState.messages[channelId].push({ sender, content, time: currentTime(), message_id: messageId, reported });
     if (channelId === gameState.currentChannel) renderChatMessages();
 
     // Nouveau message public (hors messages du joueur lui-même) pendant qu'il regarde ailleurs
@@ -109,10 +110,11 @@ function renderSystemLine(text) {
 
 function renderChatMessage(m) {
     return `
-        <div class="flex animate-rise flex-col items-start my-3">
+        <div class="chat-message flex animate-rise flex-col items-start my-3">
             <div class="mb-0.5 flex items-baseline gap-2 px-1 text-[11px]">
                 <span class="font-semibold opacity-80">${escapeHtml(getPlayerName(m.sender))}</span>
                 ${m.time ? `<span class="opacity-50">${m.time}</span>` : ''}
+                ${renderReportButton(m)}
             </div>
             <p class="chat-bubble break-words rounded-lg rounded-tl-sm px-3 py-2 text-sm leading-relaxed">${escapeHtml(m.content)}</p>
         </div>
@@ -237,4 +239,112 @@ function renderNightInfoHistory() {
             </div>
         `;
     }).join('') + '</div>';
+}
+
+// ================= SIGNALEMENT D'UN MESSAGE D'IA =================
+// Réservé aux joueurs connectés dont la partie est rattachée au compte (rien n'est collecté sur les invités).
+// Mêmes catégories côté serveur : backend/server/reports.py (REPORT_CATEGORIES).
+const REPORT_CATEGORIES = {
+    knowledge: "Révèle une information qu'il ne devrait pas connaître",
+    rules: "Incohérent ou contraire aux règles",
+    character: "Sort de son personnage",
+    inappropriate: "Contenu inapproprié",
+    other: "Autre"
+};
+const REPORT_COMMENT_MAX = 200;       // commentaire facultatif
+const REPORT_OTHER_COMMENT_MAX = 500; // « Autre » : commentaire obligatoire
+const FLAG_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-3" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" x2="4" y1="22" y2="15"></line></svg>';
+
+let reportingMessageId = null;
+let gameNotLinked = false; // connecté en cours de partie, mais la partie n'a pas pu être rattachée au compte
+
+function canReport() {
+    return Boolean(currentUser) && !gameNotLinked;
+}
+
+function renderReportButton(m) {
+    if (!m.message_id || !canReport()) return '';
+    if (m.reported) return `<span class="report-done">${FLAG_ICON} Signalé</span>`;
+    return `<button type="button" class="report-btn" data-action="open-report" data-message="${escapeHtml(m.message_id)}"
+                aria-label="Signaler ce message de ${escapeHtml(getPlayerName(m.sender))}" title="Signaler ce message">${FLAG_ICON}</button>`;
+}
+
+function findChatMessage(messageId) {
+    for (const messages of Object.values(gameState.messages)) {
+        const found = messages.find(m => m.message_id === messageId);
+        if (found) return found;
+    }
+    return null;
+}
+
+function openReportModal(messageId) {
+    const message = findChatMessage(messageId);
+    if (!message || message.reported || !canReport()) return;
+    reportingMessageId = messageId;
+    document.getElementById('report-quote').textContent = `${getPlayerName(message.sender)} : « ${message.content} »`;
+    document.getElementById('report-categories').innerHTML = Object.entries(REPORT_CATEGORIES).map(([key, label]) => `
+        <label class="report-category">
+            <input type="radio" name="report-category" value="${key}">
+            <span>${escapeHtml(label)}</span>
+        </label>
+    `).join('');
+    document.getElementById('report-comment').value = '';
+    setFormError('report-error', null);
+    document.getElementById('report-submit').disabled = false;
+    updateReportComment();
+    openModal('modal-report');
+    document.querySelector('#report-categories input').focus();
+}
+
+function closeReportModal() {
+    reportingMessageId = null;
+    closeModal('modal-report');
+}
+
+function selectedReportCategory() {
+    return document.querySelector('#report-categories input:checked')?.value || null;
+}
+
+// « Autre » : commentaire obligatoire et plus long ; sinon facultatif et court
+function updateReportComment() {
+    const other = selectedReportCategory() === 'other';
+    const max = other ? REPORT_OTHER_COMMENT_MAX : REPORT_COMMENT_MAX;
+    const comment = document.getElementById('report-comment');
+    comment.maxLength = max;
+    if (comment.value.length > max) comment.value = comment.value.slice(0, max);
+    comment.required = other;
+    document.getElementById('report-comment-label').textContent = other
+        ? "Décrivez le problème (obligatoire)" : "Commentaire (facultatif)";
+    document.getElementById('report-count').textContent = `${comment.value.length} / ${max}`;
+}
+
+function submitReport() {
+    const category = selectedReportCategory();
+    const comment = document.getElementById('report-comment').value.trim();
+    if (!category) return setFormError('report-error', "Choisissez le problème.");
+    if (category === 'other' && !comment) return setFormError('report-error', "Décrivez le problème en quelques mots.");
+    const payload = { message_id: reportingMessageId, category, comment: comment || null };
+    if (!sendAction("report_message", payload)) {
+        return setFormError('report-error', "Connexion perdue : le signalement n'a pas été envoyé.");
+    }
+    setFormError('report-error', null);
+    document.getElementById('report-submit').disabled = true; // en attente de la réponse du serveur
+}
+
+// Réponse du serveur : message marqué « Signalé », ou motif du refus
+function handleReportResult(messageId, error) {
+    if (error) {
+        if (reportingMessageId === messageId) {
+            setFormError('report-error', error);
+            document.getElementById('report-submit').disabled = false;
+        } else {
+            appendSystemMessage(error);
+        }
+        return;
+    }
+    const message = findChatMessage(messageId);
+    if (message) message.reported = true;
+    if (reportingMessageId === messageId) closeReportModal();
+    renderChatMessages();
+    appendSystemMessage("Merci : votre signalement a été transmis à l'équipe.");
 }

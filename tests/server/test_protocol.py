@@ -87,4 +87,5 @@ def test_relay_keeps_the_request_and_sends_ids(monkeypatch):
     assert types == ["role_assigned", "game_state", "action_request", "game_state", "chat"]  # rôle une seule fois
     assert sent[2] == {"type": "action_request", "kind": "vote", "candidates": ["imp", "h"],
                        "max_targets": None, "min_targets": None, "role": None}
-    assert sent[4] == {"type": "chat", "channel_id": "public", "sender": "imp", "content": "Bonjour"}
+    assert sent[4] == {"type": "chat", "channel_id": "public", "sender": "imp", "content": "Bonjour",
+                       "message_id": "m1", "reported": False}  # message d'IA : identifiant pour le signaler

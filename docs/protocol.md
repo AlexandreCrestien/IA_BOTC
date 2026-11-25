@@ -14,7 +14,8 @@ La connexion à un compte est un **jeton JWT dans un cookie `HttpOnly`** (`lh_se
 
 | Fichier | Rôle |
 |---|---|
-| `backend/server/session.py` | `GameSession` : la partie en cours (tâches, port du moteur, état, demande en attente, chat, salons, historiques). `current_session()` |
+| `backend/server/session.py` | `GameSession` : la partie en cours (tâches, port du moteur, état, demande en attente, chat, salons, historiques, messages des IA signalables). `current_session()` |
+| `backend/server/reports.py` | Signalements des messages des IA : règles, enregistrement (pseudo retiré, modèle gardé) |
 | `backend/server/protocol.py` | Traduction des demandes du moteur en messages, envoi, reprise après reconnexion |
 | `backend/server/websocket_endpoint.py` | Endpoint `/ws/{pseudo}` et un traitement par action du front |
 | `backend/server/game_runner.py` | Boucle de partie, lancement, refus, abandon |
@@ -52,6 +53,7 @@ Format : `{"action": "<nom>", "payload": {...}}`.
 | `submit_night_action` | `targets` : ids | Pouvoir de nuit |
 | `skip_turn` | `kind` : `public_message`, `private_message` ou `private_partners` | Passer une étape facultative |
 | `abandon_game` | — | Abandon : le front revient à l'accueil |
+| `report_message` | `message_id`, `category` (`knowledge`, `rules`, `character`, `inappropriate`, `other`), `comment` (facultatif, 200 caractères ; obligatoire pour `other`, 500 caractères) | Signalement d'un message d'agent IA, joueur connecté seulement (10 par partie, un par message). Réponse : `report_result` |
 
 Une action hors de son moment, ou avec un choix non proposé, reçoit un message `error`.
 
@@ -66,7 +68,7 @@ Une action hors de son moment, ou avec un choix non proposé, reçoit un message
 | `action_request` | `kind` (`nuit` / `vote` / `discussion`), `candidates` (ids), `max_targets`, `min_targets`, `role` (nom anglais, nuit) | Encadré d'action |
 | `input_request` | `kind` (`public_message` / `private_message`), `channel_id`, `text`, `left` | Bandeau « c'est à vous d'écrire » |
 | `agent_whisper_request` | `agent_id` | Un agent propose un entretien (modale) |
-| `chat` | `channel_id`, `sender` (id, ou `"Codex"` pour les annonces), `content` | Message de chat |
+| `chat` | `channel_id`, `sender` (id, ou `"Codex"` pour les annonces), `content`, `message_id` (messages des IA seulement, sinon `null`), `reported` (déjà signalé, pour la reprise) | Message de chat. Le modèle qui a écrit un message d'IA reste sur le serveur |
 | `private_channel_opened` | `channel_id`, `members` (ids), `text`, `focus` | Ouverture (ou réouverture) d'un salon privé |
 | `night_info` | `turn`, `info`, `allies` | Information de nuit ; `allies` [`id`, `role`] pour le camp du mal, la première nuit |
 | `night_result` | `turn`, `dead_player` (id ou `null`) | Réveil du village |
@@ -77,6 +79,7 @@ Une action hors de son moment, ou avec un choix non proposé, reçoit un message
 | `error` | `data` | Action refusée ou invalide |
 | `game_over` | `winner` (`good` / `evil`), `details`, `achievements` [`code`, `title`, `description`, `message`] | Fin de partie ; succès débloqués par la partie (joueur connecté) |
 | `game_abandoned` | — | Abandon confirmé |
+| `report_result` | `message_id`, `error` (motif du refus, `null` si le signalement est enregistré) | Réponse à `report_message`, à part des `error` : la demande en cours n'est pas touchée |
 | `game_interrupted` | `text` | La partie a planté : le front propose d'en relancer une |
 
 ## Routes HTTP
@@ -125,6 +128,8 @@ Réponses en JSON. Une erreur renvoie `{"detail": "<message en français>"}`, af
 | `GET /admin/games/{id}` | `game` (résumé et `pseudo`) et `detail` (même forme que `/admin/debug/all-states`). 404 si le détail a été effacé (plus de 6 mois) |
 | `GET /admin/users/{id}/events` | Registre des modifications du compte, du plus récent au plus ancien : `kind`, `label`, `date` |
 | `DELETE /admin/users/{id}` | 204 : même suppression que `DELETE /api/account` ; sa partie en cours est arrêtée (l'écran de jeu reçoit `game_abandoned`). Refusé pour le compte admin |
+| `GET /admin/reports` | Signalements des messages des IA, du plus récent au plus ancien : agent, personnalité, rôle, modèle, moment, canal, message (pseudo remplacé par « [joueur] »), problème, commentaire, auteur (`null` : compte supprimé), statut, `game_link` (`"detail"`, `"current"` ou `null`) |
+| `PUT /admin/reports/{id}/status` | `{handled}` : signalement traité (supprimé 6 mois plus tard) ou remis en attente |
 
 ### Adresse inconnue
 

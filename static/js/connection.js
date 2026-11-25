@@ -122,7 +122,10 @@ function handleServerMessage(data) {
             guestToken = data.guest_token; // jamais affiché : envoyé seulement avec une inscription ou une connexion
             break;
         case "chat":
-            receiveChatMessage(data.channel_id || "public", data.sender, data.content);
+            receiveChatMessage(data.channel_id || "public", data.sender, data.content, data.message_id, data.reported);
+            break;
+        case "report_result":
+            handleReportResult(data.message_id, data.error);
             break;
         case "game_state":
             updateGameState(data.state);

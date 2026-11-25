@@ -81,6 +81,26 @@ async def send_chat(session: GameSession, channel_id: str, sender: str, content:
     """Envoie un message de chat et le garde pour le renvoyer après une reconnexion.
     broadcast=True : message de la place publique, diffusé à toutes les connexions."""
     message = ChatMessage(channel_id=channel_id, sender=sender, content=content)
+    await _send_chat_message(session, message, broadcast)
+
+
+async def send_agent_message(session: GameSession, channel_id: str, agent_id: str, text: str) -> None:
+    """Message d'un agent IA : il reçoit un identifiant, et le serveur retient de quoi le signaler
+    (agent, modèle qui l'a écrit, moment, canal). Le modèle n'est jamais envoyé au front."""
+    message_id = f"m{len(session.ai_messages) + 1}"
+    message = ChatMessage(channel_id=channel_id, sender=agent_id, content=text, message_id=message_id)
+    session.ai_messages[message_id] = {
+        "agent": agent_id,
+        "model": getattr(text, "model", None),  # LLMText (backend/ai/llm_client.py)
+        "turn": session.state.turn,
+        "phase": session.state.phase.value,
+        "channel": "public" if channel_id == PUBLIC_CHANNEL else "private",
+        "message": message,
+    }
+    await _send_chat_message(session, message, broadcast=False)
+
+
+async def _send_chat_message(session: GameSession, message: ChatMessage, broadcast: bool) -> None:
     session.chat_log.append(message)
     if broadcast:
         await manager.broadcast(message.model_dump())
@@ -187,7 +207,7 @@ async def send_request(session: GameSession, request: dict) -> None:
 
     elif kind == "public_chat":
         # Message public d'un agent IA, pendant la discussion du jour
-        await send_chat(session, PUBLIC_CHANNEL, request["author"], request["text"])
+        await send_agent_message(session, PUBLIC_CHANNEL, request["author"], request["text"])
 
     elif kind == "agent_meeting":
         # Deux agents s'entretiennent en privé pendant le salon du joueur : annonce publique
@@ -224,7 +244,7 @@ async def send_request(session: GameSession, request: dict) -> None:
             logger.warning("Réponses privées sans salon ouvert pour %s", human)
             return
         for reply in request["replies"]:
-            await send_chat(session, session.whisper, reply["author"], reply["text"])
+            await send_agent_message(session, session.whisper, reply["author"], reply["text"])
 
     # Fin de tour et fin de partie (posées dans la file par game_runner, pour garder l'ordre)
     elif kind == "vote_result":

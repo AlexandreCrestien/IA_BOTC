@@ -1,19 +1,22 @@
 """Routes du panneau d'administration, réservées au compte admin (cookie de connexion, voir auth.py) :
 état complet de la partie en cours, comptes (réinitialisation du mot de passe, suppression), parties passées
-d'un joueur avec leur détail, registre des modifications d'un compte."""
+d'un joueur avec leur détail, registre des modifications d'un compte, signalements des messages des IA."""
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.accounts import service
 from backend.accounts.service import AccountError
-from backend.db import AccountEvent, GameDetail, GameRecord, User, iso_utc
+from backend.db import AccountEvent, AgentReport, GameDetail, GameRecord, User, iso_utc
+from backend.db.models import utcnow
 from backend.rules import get_role
 from backend.server.auth import admin_user, db_session, notify_password_changed
 from backend.server.account_removal import remove_account
 from backend.server.game_view import game_view
+from backend.server.reports import REPORT_CATEGORIES
 from backend.server.session import current_session
 
 logger = logging.getLogger(__name__)
@@ -103,6 +106,55 @@ def user_events(user_id: int, db: Session = Depends(db_session)) -> list[dict]:
                         .order_by(AccountEvent.created_at.desc(), AccountEvent.id.desc())).all()
     return [{"kind": e.kind, "label": service.ACCOUNT_EVENTS.get(e.kind, e.kind), "date": iso_utc(e.created_at)}
             for e in events]
+
+
+def _game_link(game_id, with_detail: set[int]):
+    """Partie d'un signalement : "detail" (détail enregistré), "current" (partie en cours ou dernière terminée,
+    pas encore enregistrée) ou None (partie d'un compte supprimé, ou détail effacé au bout de 6 mois)."""
+    if game_id is None:
+        return None
+    if game_id in with_detail:
+        return "detail"
+    session = current_session()
+    return "current" if session is not None and session.record_id == game_id else None
+
+
+@router.get("/reports")
+def list_reports(db: Session = Depends(db_session)) -> list[dict]:
+    """Signalements des messages des IA, du plus récent au plus ancien (filtrés par le panel)."""
+    reports = db.scalars(select(AgentReport).order_by(AgentReport.created_at.desc(), AgentReport.id.desc())).all()
+    game_ids = {r.game_id for r in reports if r.game_id is not None}
+    with_detail = set(db.scalars(select(GameDetail.game_id).where(GameDetail.game_id.in_(game_ids))))
+    pseudos = dict(db.execute(select(User.id, User.pseudo).where(
+        User.id.in_({r.user_id for r in reports if r.user_id is not None}))).all())
+    return [
+        {
+            "id": r.id, "date": iso_utc(r.created_at), "agent": r.agent, "personality": r.personality,
+            "role_name": get_role(r.role).name_FR, "model": r.model, "channel": r.channel, "moment": r.moment,
+            "message": r.message, "category": r.category, "category_label": REPORT_CATEGORIES.get(r.category, r.category),
+            "comment": r.comment, "reporter": pseudos.get(r.user_id),  # None : compte supprimé
+            "handled": r.handled_at is not None,
+            "handled_at": iso_utc(r.handled_at) if r.handled_at else None,
+            "game_id": r.game_id, "game_link": _game_link(r.game_id, with_detail),
+        }
+        for r in reports
+    ]
+
+
+class ReportStatus(BaseModel):
+    handled: bool
+
+
+@router.put("/reports/{report_id}/status")
+def set_report_status(report_id: int, body: ReportStatus, db: Session = Depends(db_session)) -> dict:
+    """Marque un signalement comme traité (supprimé 6 mois plus tard) ou le remet en attente."""
+    report = db.get(AgentReport, report_id)
+    if report is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Signalement introuvable.")
+    report.handled_at = utcnow() if body.handled else None
+    db.commit()
+    return {"id": report.id, "handled": body.handled,
+            "handled_at": iso_utc(report.handled_at) if report.handled_at else None}
 
 
 @router.get("/debug/all-states")

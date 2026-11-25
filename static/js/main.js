@@ -38,7 +38,10 @@ const CLICK_ACTIONS = {
     'open-account':      el => openAccountModal(el.dataset.mode),
     'close-account':     () => closeAccountModal(),
     'switch-account-mode': () => switchAccountMode(),
-    'new-game':          () => startNewGame()
+    'new-game':          () => startNewGame(),
+    // Signalement d'un message d'IA (chat.js)
+    'open-report':       el => openReportModal(el.dataset.message),
+    'close-report':      () => closeReportModal()
 };
 
 document.addEventListener('click', (event) => {
@@ -84,6 +87,15 @@ document.getElementById('account-form').addEventListener('submit', (event) => {
     submitGameAccount();
 });
 
+document.getElementById('report-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    submitReport();
+});
+
+// Fenêtre de signalement : catégorie choisie (« Autre » rend le commentaire obligatoire), compteur de caractères
+document.getElementById('report-form').addEventListener('change', updateReportComment);
+document.getElementById('report-comment').addEventListener('input', updateReportComment);
+
 document.getElementById('chat-form').addEventListener('submit', (event) => {
     event.preventDefault();
     sendChatMessage();
@@ -98,13 +110,14 @@ document.getElementById('chat-input').addEventListener('keydown', (event) => {
     }
 });
 
-// Échap ferme le Codex, le menu, la fenêtre de compte et la confirmation d'abandon
+// Échap ferme le Codex, le menu, la fenêtre de compte, la confirmation d'abandon et le signalement
 document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
         closeCodexModal();
         toggleGameMenu(false);
         closeAccountModal();
         closeModal('modal-abandon');
+        closeReportModal();
     }
 });
 

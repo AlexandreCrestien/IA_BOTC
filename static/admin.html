@@ -149,6 +149,30 @@
                 </div>
             </section>
 
+            <!-- SIGNALEMENTS : messages des IA signalés par les joueurs connectés -->
+            <section class="admin-section rounded-2xl p-6 space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <h2 class="admin-section-title flex-1">Signalements <span id="reports-count" class="opacity-60 text-base"></span></h2>
+                </div>
+                <p class="text-xs opacity-60">Messages des IA signalés par les joueurs connectés. Un signalement traité est supprimé 6 mois après son traitement ; à la suppression d'un compte, ses signalements sont gardés sans lien avec lui et sans son commentaire.</p>
+                <div id="reports-filters" class="admin-filters">
+                    <label>Statut
+                        <select id="filter-status" class="admin-select">
+                            <option value="pending">En attente</option>
+                            <option value="handled">Traités</option>
+                            <option value="">Tous</option>
+                        </select>
+                    </label>
+                    <label>Agent <select id="filter-agent" class="admin-select"></select></label>
+                    <label>Personnalité <select id="filter-personality" class="admin-select"></select></label>
+                    <label>Modèle <select id="filter-model" class="admin-select"></select></label>
+                    <label>Problème <select id="filter-category" class="admin-select"></select></label>
+                </div>
+                <div id="reports-container" class="flex flex-col gap-3 text-sm">
+                    <span class="italic opacity-60">Aucun signalement.</span>
+                </div>
+            </section>
+
             <!-- JOUEURS : rôles, camps, personnalités (tout est visible dans l'admin) -->
             <section class="admin-section rounded-2xl p-6 space-y-4">
                 <h2 class="admin-section-title">Joueurs</h2>

@@ -4,6 +4,7 @@
 const ADMIN_API_URL = "/admin/debug/all-states";
 const USERS_API_URL = "/admin/users";
 const GAMES_API_URL = "/admin/games";
+const REPORTS_API_URL = "/admin/reports";
 const STATUS_LABELS = { won: "Victoire", lost: "Défaite", abandoned: "Défaite (abandon)",
                         interrupted: "Interrompue", in_progress: "En cours" };
 const SIDE_LABELS = { good: "Villageois", evil: "Démons" };
@@ -14,6 +15,7 @@ const NOT_ADMIN = "Ce compte n'a pas accès au panneau d'administration.";
 // Données gardées en mémoire pour changer d'agent sans refaire de requête
 let currentAdminData = null;
 let selectedAgentId = null;
+let allReports = []; // signalements chargés, filtrés à l'affichage
 
 // Au chargement : branchement des événements, puis connexion directe si un jeton est mémorisé
 window.addEventListener('DOMContentLoaded', () => {
@@ -30,6 +32,7 @@ window.addEventListener('DOMContentLoaded', () => {
         if (event.key === 'Escape') closeDeleteModal();
     });
     document.getElementById('logout-btn').addEventListener('click', logout);
+    document.getElementById('reports-filters').addEventListener('change', renderReports);
 
     // Déjà connecté (cookie) : panneau directement ; sinon l'écran de connexion reste affiché, sans erreur
     fetchAdminData({ silent: true });
@@ -155,7 +158,7 @@ async function fetchAdminData({ silent = false } = {}) {
         `Mis à jour à ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
 
     renderDashboard(data);
-    await fetchAccounts();
+    await Promise.all([fetchAccounts(), fetchReports()]);
 }
 
 // ================= COMPTES =================
@@ -220,6 +223,120 @@ function renderAccounts(users) {
     container.querySelectorAll('.history-btn').forEach(btn => {
         btn.addEventListener('click', () => openPlayerHistory(btn.dataset.userId, btn.dataset.pseudo));
     });
+}
+
+// ================= SIGNALEMENTS DES MESSAGES DES IA =================
+// Filtres : statut, agent, personnalité, modèle, problème (choix construits d'après les signalements chargés)
+const REPORT_FILTERS = [
+    { id: 'filter-agent', field: 'agent', all: "Tous" },
+    { id: 'filter-personality', field: 'personality', all: "Toutes" },
+    { id: 'filter-model', field: 'model', all: "Tous", empty: "inconnu" },
+    { id: 'filter-category', field: 'category', all: "Tous", label: r => r.category_label },
+];
+const CHANNEL_LABELS = { public: "place publique", private: "salon privé" };
+
+async function fetchReports() {
+    const result = await getJson(REPORTS_API_URL);
+    if (!result) return;
+    allReports = result.ok && Array.isArray(result.body) ? result.body : null;
+    buildReportFilters();
+    renderReports();
+}
+
+function buildReportFilters() {
+    const reports = allReports || [];
+    for (const filter of REPORT_FILTERS) {
+        const select = document.getElementById(filter.id);
+        const previous = select.options.length ? select.value : '*'; // choix gardé après une actualisation
+        const options = new Map();
+        reports.forEach(r => options.set(r[filter.field] ?? '', filter.label ? filter.label(r) : (r[filter.field] ?? filter.empty)));
+        select.innerHTML = `<option value="*">${filter.all}</option>` + [...options.entries()]
+            .sort((a, b) => String(a[1]).localeCompare(String(b[1]), 'fr'))
+            .map(([value, label]) => `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`).join('');
+        select.value = options.has(previous) ? previous : '*';
+    }
+}
+
+function filteredReports() {
+    const status = document.getElementById('filter-status').value;
+    return allReports.filter(r =>
+        (status === '' || r.handled === (status === 'handled'))
+        && REPORT_FILTERS.every(f => {
+            const value = document.getElementById(f.id).value;
+            return value === '*' || (r[f.field] ?? '') === value;
+        }));
+}
+
+function renderReports() {
+    const container = document.getElementById('reports-container');
+    const count = document.getElementById('reports-count');
+    if (allReports === null) {
+        count.textContent = '';
+        container.innerHTML = emptyLine("Impossible de charger les signalements.");
+        return;
+    }
+    const pending = allReports.filter(r => !r.handled).length;
+    count.textContent = `(${pending} en attente)`;
+    const reports = filteredReports();
+    if (!reports.length) {
+        container.innerHTML = emptyLine(allReports.length ? "Aucun signalement pour ces filtres." : "Aucun signalement.");
+        return;
+    }
+    container.innerHTML = reports.map(r => `
+        <article class="report-card ${r.handled ? 'is-handled' : ''}">
+            <div class="flex flex-wrap items-baseline justify-between gap-2">
+                <div>
+                    <span class="font-semibold">${escapeHtml(r.agent)}</span>
+                    <span class="opacity-70">· ${escapeHtml(r.personality)} · ${escapeHtml(r.role_name)}</span>
+                    <span class="opacity-70">· modèle : ${r.model ? `<code>${escapeHtml(r.model)}</code>` : 'inconnu'}</span>
+                </div>
+                <span class="text-xs opacity-60">${escapeHtml(formatDateTime(r.date))}</span>
+            </div>
+            <div class="text-xs opacity-70 mt-1">${escapeHtml(r.moment)}, ${escapeHtml(CHANNEL_LABELS[r.channel] || r.channel)}
+                · signalé par ${r.reporter ? escapeHtml(r.reporter) : '<span class="italic">compte supprimé</span>'}</div>
+            <p class="report-message">« ${escapeHtml(r.message)} »</p>
+            <p><span class="report-problem">${escapeHtml(r.category_label)}</span>${r.comment ? ` — ${escapeHtml(r.comment)}` : ''}</p>
+            <div class="flex flex-wrap items-center gap-2 mt-3">
+                ${renderReportGameLink(r)}
+                <button type="button" class="btn-ghost admin-btn report-status-btn" data-report-id="${escapeHtml(r.id)}"
+                    data-handled="${r.handled ? 'false' : 'true'}">${r.handled ? "Remettre en attente" : "Marquer comme traité"}</button>
+                ${r.handled ? `<span class="text-xs opacity-60">Traité le ${escapeHtml(formatDate(r.handled_at))}</span>` : ''}
+            </div>
+        </article>
+    `).join('');
+    container.querySelectorAll('.report-status-btn').forEach(btn => {
+        btn.addEventListener('click', () => setReportStatus(btn.dataset.reportId, btn.dataset.handled === 'true'));
+    });
+    container.querySelectorAll('.report-game-btn').forEach(btn => {
+        btn.addEventListener('click', () => btn.dataset.link === 'current' ? backToCurrentGame() : showPastGame(btn.dataset.gameId));
+    });
+}
+
+// Lien vers la partie : détail enregistré, partie en cours (pas encore enregistrée), ou plus disponible
+function renderReportGameLink(r) {
+    if (!r.game_link) return '<span class="text-xs opacity-50">Partie plus disponible</span>';
+    const label = r.game_link === 'current' ? "Voir la partie en cours" : "Voir la partie";
+    return `<button type="button" class="btn-ghost admin-btn report-game-btn" data-link="${escapeHtml(r.game_link)}"
+                data-game-id="${escapeHtml(r.game_id)}">${label}</button>`;
+}
+
+async function setReportStatus(reportId, handled) {
+    try {
+        const response = await fetch(`${REPORTS_API_URL}/${encodeURIComponent(reportId)}/status`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ handled }),
+        });
+        if (response.status === 401) return showLoginScreen("Votre session a expiré. Reconnectez-vous.");
+        if (!response.ok) return showNotice("Le statut du signalement n'a pas pu être modifié.");
+        const body = await response.json();
+        const report = allReports.find(r => String(r.id) === String(reportId));
+        if (report) Object.assign(report, { handled: body.handled, handled_at: body.handled_at });
+        renderReports();
+    } catch (err) {
+        console.error(err);
+        showNotice("Impossible de joindre le serveur.");
+    }
 }
 
 // ================= HISTORIQUE D'UN JOUEUR =================

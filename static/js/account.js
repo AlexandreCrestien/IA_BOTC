@@ -325,6 +325,8 @@ async function submitGameAccount() {
         welcome += ` Un lien de confirmation a été envoyé à ${body.email} : confirmez votre adresse pour accéder `
             + "à votre tableau de bord.";
     }
+    gameNotLinked = !body.game_claimed; // signalements réservés aux parties rattachées au compte
+    renderChatMessages(); // boutons « Signaler » sur les messages des IA
     if (!body.game_claimed) {
         appendSystemMessage(`${welcome} Cette partie n'a pas pu être rattachée à votre compte.`);
     } else if (gameIsOver) {

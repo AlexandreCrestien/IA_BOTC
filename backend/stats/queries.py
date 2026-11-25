@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from backend.db import (
     COUNTED_STATUSES,
     AccountEvent,
+    AgentReport,
     GameDetail,
     GameRecord,
     GameStatus,
@@ -114,9 +115,10 @@ ALIGNMENT_LABELS = {Alignment.GOOD: "Villageois", Alignment.EVIL: "Démons"}
 def export_account(db: Session, user: User) -> dict:
     """Copie de toutes les données du compte (droit d'accès du RGPD), lisible par une personne :
     compte, registre de ses modifications, parties (partie en cours comprise, avec leur détail tant qu'il est
-    gardé), succès débloqués et statistiques.
+    gardé), succès débloqués, statistiques et signalements de messages des IA.
     Ni le mot de passe (seule son empreinte est stockée, jamais exportée) ni la version de jeton."""
     from backend.accounts.service import ACCOUNT_EVENTS  # import local : le service des comptes importe ce module
+    from backend.server.reports import REPORT_CATEGORIES
     games = list(db.scalars(select(GameRecord).where(GameRecord.user_id == user.id)
                             .order_by(GameRecord.started_at, GameRecord.id)))
     details = {d.game_id: d.data for d in db.scalars(
@@ -125,13 +127,17 @@ def export_account(db: Session, user: User) -> dict:
                         .order_by(AccountEvent.created_at, AccountEvent.id))
     unlocked = db.scalars(select(UnlockedAchievement).where(UnlockedAchievement.user_id == user.id)
                           .order_by(UnlockedAchievement.unlocked_at, UnlockedAchievement.id))
+    reports = db.scalars(select(AgentReport).where(AgentReport.user_id == user.id)
+                         .order_by(AgentReport.created_at, AgentReport.id))
     return {
         "export": {
             "service": "Lantern Hollow",
             "generated_at": iso_utc(utcnow()),
             "contents": "Toutes les données enregistrées pour votre compte. Les dates sont en UTC.",
             "retention": "Le détail de chaque partie (messages, votes, actions, mémoire des personnages) est gardé "
-                         "6 mois pour le service client ; le registre des modifications du compte, un an. Votre mot "
+                         "6 mois pour le service client ; le registre des modifications du compte, un an. Un signalement "
+                         "traité est supprimé 6 mois après son traitement ; si vous supprimez votre compte, vos "
+                         "signalements sont gardés sans lien avec vous et sans votre commentaire. Votre mot "
                          "de passe n'est pas stocké : seule une empreinte chiffrée l'est, et elle n'est pas exportée.",
         },
         "account": {
@@ -166,6 +172,18 @@ def export_account(db: Session, user: User) -> dict:
             for a in unlocked
         ],
         "statistics": player_stats(db, user.id),
+        "reports": [
+            {
+                "date": iso_utc(r.created_at),
+                "agent": r.agent,
+                "moment": r.moment,
+                "message": r.message,
+                "problem": REPORT_CATEGORIES.get(r.category, r.category),
+                "comment": r.comment,
+                "handled": r.handled_at is not None,
+            }
+            for r in reports
+        ],
     }
 
 

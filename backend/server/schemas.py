@@ -89,6 +89,20 @@ class AbandonGameAction(BaseAction):
     payload: AbandonGamePayload = Field(default_factory=AbandonGamePayload)
 
 
+class ReportMessagePayload(StrictInput):
+    message_id: str = Field(..., description="Identifiant du message de l'agent IA (reçu dans le message de chat)")
+    category: Literal["knowledge", "rules", "character", "inappropriate", "other"] = Field(
+        ..., description="Problème : information qu'il ne devrait pas connaître, incohérent ou contraire aux règles, "
+                         "sort de son personnage, contenu inapproprié, autre")
+    comment: Optional[str] = Field(default=None, max_length=500,
+                                   description="Commentaire : facultatif (200 caractères), obligatoire pour « other »")
+
+class ReportMessageAction(BaseAction):
+    """Signaler un message d'un agent IA (joueur connecté seulement)."""
+    action: Literal["report_message"] = "report_message"
+    payload: ReportMessagePayload
+
+
 # Le type d'action est choisi uniquement d'après le champ "action" (obligatoire dans le paquet reçu).
 ClientActionPacket = Annotated[
     Union[
@@ -100,6 +114,7 @@ ClientActionPacket = Annotated[
         DiscussionTimeoutAction,
         SkipTurnAction,
         AbandonGameAction,
+        ReportMessageAction,
     ],
     Field(discriminator="action"),
 ]
@@ -205,6 +220,8 @@ class ChatMessage(OutMessage):
     channel_id: str
     sender: str = Field(..., description="Identifiant du joueur, ou « Codex » pour les annonces")
     content: str
+    message_id: Optional[str] = Field(default=None, description="Message d'un agent IA : identifiant pour le signaler")
+    reported: bool = Field(default=False, description="Message déjà signalé par le joueur (renvoyé à la reconnexion)")
 
 
 class PrivateChannelOpened(OutMessage):
@@ -249,6 +266,13 @@ class VoteResult(OutMessage):
 class Announcement(OutMessage):
     type: Literal["announcement"] = "announcement"
     text: str
+
+
+class ReportResult(OutMessage):
+    """Réponse à un signalement de message d'agent IA (à part des erreurs : la demande en cours n'est pas touchée)."""
+    type: Literal["report_result"] = "report_result"
+    message_id: str
+    error: Optional[str] = Field(default=None, description="Motif du refus ; vide si le signalement est enregistré")
 
 
 class Error(OutMessage):

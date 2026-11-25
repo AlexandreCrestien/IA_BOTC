@@ -8,7 +8,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Iterable, NamedTuple, Optional
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -17,6 +17,7 @@ from backend.accounts.pseudo import INVALID_PSEUDO, normalize_pseudo, pseudo_is_
 from backend.accounts.tokens import read_token
 from backend.db import (
     AccountEvent,
+    AgentReport,
     EmailVerificationToken,
     GameDetail,
     GameRecord,
@@ -44,6 +45,8 @@ UNVERIFIED_ACCOUNT_LIFETIME = timedelta(hours=72)
 # Durées de conservation (RGPD) : détail des parties (panel admin) et registre des modifications des comptes
 GAME_DETAIL_LIFETIME = timedelta(days=183)   # 6 mois
 ACCOUNT_EVENT_LIFETIME = timedelta(days=365)  # 1 an
+# Signalement d'un message d'IA traité : supprimé 6 mois après son traitement (en attente : gardé jusque-là)
+HANDLED_REPORT_LIFETIME = timedelta(days=183)
 
 # Registre des modifications : type d'événement -> libellé affiché dans le panel admin
 ACCOUNT_EVENTS = {
@@ -361,11 +364,13 @@ def delete_unverified_accounts(db: Session, keep: Iterable[int] = (), now: Optio
 
 
 def delete_expired_records(db: Session, now: Optional[datetime] = None) -> int:
-    """Durées de conservation : efface le détail des parties de plus de 6 mois et le registre des
-    modifications de plus d'un an. Renvoie le nombre de lignes effacées."""
+    """Durées de conservation : efface le détail des parties de plus de 6 mois, le registre des
+    modifications de plus d'un an et les signalements traités depuis plus de 6 mois.
+    Renvoie le nombre de lignes effacées."""
     now = now or utcnow()
     count = db.execute(delete(GameDetail).where(GameDetail.created_at < now - GAME_DETAIL_LIFETIME)).rowcount
     count += db.execute(delete(AccountEvent).where(AccountEvent.created_at < now - ACCOUNT_EVENT_LIFETIME)).rowcount
+    count += db.execute(delete(AgentReport).where(AgentReport.handled_at < now - HANDLED_REPORT_LIFETIME)).rowcount
     db.commit()
     return count
 
@@ -402,7 +407,9 @@ def delete_account(db: Session, user: User, reason: str = "à sa demande") -> No
     - supprimés : le compte (pseudo, adresse e-mail, mot de passe), ses succès, ses liens envoyés par e-mail,
       le registre de ses modifications et le détail de ses parties (chat, mémoire des IA) ;
     - gardées, anonymisées : ses parties, détachées du compte et datées au jour près (sans l'heure), pour les
-      statistiques du jeu. Elles ne permettent plus de retrouver le joueur.
+      statistiques du jeu. Elles ne permettent plus de retrouver le joueur ;
+    - gardés, anonymisés : ses signalements de messages des IA, détachés du compte et sans son commentaire
+      (texte libre). Ils ne concernent plus que l'IA.
     Le compte admin ne peut pas être supprimé. L'appelant arrête d'abord la partie en cours du compte."""
     if user.is_admin:
         raise AccountError("Le compte administrateur ne peut pas être supprimé.")
@@ -411,6 +418,7 @@ def delete_account(db: Session, user: User, reason: str = "à sa demande") -> No
     db.execute(delete(PasswordResetToken).where(PasswordResetToken.user_id == user.id))
     db.execute(delete(EmailVerificationToken).where(EmailVerificationToken.user_id == user.id))
     db.execute(delete(AccountEvent).where(AccountEvent.user_id == user.id))
+    db.execute(update(AgentReport).where(AgentReport.user_id == user.id).values(user_id=None, comment=None))
     game_ids = select(GameRecord.id).where(GameRecord.user_id == user.id)
     db.execute(delete(GameDetail).where(GameDetail.game_id.in_(game_ids)))
     for game in db.scalars(select(GameRecord).where(GameRecord.user_id == user.id)):

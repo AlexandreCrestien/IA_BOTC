@@ -1,4 +1,4 @@
-"""Tables de la base : comptes, parties jouées, succès débloqués.
+"""Tables de la base : comptes, parties jouées, succès débloqués, signalements des messages des IA.
 
 Les valeurs stockées sont en anglais (clés de rôle, camps, statuts) ; le front les traduit à l'affichage.
 """
@@ -7,7 +7,7 @@ from enum import StrEnum
 from typing import Optional
 
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy import JSON, DateTime, ForeignKey, String, UniqueConstraint
+from sqlalchemy import JSON, DateTime, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, validates
 
 from backend.models import Alignment, RoleKey
@@ -177,3 +177,28 @@ class AccountEvent(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     kind: Mapped[str] = mapped_column(String(40))
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+
+class AgentReport(Base):
+    """Signalement par un joueur connecté d'un message d'un agent IA (panel admin, pour améliorer les prompts à la main ;
+    jamais renvoyé aux agents). Garde l'agent, sa personnalité, son rôle, le modèle qui a écrit le message, le message
+    (pseudo du joueur remplacé par « [joueur] ») et le problème choisi.
+
+    À la suppression du compte : détaché du compte (user_id vide) et commentaire effacé, le reste est gardé.
+    Traité (handled_at) : supprimé au bout de HANDLED_REPORT_LIFETIME (backend/accounts/service.py)."""
+    __tablename__ = "agent_reports"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), index=True)
+    game_id: Mapped[Optional[int]] = mapped_column(ForeignKey("games.id"))
+    agent: Mapped[str] = mapped_column(String(40))
+    personality: Mapped[str] = mapped_column(String(40))
+    role: Mapped[RoleKey] = mapped_column(_enum(RoleKey))
+    model: Mapped[Optional[str]] = mapped_column(String(120))  # vide si inconnu
+    channel: Mapped[str] = mapped_column(String(10))           # "public" ou "private"
+    moment: Mapped[str] = mapped_column(String(20))            # « Jour 2 »
+    message: Mapped[str] = mapped_column(Text)
+    category: Mapped[str] = mapped_column(String(20))          # clé de REPORT_CATEGORIES (backend/server/reports.py)
+    comment: Mapped[Optional[str]] = mapped_column(String(500))
+    handled_at: Mapped[Optional[datetime]]

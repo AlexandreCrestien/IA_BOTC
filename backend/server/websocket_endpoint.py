@@ -29,7 +29,9 @@ from backend.server.schemas import (
     GameAbandoned,
     GuestSession,
     NightActionAck,
+    ReportResult,
 )
+from backend.server.reports import save_report
 from backend.server.session import WHISPER_MESSAGES, GameSession, current_session
 
 logger = logging.getLogger(__name__)
@@ -175,6 +177,12 @@ async def on_abandon_game(session: GameSession, payload) -> None:
         await _error(session, "Aucune partie en cours à abandonner.")
 
 
+async def on_report_message(session: GameSession, payload) -> None:
+    """Signalement d'un message d'agent IA (joueur connecté), possible aussi sur l'écran de fin."""
+    error = save_report(session, payload.message_id, payload.category, payload.comment)
+    await send(session.human_id, ReportResult(message_id=payload.message_id, error=error))
+
+
 ACTIONS: dict[str, Callable[[GameSession, BaseModel], Awaitable[None]]] = {
     "send_chat": on_send_chat,
     "request_whisper": on_request_whisper,
@@ -184,6 +192,7 @@ ACTIONS: dict[str, Callable[[GameSession, BaseModel], Awaitable[None]]] = {
     "submit_night_action": on_submit_night_action,
     "skip_turn": on_skip_turn,
     "abandon_game": on_abandon_game,
+    "report_message": on_report_message,
 }
 
 

@@ -479,6 +479,11 @@
                                 <p class="text-sm leading-relaxed opacity-85 mt-1">Ces données sont gardées tant que le compte existe. Vous pouvez le supprimer à tout moment depuis votre tableau de bord (section Profil) : votre compte, vos succès, le déroulé de vos parties et le registre de votre compte sont effacés définitivement ; seul le résumé de vos parties est gardé de façon anonyme, détaché de votre compte, pour les statistiques du jeu.</p>
                                 <p class="text-sm leading-relaxed opacity-85 mt-1">Un compte sans connexion pendant un an est supprimé automatiquement, de la même façon, après un e-mail d'avertissement envoyé un mois avant.</p>
                             </article>
+                            <article class="codex-card rounded-lg p-3">
+                                <h4 class="font-display text-lg text-gold mb-1">Signaler un message d'une IA</h4>
+                                <p class="text-sm leading-relaxed opacity-85">Avec un compte, vous pouvez signaler un message d'un personnage (drapeau au survol du message) : information qu'il ne devrait pas connaître, incohérence, sortie de son personnage, contenu inapproprié… Votre signalement aide l'équipe à améliorer les personnages ; il n'est jamais transmis aux IA. Il garde le message (votre pseudo y est remplacé par « [joueur] »), le personnage, le modèle d'IA qui l'a écrit, le problème choisi et votre commentaire éventuel.</p>
+                                <p class="text-sm leading-relaxed opacity-85 mt-1">Un signalement traité est supprimé 6 mois après son traitement. Si vous supprimez votre compte, vos signalements sont gardés sans lien avec vous et sans votre commentaire : ils ne concernent plus que l'IA. Les invités ne peuvent pas signaler de message : rien n'est collecté sur eux.</p>
+                            </article>
                         </div>
                     </div>
 
@@ -702,6 +707,30 @@
                 <button type="button" id="account-switch" data-action="switch-account-mode" class="w-full text-sm underline opacity-70 hover:opacity-100">
                     J'ai déjà un compte
                 </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Signalement d'un message d'agent IA (joueur connecté) -->
+    <div id="modal-report" class="modal-backdrop hidden" data-action="close-report" data-backdrop>
+        <div class="modal-card w-[440px]" data-tone="blood" role="dialog" aria-modal="true" aria-labelledby="report-title">
+            <p class="modal-kicker ornament text-center">Signaler un message</p>
+            <h3 id="report-title" class="modal-title my-2 text-center">Quel est le problème ?</h3>
+            <blockquote id="report-quote" class="report-quote"></blockquote>
+            <form id="report-form" class="space-y-3 mt-4">
+                <fieldset class="report-categories">
+                    <legend class="text-xs font-semibold uppercase tracking-wider opacity-70 mb-2">Problème</legend>
+                    <div id="report-categories" class="space-y-1.5"></div>
+                </fieldset>
+                <label for="report-comment" id="report-comment-label" class="text-xs font-semibold uppercase tracking-wider block opacity-70">Commentaire (facultatif)</label>
+                <textarea id="report-comment" rows="3" maxlength="200" class="report-comment w-full"></textarea>
+                <p id="report-count" class="text-xs text-right opacity-60" aria-live="polite">0 / 200</p>
+                <p class="text-xs italic opacity-70">Votre signalement aide l'équipe à améliorer les personnages. Il n'est jamais transmis aux IA.</p>
+                <p id="report-error" role="alert" class="welcome-error hidden text-sm text-center"></p>
+                <div class="flex gap-2 pt-2">
+                    <button type="button" data-action="close-report" class="btn-ghost flex-1">Annuler</button>
+                    <button type="submit" id="report-submit" class="btn-seal btn-blood flex-1">Envoyer</button>
+                </div>
             </form>
         </div>
     </div>
