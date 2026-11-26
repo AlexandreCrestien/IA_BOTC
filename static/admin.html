@@ -38,21 +38,25 @@
                 </p>
 
                 <p class="text-sm text-gray-400 leading-relaxed">
-                    Entrez le jeton administrateur configuré sur le serveur pour consulter les historiques et la mémoire des agents IA.
+                    Connectez-vous avec le compte administrateur pour consulter les historiques, la mémoire des agents IA et les comptes joueurs.
                 </p>
             </div>
 
             <!-- Formulaire : la touche Entrée valide -->
             <form id="login-form" class="w-full space-y-3">
-                <label for="admin-token-input" class="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Jeton administrateur</label>
-                <input type="password" id="admin-token-input" placeholder="••••••••" autocomplete="current-password" autofocus
+                <label for="admin-pseudo-input" class="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Pseudo ou adresse e-mail</label>
+                <input type="text" id="admin-pseudo-input" autocomplete="username" autofocus maxlength="254"
+                    class="w-full bg-black/40 border border-[var(--gold)] rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[var(--gold)] text-center text-gray-200">
+
+                <label for="admin-password-input" class="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Mot de passe</label>
+                <input type="password" id="admin-password-input" placeholder="••••••••" autocomplete="current-password"
                     class="w-full bg-black/40 border border-[var(--gold)] rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[var(--gold)] text-center font-mono text-gray-200">
 
                 <button type="submit" id="login-btn" class="w-full bg-seal text-white font-display tracking-wider py-3.5 rounded-xl transition shadow-seal uppercase text-sm font-bold disabled:opacity-60 disabled:cursor-progress">
                     Accéder au panneau
                 </button>
 
-                <!-- Erreur de connexion (jeton refusé, serveur injoignable…) -->
+                <!-- Erreur de connexion (identifiants refusés, compte non admin, serveur injoignable…) -->
                 <p id="login-error" role="alert" class="welcome-error hidden text-sm text-center"></p>
             </form>
         </div>
@@ -62,25 +66,43 @@
     <div id="dashboard-section" class="hidden min-h-screen flex flex-col">
 
         <!-- HEADER ADMIN -->
-        <header class="panel border-b px-6 h-16 shrink-0 flex items-center justify-between gap-4 sticky top-0 z-10 admin-header">
+        <!-- 3 colonnes : titre | raccourcis vers les sections | actualisation et déconnexion.
+             Écran moyen : les raccourcis passent sur une deuxième ligne (css/admin.css) -->
+        <header class="panel border-b px-6 shrink-0 admin-header">
             <div class="flex items-center gap-3 min-w-0">
                 <span class="modal-icon admin-header-icon" aria-hidden="true">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="size-5"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"></path><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"></circle></svg>
                 </span>
                 <div class="min-w-0">
                     <h1 class="font-display text-lg leading-tight text-gilt uppercase tracking-wider truncate">Panneau de contrôle &amp; Debug</h1>
-                    <p class="font-serif text-sm italic opacity-70 truncate">Suivi des historiques LLM et états internes du serveur</p>
+                    <p class="font-serif text-sm italic opacity-70 truncate hidden 2xl:block">Suivi des historiques LLM et états internes du serveur</p>
                 </div>
             </div>
-            <div class="flex items-center gap-2 shrink-0">
-                <span id="last-refresh" class="hidden md:inline text-xs opacity-50 mr-2"></span>
+
+            <!-- Raccourcis : défilement doux vers la section, section visible mise en valeur (js/section-nav.js) -->
+            <nav id="admin-nav" class="dash-nav" aria-label="Sections du panneau">
+                <a href="#admin-home" class="dash-nav-link" data-section="admin-home">Accueil</a>
+                <span class="dash-nav-sep" aria-hidden="true">✠</span>
+                <a href="#admin-reports" class="dash-nav-link" data-section="admin-reports">Signalements</a>
+                <span class="dash-nav-sep" aria-hidden="true">✠</span>
+                <a href="#admin-game" class="dash-nav-link" data-section="admin-game">Partie</a>
+            </nav>
+
+            <div class="flex items-center gap-2 shrink-0 justify-self-end">
+                <span id="last-refresh" class="hidden 2xl:inline text-xs opacity-50 mr-2"></span>
                 <button type="button" id="refresh-btn" class="btn-seal admin-btn">Rafraîchir</button>
                 <button type="button" id="logout-btn" class="btn-ghost admin-btn">Déconnexion</button>
             </div>
         </header>
 
         <!-- CONTENU PRINCIPAL -->
-        <main class="flex-1 p-6 max-w-7xl mx-auto w-full space-y-6">
+        <main id="admin-home" class="flex-1 p-6 max-w-7xl mx-auto w-full space-y-6">
+
+            <!-- Partie passée affichée à la place de la partie en cours (historique d'un joueur) -->
+            <div id="viewing-past-game" class="modal-notice notice-night hidden flex flex-wrap items-center justify-between gap-3">
+                <span id="viewing-past-game-text" class="font-serif italic text-base"></span>
+                <button type="button" id="back-to-current-game" class="btn-ghost admin-btn">Revenir à la partie en cours</button>
+            </div>
 
             <!-- Message du serveur (aucune partie lancée) ou réponse inattendue -->
             <div id="no-data-notice" class="modal-notice notice-night hidden font-serif italic text-base text-center"></div>
@@ -110,9 +132,82 @@
                 </div>
             </div>
 
-            <!-- JOUEURS : rôles, camps, personnalités (tout est visible dans l'admin) -->
+            <!-- COMPTES JOUEURS : réinitialisation du mot de passe (dépannage) -->
             <section class="admin-section rounded-2xl p-6 space-y-4">
-                <h2 class="admin-section-title">Joueurs</h2>
+                <h2 class="admin-section-title">Comptes</h2>
+                <!-- Mot de passe temporaire, affiché une seule fois après une réinitialisation -->
+                <p id="reset-result" role="status" class="modal-notice notice-night hidden text-sm"></p>
+                <div id="accounts-container" class="overflow-x-auto text-sm">
+                    <span class="italic opacity-60">Aucun compte.</span>
+                </div>
+            </section>
+
+            <!-- HISTORIQUE D'UN JOUEUR : ses parties (détail gardé 6 mois) et le registre de son compte (1 an) -->
+            <section id="player-history" class="admin-section rounded-2xl p-6 space-y-4 hidden">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <h2 id="player-history-title" class="admin-section-title flex-1">Historique</h2>
+                    <button type="button" id="close-player-history" class="btn-ghost admin-btn">Fermer</button>
+                </div>
+                <p class="text-xs opacity-60">Détail des parties gardé 6 mois, registre des modifications du compte gardé un an ; tout est supprimé avec le compte.</p>
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-2 space-y-2">
+                        <h3 class="modal-kicker">Parties</h3>
+                        <div id="player-games-container" class="overflow-x-auto text-sm"></div>
+                    </div>
+                    <div class="space-y-2">
+                        <h3 class="modal-kicker">Modifications du compte</h3>
+                        <div id="player-events-container" class="flex flex-col gap-2 text-sm"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SIGNALEMENTS : messages des IA signalés par les joueurs connectés -->
+            <section id="admin-reports" class="admin-section rounded-2xl p-6 space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <h2 class="admin-section-title flex-1">Signalements <span id="reports-count" class="opacity-60 text-base"></span></h2>
+                </div>
+                <p class="text-xs opacity-60">Messages des IA signalés par les joueurs connectés. Un signalement traité est supprimé 6 mois après son traitement ; à la suppression d'un compte, ses signalements sont gardés sans lien avec lui et sans son commentaire.</p>
+                <div id="reports-filters" class="admin-filters">
+                    <label>Statut
+                        <select id="filter-status" class="admin-select">
+                            <option value="pending">En attente</option>
+                            <option value="handled">Traités</option>
+                            <option value="">Tous</option>
+                        </select>
+                    </label>
+                    <label>Agent <select id="filter-agent" class="admin-select"></select></label>
+                    <label>Personnalité <select id="filter-personality" class="admin-select"></select></label>
+                    <label>Modèle <select id="filter-model" class="admin-select"></select></label>
+                    <label>Problème <select id="filter-category" class="admin-select"></select></label>
+                </div>
+                <div id="reports-container" class="flex flex-col gap-3 text-sm">
+                    <span class="italic opacity-60">Aucun signalement.</span>
+                </div>
+            </section>
+
+            <!-- ÉVALUATIONS : notes des agents données par les joueurs connectés en fin de partie -->
+            <section class="admin-section rounded-2xl p-6 space-y-4">
+                <h2 class="admin-section-title">Évaluations des agents <span id="ratings-summary" class="opacity-60 text-base"></span></h2>
+                <p class="text-xs opacity-60">« Ce personnage était-il crédible ? », de 1 à 5. Le modèle d'un agent est celui qui a écrit le plus de ses messages dans la partie. Commentaires effacés au bout de 6 mois, et à la suppression du compte (la note est gardée).</p>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="space-y-2">
+                        <h3 class="modal-kicker">Par personnalité</h3>
+                        <div id="ratings-personality" class="overflow-x-auto text-sm"></div>
+                    </div>
+                    <div class="space-y-2">
+                        <h3 class="modal-kicker">Par modèle</h3>
+                        <div id="ratings-model" class="overflow-x-auto text-sm"></div>
+                    </div>
+                </div>
+                <div class="space-y-2">
+                    <h3 class="modal-kicker">Commentaires</h3>
+                    <div id="ratings-comments" class="flex flex-col gap-3 text-sm"></div>
+                </div>
+            </section>
+
+            <!-- JOUEURS de la partie affichée : rôles, camps, personnalités (tout est visible dans l'admin) -->
+            <section id="admin-game" class="admin-section rounded-2xl p-6 space-y-4">
+                <h2 class="admin-section-title">Partie en cours</h2>
                 <div id="players-container" class="overflow-x-auto text-sm">
                     <span class="italic opacity-60">Aucune partie en cours.</span>
                 </div>
@@ -177,7 +272,27 @@
         </main>
     </div>
 
+    <!-- Confirmation de suppression d'un compte (évite un clic malheureux) -->
+    <div id="modal-delete-account" class="modal-backdrop hidden">
+        <div class="modal-card w-[440px] text-center" data-tone="blood" role="alertdialog" aria-modal="true" aria-labelledby="delete-account-title">
+            <p class="modal-kicker ornament">Effacer du registre</p>
+            <h3 id="delete-account-title" class="modal-title my-2">Supprimer le compte ?</h3>
+            <p id="delete-account-text" class="font-serif text-base italic leading-relaxed opacity-90"></p>
+            <div class="modal-notice notice-blood text-left">
+                Le compte (pseudo, adresse e-mail, mot de passe), ses succès, le déroulé de ses parties et le registre de son compte seront <strong>définitivement</strong> supprimés.
+                Ses parties restent dans les statistiques, de façon anonyme (détachées du compte, datées au jour près).
+                Si le joueur a une partie en cours, elle sera arrêtée.
+            </div>
+            <p id="delete-account-error" role="alert" class="welcome-error hidden text-sm mt-3"></p>
+            <div class="flex gap-2 mt-5">
+                <button type="button" id="delete-account-cancel" class="btn-ghost flex-1">Annuler</button>
+                <button type="button" id="delete-account-confirm" class="btn-seal btn-blood flex-1">Supprimer définitivement</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Script JS -->
+    <script src="/js/section-nav.js"></script>
     <script src="/js/admin.js"></script>
 </body>
 </html>

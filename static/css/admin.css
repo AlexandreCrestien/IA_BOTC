@@ -14,7 +14,33 @@
 }
 
 .admin-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto; /* titre entier, raccourcis centrés dans l'espace restant */
+  align-items: center;
+  gap: 1rem;
+  min-height: 4rem;
   background-color: color-mix(in oklab, var(--background) 80%, transparent);
+}
+.admin-header .dash-nav { justify-self: center; }
+
+/* Écran moyen : les raccourcis passent sous le titre et les boutons */
+@media (max-width: 1023px) {
+  .admin-header {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 0.25rem;
+    padding-block: 0.5rem;
+  }
+  .admin-header .dash-nav {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.4rem;
+  }
+  .admin-header .dash-nav-link { font-size: 0.95rem; }
 }
 .admin-header-icon {
   width: 2.5rem;
@@ -163,3 +189,57 @@
   border-color: rgb(239 68 68 / 30%);
   background-color: rgb(69 10 10 / 15%);
 }
+
+/* Action irréversible (suppression d'un compte) */
+.admin-btn-danger {
+  color: oklch(0.72 0.17 25);
+  border-color: color-mix(in oklab, var(--blood) 55%, transparent);
+}
+.admin-btn-danger:hover {
+  background-color: color-mix(in oklab, var(--blood) 18%, transparent);
+  color: oklch(0.8 0.15 25);
+}
+
+/* Signalements des messages des IA : filtres et cartes */
+.admin-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  font-size: 0.8rem;
+  color: var(--gold-dim);
+}
+.admin-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.admin-select {
+  min-width: 9rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid color-mix(in oklab, var(--gold-dim) 55%, transparent);
+  border-radius: 0.5rem;
+  background-color: oklch(0 0 0 / 40%);
+  color: var(--foreground);
+  font-size: 0.875rem;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.report-card {
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 0.75rem 1rem;
+  background-color: color-mix(in oklab, var(--secondary) 55%, transparent);
+}
+.report-card.is-handled { opacity: 0.6; }
+.report-message {
+  margin: 0.5rem 0;
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--gold-dim);
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-style: italic;
+  font-size: 1rem;
+}
+.report-problem { color: oklch(0.72 0.17 25); font-weight: 600; }
+.rating-score { color: var(--gold); letter-spacing: 0.1em; }

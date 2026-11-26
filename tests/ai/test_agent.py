@@ -280,3 +280,30 @@ def test_optional_instruction_says_passing_is_normal(agent, fake_llm):
 def test_long_message_starting_with_passe_is_kept(agent, fake_llm):
     fake_llm.replies = ["Passe-moi le relais : bruno ment."]
     assert asyncio.run(agent.speak_public(optional=True)) == "Passe-moi le relais : bruno ment."
+
+
+# --- Modèle qui a écrit la réponse (signalements des joueurs) -------------------------------------
+
+def _response(content, model, hidden=None):
+    from types import SimpleNamespace
+    response = SimpleNamespace(model=model, usage=SimpleNamespace(total_tokens=1),
+                               choices=[SimpleNamespace(message=SimpleNamespace(content=content))])
+    if hidden is not None:
+        response._hidden_params = hidden
+    return response
+
+
+@pytest.mark.parametrize("hidden, expected", [
+    # Après une bascule, le modèle configuré qui a vraiment répondu (tel qu'écrit dans PROFILES)
+    ({"litellm_model_name": "groq/openai/gpt-oss-20b"}, "groq/openai/gpt-oss-20b"),
+    (None, "gpt-oss-20b"),  # sans information du routeur : le nom renvoyé par le fournisseur
+])
+def test_ask_llm_returns_the_text_with_the_model_that_answered(monkeypatch, hidden, expected):
+    async def fake_acompletion(model, messages, **kwargs):
+        return _response("Bonsoir.", "gpt-oss-20b", hidden)
+
+    monkeypatch.setattr(llm_client.router, "acompletion", fake_acompletion)
+    monkeypatch.setattr(llm_client, "CALL_PAUSE_SECONDS", 0)
+    text = asyncio.run(llm_client.ask_llm("fast", [{"role": "user", "content": "?"}]))
+    assert text == "Bonsoir." and isinstance(text, str)
+    assert text.model == expected

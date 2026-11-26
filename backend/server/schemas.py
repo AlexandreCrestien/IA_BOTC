@@ -14,9 +14,13 @@ class BaseAction(StrictInput):
     action: str
 
 
+# Longueur maximale d'un message du joueur : chaque message entre dans le contexte des agents (tokens)
+CHAT_MESSAGE_MAX = 500
+
+
 class SendChatPayload(StrictInput):
     channel_id: str = Field(..., description="ID du salon (ex: 'public' ou ID d'un salon privé)")
-    content: str = Field(..., min_length=1, description="Contenu du message")
+    content: str = Field(..., min_length=1, max_length=CHAT_MESSAGE_MAX, description="Contenu du message (500 caractères au plus)")
 
 class SendChatAction(BaseAction):
     """Poster un message dans un canal public ou privé."""
@@ -89,6 +93,34 @@ class AbandonGameAction(BaseAction):
     payload: AbandonGamePayload = Field(default_factory=AbandonGamePayload)
 
 
+class ReportMessagePayload(StrictInput):
+    message_id: str = Field(..., description="Identifiant du message de l'agent IA (reçu dans le message de chat)")
+    category: Literal["knowledge", "rules", "character", "inappropriate", "other"] = Field(
+        ..., description="Problème : information qu'il ne devrait pas connaître, incohérent ou contraire aux règles, "
+                         "sort de son personnage, contenu inapproprié, autre")
+    comment: Optional[str] = Field(default=None, max_length=500,
+                                   description="Commentaire : facultatif (200 caractères), obligatoire pour « other »")
+
+class ReportMessageAction(BaseAction):
+    """Signaler un message d'un agent IA (joueur connecté seulement)."""
+    action: Literal["report_message"] = "report_message"
+    payload: ReportMessagePayload
+
+
+class AgentRatingIn(StrictInput):
+    agent_id: str = Field(..., description="Identifiant de l'agent évalué (p1…p5)")
+    score: int = Field(..., ge=1, le=5, description="Ce personnage était-il crédible ? De 1 à 5")
+    comment: Optional[str] = Field(default=None, max_length=300, description="Commentaire facultatif")
+
+class RateAgentsPayload(StrictInput):
+    ratings: List[AgentRatingIn] = Field(..., min_length=1, max_length=5, description="Un agent au moins, une fois chacun")
+
+class RateAgentsAction(BaseAction):
+    """Évaluer les agents IA sur l'écran de fin (joueur connecté, partie terminée, une seule fois)."""
+    action: Literal["rate_agents"] = "rate_agents"
+    payload: RateAgentsPayload
+
+
 # Le type d'action est choisi uniquement d'après le champ "action" (obligatoire dans le paquet reçu).
 ClientActionPacket = Annotated[
     Union[
@@ -100,6 +132,8 @@ ClientActionPacket = Annotated[
         DiscussionTimeoutAction,
         SkipTurnAction,
         AbandonGameAction,
+        ReportMessageAction,
+        RateAgentsAction,
     ],
     Field(discriminator="action"),
 ]
@@ -159,6 +193,13 @@ class Connected(OutMessage):
     type: Literal["connected"] = "connected"
 
 
+class GuestSession(OutMessage):
+    """Partie d'un invité : jeton à présenter à l'inscription ou à la connexion (pendant la partie ou sur
+    l'écran de fin) pour rattacher la partie au compte. Le front le garde en mémoire, sans le montrer."""
+    type: Literal["guest_session"] = "guest_session"
+    guest_token: str
+
+
 class RoleAssigned(OutMessage):
     type: Literal["role_assigned"] = "role_assigned"
     role_name: str
@@ -198,6 +239,8 @@ class ChatMessage(OutMessage):
     channel_id: str
     sender: str = Field(..., description="Identifiant du joueur, ou « Codex » pour les annonces")
     content: str
+    message_id: Optional[str] = Field(default=None, description="Message d'un agent IA : identifiant pour le signaler")
+    reported: bool = Field(default=False, description="Message déjà signalé par le joueur (renvoyé à la reconnexion)")
 
 
 class PrivateChannelOpened(OutMessage):
@@ -244,15 +287,37 @@ class Announcement(OutMessage):
     text: str
 
 
+class ReportResult(OutMessage):
+    """Réponse à un signalement de message d'agent IA (à part des erreurs : la demande en cours n'est pas touchée)."""
+    type: Literal["report_result"] = "report_result"
+    message_id: str
+    error: Optional[str] = Field(default=None, description="Motif du refus ; vide si le signalement est enregistré")
+
+
+class RatingResult(OutMessage):
+    """Réponse à l'évaluation des agents en fin de partie."""
+    type: Literal["rating_result"] = "rating_result"
+    error: Optional[str] = Field(default=None, description="Motif du refus ; vide si l'évaluation est enregistrée")
+
+
 class Error(OutMessage):
     type: Literal["error"] = "error"
     data: str
+
+
+class UnlockedAchievementOut(OutMessage):
+    """Succès débloqué par la partie, annoncé sur l'écran de fin."""
+    code: str
+    title: str
+    description: str
+    message: Optional[str] = None
 
 
 class GameOver(OutMessage):
     type: Literal["game_over"] = "game_over"
     winner: Literal["good", "evil"]
     details: str
+    achievements: List[UnlockedAchievementOut] = Field(default_factory=list)
 
 
 class GameAbandoned(OutMessage):

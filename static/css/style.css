@@ -159,6 +159,85 @@ body {
   color: var(--foreground);
 }
 
+/* Signalement d'un message d'IA : petit drapeau qui apparaît au survol du message (toujours visible au toucher) */
+.report-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.25rem;
+  border-radius: 0.25rem;
+  color: var(--foreground);
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+.chat-message:hover .report-btn,
+.report-btn:focus-visible { opacity: 0.6; }
+.report-btn:hover,
+.report-btn:focus-visible { opacity: 1; color: oklch(0.72 0.17 25); outline: none; }
+@media (hover: none) { .report-btn { opacity: 0.5; } }
+.report-done {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  color: oklch(0.72 0.17 25);
+  opacity: 0.75;
+}
+.report-quote {
+  margin-top: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-left: 2px solid var(--gold-dim);
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-style: italic;
+  font-size: 0.95rem;
+  max-height: 6rem;
+  overflow-y: auto;
+  opacity: 0.9;
+}
+.report-category {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+.report-category input { margin-top: 0.2rem; accent-color: var(--gold); }
+.report-comment {
+  background-color: oklch(0 0 0 / 40%);
+  border: 1px solid var(--gold-dim);
+  border-radius: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  color: oklch(0.9 0.01 85);
+  resize: vertical;
+}
+.report-comment:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 2px oklch(0.76 0.115 80 / 25%); }
+
+/* Évaluation des agents en fin de partie : une carte par agent, 5 étoiles.
+   Les boutons radio sont dans l'ordre 5 → 1, affichés de droite à gauche : l'étoile choisie (ou survolée)
+   et celles qui la précèdent sont dorées. */
+.rating-agent {
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 0.5rem 0.75rem 0.75rem;
+  background-color: color-mix(in oklab, var(--secondary) 45%, transparent);
+}
+.rating-stars {
+  display: inline-flex;
+  flex-direction: row-reverse;
+  gap: 0.15rem;
+}
+.rating-stars label {
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+  color: color-mix(in oklab, var(--foreground) 25%, transparent);
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+.rating-stars input:checked ~ label,
+.rating-stars label:hover,
+.rating-stars label:hover ~ label { color: var(--gold); }
+.rating-stars label:hover { transform: scale(1.1); }
+.rating-stars input:focus-visible + label { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: 0.25rem; }
+
 /* Historique des nuits (onglet Nuits) */
 .night-history-turn { color: var(--gold); }
 .night-history-item.is-result {
@@ -819,3 +898,212 @@ body {
 #modal-gameover,
 #modal-abandon,
 #modal-disconnected { z-index: 60; }
+#modal-account { z-index: 65; }
+
+/* ==========================================================
+   Comptes : onglets de l'accueil, champs, menu de la partie, succès
+   ========================================================== */
+.welcome-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border: 1px solid color-mix(in oklab, var(--gold-dim) 50%, transparent);
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+.welcome-tab {
+  padding: 0.55rem 0.5rem;
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: 1rem;
+  font-weight: 600;
+  color: color-mix(in oklab, var(--foreground) 70%, transparent);
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.welcome-tab + .welcome-tab { border-left: 1px solid color-mix(in oklab, var(--gold-dim) 40%, transparent); }
+.welcome-tab:hover { color: var(--gold); }
+.welcome-tab.is-active {
+  background-color: color-mix(in oklab, var(--gold) 14%, transparent);
+  color: var(--gold);
+}
+.welcome-input {
+  background-color: oklch(0 0 0 / 40%);
+  border: 1px solid var(--gold);
+  border-radius: 0.75rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  text-align: center;
+  color: oklch(0.9 0.01 85);
+}
+.welcome-input:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 2px oklch(0.76 0.115 80 / 25%); }
+
+/* L'en-tête passe devant le plateau : le menu déroulant s'affiche par-dessus */
+.game-header { position: relative; z-index: 20; }
+.game-menu-wrap { position: relative; }
+.game-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.5rem);
+  z-index: 40;
+  min-width: 13rem;
+  display: flex;
+  flex-direction: column;
+  padding: 0.35rem;
+  border-radius: 0.75rem;
+  background-color: oklch(0.17 0.022 295 / 97%);
+  border-color: color-mix(in oklab, var(--gold-dim) 50%, transparent);
+}
+.game-menu.hidden { display: none; }
+.game-menu-label {
+  padding: 0.35rem 0.75rem 0.5rem;
+  font-size: 0.8rem;
+  opacity: 0.65;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.25rem;
+}
+.game-menu-label:empty { display: none; }
+.game-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--foreground);
+}
+.game-menu-item:hover, .game-menu-item:focus-visible { background-color: color-mix(in oklab, var(--gold) 12%, transparent); color: var(--gold); outline: none; }
+.game-menu-item.hidden { display: none; }
+.game-menu-item.is-danger { color: oklch(0.72 0.17 25); }
+.game-menu-item.is-danger:hover { background-color: color-mix(in oklab, var(--blood) 18%, transparent); }
+
+.achievement-unlocks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.achievement-unlock {
+  border: 1px solid color-mix(in oklab, var(--gold-dim) 55%, transparent);
+  border-radius: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  background-color: color-mix(in oklab, var(--gold) 8%, transparent);
+}
+.achievement-unlock-title { font-family: "IM Fell English SC", Georgia, serif; color: var(--gold); }
+.achievement-unlock-message { font-family: "Cormorant Garamond", Georgia, serif; font-style: italic; opacity: 0.85; }
+/* Les boutons ont leur propre display : .hidden doit toujours les masquer */
+.btn-seal.hidden, .btn-ghost.hidden { display: none; }
+
+/* ==========================================================
+   Infobulle d'information : petite icône « ? » cerclée à côté d'un libellé ;
+   le texte apparaît au survol, au clavier (focus) et au toucher, sans clic à faire.
+   ========================================================== */
+.label-with-tip {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.info-tip {
+  position: relative;
+  display: inline-flex;
+}
+.info-tip-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in oklab, var(--gold-dim) 80%, transparent);
+  color: var(--gold);
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1;
+  text-transform: none;
+  cursor: help;
+  transition: background-color 0.15s ease;
+}
+.info-tip-icon:hover,
+.info-tip-icon:focus-visible {
+  background-color: color-mix(in oklab, var(--gold) 18%, transparent);
+  outline: none;
+}
+.info-tip-text {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 0.5rem);
+  z-index: 70;
+  width: 16rem;
+  max-width: 70vw;
+  transform: translateX(-50%);
+  padding: 0.6rem 0.75rem;
+  border-radius: 0.6rem;
+  border: 1px solid color-mix(in oklab, var(--gold-dim) 60%, transparent);
+  background-color: oklch(0.17 0.022 295 / 97%);
+  box-shadow: var(--shadow-panel);
+  color: var(--foreground);
+  font-size: 0.8rem;
+  font-weight: 400;
+  letter-spacing: normal;
+  line-height: 1.4;
+  text-align: left;
+  text-transform: none;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+.info-tip:hover .info-tip-text,
+.info-tip:focus-within .info-tip-text {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Raccourcis de l'en-tête vers les sections de la page (tableau de bord, panneau admin : js/section-nav.js) */
+.dash-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.dash-nav-link {
+  position: relative;
+  padding: 0.25rem 0.15rem;
+  font-family: "IM Fell English SC", "Cormorant Garamond", Georgia, serif;
+  font-size: 1.05rem;
+  letter-spacing: 0.04em;
+  color: color-mix(in oklab, var(--foreground) 75%, transparent);
+  transition: color 0.2s ease;
+}
+/* Filet doré qui se déploie sous le raccourci survolé ou de la section affichée */
+.dash-nav-link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -0.1rem;
+  height: 1px;
+  background: var(--gradient-gilt);
+  transform: scaleX(0);
+  transition: transform 0.25s ease;
+}
+.dash-nav-link:hover,
+.dash-nav-link:focus-visible,
+.dash-nav-link.is-active {
+  color: var(--gold);
+  outline: none;
+}
+.dash-nav-link:hover::after,
+.dash-nav-link:focus-visible::after,
+.dash-nav-link.is-active::after {
+  transform: scaleX(1);
+}
+.dash-nav-sep {
+  font-size: 0.8rem;
+  color: var(--gold-dim);
+  opacity: 0.8;
+}
+
+/* Défilement doux vers la section (sauf si le système demande moins d'animations). Il s'arrête sous l'en-tête
+   collant grâce à scroll-padding-top, réglé d'après la hauteur de l'en-tête par js/section-nav.js */
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+}

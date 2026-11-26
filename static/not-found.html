@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="fr" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lantern Hollow - Page introuvable</title>
+
+    <!-- Mêmes polices que l'interface de jeu -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Alegreya+Sans:ital,wght@0,400;0,500;0,700;1,400&family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=IM+Fell+English+SC&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS v3 CDN + configuration du thème -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/js/tailwind.config.js"></script>
+
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="min-h-screen font-sans">
+    <!-- Même décor que l'écran d'accueil. Chemins absolus : la page est servie pour n'importe quelle adresse inconnue. -->
+    <main class="fixed inset-0 flex items-center justify-center bg-cover bg-center bg-no-repeat bg-game-background">
+        <div class="panel p-8 rounded-2xl max-w-lg w-full mx-4 shadow-2xl flex flex-col items-center space-y-5 text-center">
+            <div class="ornament text-xs tracking-[0.3em] uppercase font-serif">LANTERNSWOOD · 1888</div>
+
+            <p class="font-display text-6xl text-gilt leading-none" aria-hidden="true">404</p>
+            <h1 class="font-display text-2xl tracking-wide text-gilt uppercase">Ce chemin ne mène nulle part</h1>
+
+            <p class="font-serif text-lg italic leading-relaxed opacity-90">
+                La lanterne vacille, le brouillard s'épaissit… Aucune maison du village ne se trouve à cette adresse.
+            </p>
+
+            <a href="/" id="not-found-home" class="btn-seal w-full">Retourner au village</a>
+        </div>
+    </main>
+</body>
+</html>

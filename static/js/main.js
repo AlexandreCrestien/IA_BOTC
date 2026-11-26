@@ -23,15 +23,33 @@ const CLICK_ACTIONS = {
     'close-night-result':() => closeNightResultModal(),
     'close-night-info':  () => closeNightInfoModal(),
     'close-disconnected':() => closeDisconnectedModal(),
-    'ask-abandon':       () => openModal('modal-abandon'),
+    'ask-abandon':       () => { toggleGameMenu(false); openModal('modal-abandon'); },
     'cancel-abandon':    () => closeModal('modal-abandon'),
     'confirm-abandon':   () => confirmAbandon(),
     'skip-turn':         () => skipTurnPrompt(),
     'skip-private':      () => skipPrivateDiscussion(),
-    'reload':            () => location.reload()
+    'reload':            () => location.reload(),
+    // Comptes (account.js)
+    'welcome-tab':       el => switchWelcomeTab(el.dataset.tab),
+    'resume-guest-game': () => resumeGuestGame(),
+    'toggle-menu':       () => toggleGameMenu(),
+    'close-menu':        () => toggleGameMenu(false),
+    'logout':            () => logout(),
+    'open-account':      el => openAccountModal(el.dataset.mode),
+    'close-account':     () => closeAccountModal(),
+    'switch-account-mode': () => switchAccountMode(),
+    'new-game':          () => startNewGame(),
+    // Signalement d'un message d'IA (chat.js)
+    'open-report':       el => openReportModal(el.dataset.message),
+    'close-report':      () => closeReportModal(),
+    // Évaluation des agents en fin de partie (modals.js)
+    'open-rating':       () => openRatingModal(),
+    'close-rating':      () => closeRatingModal()
 };
 
 document.addEventListener('click', (event) => {
+    // Clic en dehors du menu de la partie : il se referme
+    if (!event.target.closest('#game-menu, #menu-btn')) toggleGameMenu(false);
     const el = event.target.closest('[data-action]');
     if (!el || el.disabled) return;
     // Voile d'une modale : seul un clic sur le voile lui-même la ferme (pas sur la carte)
@@ -46,11 +64,45 @@ document.addEventListener('change', (event) => {
     if (select?.dataset.playerId) updateSuspicion(select.dataset.playerId, select.value);
 });
 
-// Formulaires : rejoindre la partie, envoyer un message
+// Formulaires : rejoindre la partie (invité), se connecter, s'inscrire, envoyer un message
 document.getElementById('welcome-form').addEventListener('submit', (event) => {
     event.preventDefault();
     joinGame();
 });
+
+document.getElementById('login-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    submitWelcomeAccount('login');
+});
+
+document.getElementById('register-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    submitWelcomeAccount('register');
+});
+
+document.getElementById('forgot-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    submitForgotPassword();
+});
+
+document.getElementById('account-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    submitGameAccount();
+});
+
+document.getElementById('rating-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    submitRatings();
+});
+
+document.getElementById('report-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    submitReport();
+});
+
+// Fenêtre de signalement : catégorie choisie (« Autre » rend le commentaire obligatoire), compteur de caractères
+document.getElementById('report-form').addEventListener('change', updateReportComment);
+document.getElementById('report-comment').addEventListener('input', updateReportComment);
 
 document.getElementById('chat-form').addEventListener('submit', (event) => {
     event.preventDefault();
@@ -66,10 +118,16 @@ document.getElementById('chat-input').addEventListener('keydown', (event) => {
     }
 });
 
-// Échap ferme le Codex et la confirmation d'abandon
+// Échap ferme le Codex, le menu, la fenêtre de compte, la confirmation d'abandon et le signalement
 document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
         closeCodexModal();
+        toggleGameMenu(false);
+        closeAccountModal();
         closeModal('modal-abandon');
+        closeReportModal();
     }
 });
+
+// Accueil : joueur connecté (tableau de bord, ou sa partie), ou partie d'invité à reprendre
+initWelcome();

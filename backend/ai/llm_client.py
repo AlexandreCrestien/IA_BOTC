@@ -25,7 +25,7 @@ LLM_CONCURRENCY = 1
 CALL_PAUSE_SECONDS = 2.0
 _llm_slot = asyncio.Semaphore(LLM_CONCURRENCY)
 
-# Ordre de priorité : voir docs/model_choices.md
+# Ordre de priorité : voir docs/ai.md (Choix des modèles)
 # Mistral en direct (clé MISTRAL_API_KEY) : essai d'un collègue, désactivé. Décommenter les deux lignes
 # « mistral/mistral-small-latest » ci-dessous pour le remettre en tête (et ajouter la clé au .env).
 FAST_MODELS = [
@@ -106,8 +106,26 @@ if SIMULATE_LLM:
     logger.warning("SIMULATE_LLM=1 : aucun appel réel aux modèles, aucun token consommé.")
 
 
-async def ask_llm(profile: str, messages: list[dict], **kwargs) -> str:
-    """Envoie les messages au premier modèle du profil ("fast" ou "capable") et renvoie le texte.
+class LLMText(str):
+    """Texte d'une réponse, qui garde le modèle qui l'a écrite (après une éventuelle bascule) :
+    les messages des agents signalés par les joueurs indiquent ainsi leur modèle (panel admin)."""
+    model: str
+
+    def __new__(cls, text: str, model: str):
+        instance = super().__new__(cls, text)
+        instance.model = model
+        return instance
+
+
+def _model_used(response) -> str:
+    """Modèle qui a vraiment répondu, tel qu'écrit dans PROFILES (ex. "groq/openai/gpt-oss-20b")."""
+    hidden = getattr(response, "_hidden_params", None) or {}
+    return hidden.get("litellm_model_name") or response.model
+
+
+async def ask_llm(profile: str, messages: list[dict], **kwargs) -> LLMText:
+    """Envoie les messages au premier modèle du profil ("fast" ou "capable") et renvoie le texte,
+    avec le modèle qui a répondu (LLMText.model).
 
     Un seul appel à la fois, avec une pause après chacun (voir LLM_CONCURRENCY).
     Si tous les modèles du profil échouent, l'exception remonte : c'est à l'appelant
@@ -119,13 +137,14 @@ async def ask_llm(profile: str, messages: list[dict], **kwargs) -> str:
             response = await router.acompletion(model=f"{profile}-1", messages=messages, **kwargs)
         finally:
             await asyncio.sleep(CALL_PAUSE_SECONDS)
+    model = _model_used(response)
     logger.info("profil=%s modèle=%s durée=%.2fs tokens=%s",
-                profile, response.model, time.perf_counter() - start, response.usage.total_tokens)
+                profile, model, time.perf_counter() - start, response.usage.total_tokens)
     content = response.choices[0].message.content
     if not content:
         # Arrive avec les modèles de raisonnement quand max_tokens est épuisé avant la réponse
-        raise ValueError(f"Réponse vide du modèle {response.model}")
-    return content
+        raise ValueError(f"Réponse vide du modèle {model}")
+    return LLMText(content, model)
 
 
 def _strip_code_fences(text: str) -> str:

@@ -1,36 +1,197 @@
-import os
+"""Routes du panneau d'administration, réservées au compte admin (cookie de connexion, voir auth.py) :
+état complet de la partie en cours, comptes (réinitialisation du mot de passe, suppression), parties passées
+d'un joueur avec leur détail, registre des modifications d'un compte, signalements des messages des IA, évaluations des agents."""
 import logging
-import secrets
-from typing import Optional
-from fastapi import APIRouter, Header, HTTPException, status, Depends
-from dotenv import load_dotenv
 
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from backend.accounts import service
+from backend.accounts.service import AccountError
+from backend.db import AccountEvent, AgentRating, AgentReport, GameDetail, GameRecord, User, iso_utc
+from backend.db.models import utcnow
+from backend.rules import get_role
+from backend.server.auth import admin_user, db_session, notify_password_changed
+from backend.server.account_removal import remove_account
+from backend.server.game_view import game_view
+from backend.server.reports import REPORT_CATEGORIES
 from backend.server.session import current_session
-
-load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/admin", tags=["Administration"])
-
-ADMIN_SECRET_TOKEN = os.getenv("ADMIN_SECRET_TOKEN")
-
-def verify_admin_token(x_admin_token: Optional[str] = Header(default=None)):
-    """Vérifie que la requête contient le bon jeton secret dans le header.
-    Si aucun jeton n'est configuré (variable absente ou vide), l'accès admin est toujours refusé.
-    Header absent ou jeton faux : même réponse 403.
-    compare_digest compare en temps constant : le temps de réponse ne révèle rien du jeton.
-    On compare des octets : avec du texte, un caractère non ASCII ferait planter la comparaison."""
-    if not ADMIN_SECRET_TOKEN or not x_admin_token or not secrets.compare_digest(x_admin_token.encode(), ADMIN_SECRET_TOKEN.encode()):
-        logger.warning("Tentative d'accès admin non autorisée détectée.")
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Accès refusé : Jeton admin invalide ou manquant."
-        )
-    return x_admin_token
+# Toutes les routes : 401 sans connexion, 403 pour un compte qui n'est pas admin
+router = APIRouter(prefix="/admin", tags=["Administration"], dependencies=[Depends(admin_user)])
 
 
-@router.get("/debug/all-states", dependencies=[Depends(verify_admin_token)])
+@router.get("/users")
+def list_users(db: Session = Depends(db_session)) -> list[dict]:
+    """Comptes, du plus ancien au plus récent (jamais le hash du mot de passe)."""
+    users = db.scalars(select(User).order_by(User.created_at, User.id)).all()
+    return [{"id": u.id, "pseudo": u.pseudo, "email": u.email, "email_verified": u.email_verified,
+             "is_admin": u.is_admin,
+             "created_at": iso_utc(u.created_at)}
+            for u in users]
+
+
+@router.post("/users/{user_id}/reset-password")
+async def reset_user_password(user_id: int, db: Session = Depends(db_session)) -> dict:
+    """Dépannage d'un joueur qui a oublié son mot de passe : mot de passe temporaire, montré une seule fois
+    à l'admin qui le lui transmet. Le joueur est déconnecté partout et prévenu par e-mail."""
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Compte introuvable.")
+    try:
+        temporary = service.reset_password(db, user)
+    except AccountError as error:
+        raise HTTPException(error.status, error.message)
+    await notify_password_changed(user, "par l'administrateur")
+    return {"pseudo": user.pseudo, "temporary_password": temporary}
+
+
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user(user_id: int, db: Session = Depends(db_session)) -> None:
+    """Suppression d'un compte à la demande du joueur (même suppression que depuis son tableau de bord) :
+    compte et succès effacés, parties gardées anonymement. Sa partie en cours est arrêtée d'abord."""
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Compte introuvable.")
+    try:
+        await remove_account(db, user, reason="par l'admin")
+    except AccountError as error:
+        raise HTTPException(error.status, error.message)
+
+
+def _user_or_404(db: Session, user_id: int) -> User:
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Compte introuvable.")
+    return user
+
+
+def _game_summary(game: GameRecord, has_detail: bool) -> dict:
+    return {"id": game.id, "date": iso_utc(game.started_at), "role_name": get_role(game.role).name_FR,
+            "alignment": game.alignment.value, "status": game.status.value, "turns": game.turns,
+            "has_detail": has_detail}
+
+
+@router.get("/users/{user_id}/games")
+def user_games(user_id: int, db: Session = Depends(db_session)) -> list[dict]:
+    """Parties d'un joueur, de la plus récente à la plus ancienne ; has_detail : détail encore disponible
+    (effacé au bout de 6 mois)."""
+    _user_or_404(db, user_id)
+    games = db.scalars(select(GameRecord).where(GameRecord.user_id == user_id)
+                       .order_by(GameRecord.started_at.desc(), GameRecord.id.desc())).all()
+    with_detail = set(db.scalars(select(GameDetail.game_id).where(GameDetail.game_id.in_([g.id for g in games]))))
+    return [_game_summary(g, g.id in with_detail) for g in games]
+
+
+@router.get("/games/{game_id}")
+def game_detail(game_id: int, db: Session = Depends(db_session)) -> dict:
+    """Détail complet d'une partie passée (même forme que /debug/all-states), avec son résumé et son joueur."""
+    game = db.get(GameRecord, game_id)
+    detail = db.scalar(select(GameDetail).where(GameDetail.game_id == game_id))
+    if game is None or detail is None or game.user_id is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND,
+                            "Détail introuvable : partie inconnue, ou détail effacé (plus de 6 mois).")
+    return {"game": {**_game_summary(game, True), "pseudo": game.user.pseudo}, "detail": detail.data}
+
+
+@router.get("/users/{user_id}/events")
+def user_events(user_id: int, db: Session = Depends(db_session)) -> list[dict]:
+    """Registre des modifications du compte (type et date, gardé un an), du plus récent au plus ancien."""
+    _user_or_404(db, user_id)
+    events = db.scalars(select(AccountEvent).where(AccountEvent.user_id == user_id)
+                        .order_by(AccountEvent.created_at.desc(), AccountEvent.id.desc())).all()
+    return [{"kind": e.kind, "label": service.ACCOUNT_EVENTS.get(e.kind, e.kind), "date": iso_utc(e.created_at)}
+            for e in events]
+
+
+def _game_link(game_id, with_detail: set[int]):
+    """Partie d'un signalement : "detail" (détail enregistré), "current" (partie en cours ou dernière terminée,
+    pas encore enregistrée) ou None (partie d'un compte supprimé, ou détail effacé au bout de 6 mois)."""
+    if game_id is None:
+        return None
+    if game_id in with_detail:
+        return "detail"
+    session = current_session()
+    return "current" if session is not None and session.record_id == game_id else None
+
+
+@router.get("/reports")
+def list_reports(db: Session = Depends(db_session)) -> list[dict]:
+    """Signalements des messages des IA, du plus récent au plus ancien (filtrés par le panel)."""
+    reports = db.scalars(select(AgentReport).order_by(AgentReport.created_at.desc(), AgentReport.id.desc())).all()
+    game_ids = {r.game_id for r in reports if r.game_id is not None}
+    with_detail = set(db.scalars(select(GameDetail.game_id).where(GameDetail.game_id.in_(game_ids))))
+    pseudos = dict(db.execute(select(User.id, User.pseudo).where(
+        User.id.in_({r.user_id for r in reports if r.user_id is not None}))).all())
+    return [
+        {
+            "id": r.id, "date": iso_utc(r.created_at), "agent": r.agent, "personality": r.personality,
+            "role_name": get_role(r.role).name_FR, "model": r.model, "channel": r.channel, "moment": r.moment,
+            "message": r.message, "category": r.category, "category_label": REPORT_CATEGORIES.get(r.category, r.category),
+            "comment": r.comment, "reporter": pseudos.get(r.user_id),  # None : compte supprimé
+            "handled": r.handled_at is not None,
+            "handled_at": iso_utc(r.handled_at) if r.handled_at else None,
+            "game_id": r.game_id, "game_link": _game_link(r.game_id, with_detail),
+        }
+        for r in reports
+    ]
+
+
+class ReportStatus(BaseModel):
+    handled: bool
+
+
+@router.put("/reports/{report_id}/status")
+def set_report_status(report_id: int, body: ReportStatus, db: Session = Depends(db_session)) -> dict:
+    """Marque un signalement comme traité (supprimé 6 mois plus tard) ou le remet en attente."""
+    report = db.get(AgentReport, report_id)
+    if report is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Signalement introuvable.")
+    report.handled_at = utcnow() if body.handled else None
+    db.commit()
+    return {"id": report.id, "handled": body.handled,
+            "handled_at": iso_utc(report.handled_at) if report.handled_at else None}
+
+
+def _averages(ratings: list[AgentRating], field: str) -> list[dict]:
+    """Note moyenne et nombre de notes par valeur de `field` (personnalité, modèle), de la meilleure à la moins bonne."""
+    groups: dict = {}
+    for rating in ratings:
+        groups.setdefault(getattr(rating, field), []).append(rating.score)
+    rows = [{"key": key, "count": len(scores), "average": round(sum(scores) / len(scores), 2)}
+            for key, scores in groups.items()]
+    return sorted(rows, key=lambda row: (-row["average"], -row["count"], str(row["key"])))
+
+
+@router.get("/ratings")
+def list_ratings(db: Session = Depends(db_session)) -> dict:
+    """Évaluations des agents en fin de partie : moyennes par personnalité et par modèle (model vide : agent qui
+    n'a rien dit), et notes avec commentaire, de la plus récente à la plus ancienne."""
+    ratings = db.scalars(select(AgentRating).order_by(AgentRating.created_at.desc(), AgentRating.id.desc())).all()
+    commented = [r for r in ratings if r.comment]
+    game_ids = {r.game_id for r in commented if r.game_id is not None}
+    with_detail = set(db.scalars(select(GameDetail.game_id).where(GameDetail.game_id.in_(game_ids))))
+    pseudos = dict(db.execute(select(User.id, User.pseudo).where(
+        User.id.in_({r.user_id for r in commented if r.user_id is not None}))).all())
+    return {
+        "count": len(ratings),
+        "average": round(sum(r.score for r in ratings) / len(ratings), 2) if ratings else None,
+        "by_personality": _averages(ratings, "personality"),
+        "by_model": _averages(ratings, "model"),
+        "comments": [
+            {"id": r.id, "date": iso_utc(r.created_at), "agent": r.agent, "personality": r.personality,
+             "role_name": get_role(r.role).name_FR, "model": r.model, "score": r.score, "comment": r.comment,
+             "author": pseudos.get(r.user_id), "game_id": r.game_id, "game_link": _game_link(r.game_id, with_detail)}
+            for r in commented
+        ],
+    }
+
+
+@router.get("/debug/all-states")
 def get_all_debug_states():
     """
     Route sécurisée pour inspecter la partie en cours (ou la dernière terminée), sans rien cacher :
@@ -42,116 +203,10 @@ def get_all_debug_states():
     return build_debug_state()
 
 
-TEAM_LABELS = {"townsfolk": "Villageois", "outcast": "Paria", "accomplice": "Complice", "demon": "Démon"}
-FAILURE_STEPS = {"night": "action de nuit (choix tiré au hasard)", "public": "message public",
-                 "private": "réponse en salon privé", "vote": "vote (abstention)"}
-def _moment(event) -> str:
-    return f"{'Nuit' if event.phase.value == 'nuit' else 'Jour'} {event.turn}"
-
-
-def _author(memory, event) -> str:
-    return "Maître du Jeu" if event.author_id is None else memory.name_of(event.author_id)
-
-
-def _channel(memory, event, reader: str) -> str:
-    """Canal de l'événement, vu par `reader` : public, personnel ou privé (avec qui)."""
-    if event.visible_to is None:
-        return "public"
-    if event.visible_to == {reader}:
-        return "personnel"
-    others = sorted(memory.name_of(p) for p in event.visible_to - {reader})
-    return f"privé avec {', '.join(others)}"
-
-
-def _night_history(session) -> list[dict]:
-    """Onglet Nuits du joueur humain, avec des noms (le front du jeu, lui, reçoit des identifiants)."""
-    history = []
-    for entry in session.night_log:
-        if entry.type == "result":
-            dead = session.state.player(entry.dead_player).name if entry.dead_player else None
-            info = f"{dead} est mort·e cette nuit." if dead else "Personne n'est mort cette nuit."
-        else:
-            info = entry.info
-        history.append({"turn": entry.turn, "type": entry.type, "info": info})
-    return history
-
-
-def _vote_history(session) -> list[dict]:
-    """Onglet Votes du joueur humain, avec des noms."""
-    def name(player_id):
-        return session.state.player(player_id).name if player_id else None
-    return [
-        {"turn": v.turn, "voter": name(v.voter), "target": name(v.target), "executed": name(v.executed)}
-        for v in session.vote_log
-    ]
-
-
 def build_debug_state() -> dict:
-    """État complet de la partie pour le panneau d'administration (noms, jamais d'identifiants)."""
+    """État complet de la partie en cours (ou de la dernière terminée) pour le panneau d'administration."""
     session = current_session()
-    if session is None or session.state is None or session.memory is None:
+    view = game_view(session) if session is not None else None
+    if view is None:
         return {"game_in_progress": False, "message": "Aucune partie n'a encore été lancée."}
-
-    state, memory, agents, human_id = session.state, session.memory, session.agents, session.human_id
-    ai_ids = [p.id for p in state.players if p.id != human_id]
-
-    return {
-        "game_in_progress": session.running,
-        "status": "en cours" if session.running else "terminée",
-        "human": memory.name_of(human_id),
-        "turn": state.turn,
-        "phase": state.phase.value,
-        "agents": [memory.name_of(pid) for pid in ai_ids],
-        "channels": [", ".join(memory.name_of(pid) for pid in members)
-                     for members in session.opened_channels.values()],
-        "players": [
-            {
-                "name": p.name,
-                "is_human": p.id == human_id,
-                "role": p.role.name_FR,
-                "team": TEAM_LABELS.get(p.role.team.value, p.role.team.value),
-                "personality": getattr(agents.get(p.id), "personality_key", None),
-                "alive": p.alive,
-                "has_vote": p.can_vote,
-            }
-            for p in state.players
-        ],
-        # Tout ce qui s'est dit ou annoncé publiquement
-        "public_history": [
-            {"moment": _moment(e), "sender": _author(memory, e), "content": e.content}
-            for e in memory.events_for(human_id) if e.visible_to is None
-        ],
-        # Historique personnel de chaque IA : tout ce qu'elle sait, dans l'ordre
-        "agent_histories": {
-            memory.name_of(pid): [
-                {
-                    "role": f"{_moment(e)} · {_channel(memory, e, pid)} · {_author(memory, e)}",
-                    "content": e.content,
-                }
-                for e in memory.events_for(pid)
-            ]
-            for pid in ai_ids
-        },
-        # Action de nuit de chaque joueur (IA et humain), telle qu'enregistrée par le moteur
-        "night_actions": sorted(
-            (
-                {"turn": e.turn, "player": p.name, "content": e.content}
-                for p in state.players
-                for e in memory.events_for(p.id)
-                if e.type.value == "night_action" and e.visible_to == {p.id}
-            ),
-            key=lambda action: action["turn"],
-        ),
-        # IA qui n'ont pas répondu (les échecs de nuit ne sont montrés qu'ici)
-        "agent_failures": [
-            {
-                "moment": f"{'Nuit' if f['phase'] == 'nuit' else 'Jour'} {f['turn']}",
-                "agent": memory.name_of(f["agent"]),
-                "step": FAILURE_STEPS.get(f["step"], f["step"]),
-            }
-            for f in session.agent_failures
-        ],
-        # Onglets Nuits et Votes du joueur humain
-        "night_history": _night_history(session),
-        "vote_history": _vote_history(session),
-    }
+    return view

@@ -1,4 +1,4 @@
-"""Route d'administration : accès par jeton, et état complet de la partie en cours (rien n'est caché)."""
+"""Routes d'administration : réservées au compte admin ; état complet de la partie en cours (rien n'est caché)."""
 import random
 
 import pytest
@@ -11,6 +11,12 @@ from backend.server import admin
 from backend.server.app import app
 from backend.server.schemas import NightHistoryEntry, VoteHistoryEntry
 from backend.server.session import GameSession, set_current_session
+from backend.accounts.service import ensure_admin, find_by_pseudo, register
+from backend.db import GameRecord
+from backend.db.models import utcnow
+from backend.server import game_records
+from backend.accounts.tokens import COOKIE_NAME
+from backend.db import get_session
 
 NAMES = {"h": "Alex", "p1": "marIA", "p2": "tobIAs", "p3": "mAIsie", "p4": "adrIAn", "p5": "dIAne"}
 PERSONALITIES = ["agitator", "clown", "observer", "paranoid", "strategist"]
@@ -90,58 +96,86 @@ def test_player_histories_use_names(session):
     assert view["channels"] == ["Alex, marIA"]
 
 
-# --- Accès à la route /admin/debug/all-states --------------------------------------
+# --- Accès aux routes /admin : réservées au compte admin ----------------------------
 
 ADMIN_URL = "/admin/debug/all-states"
-TOKEN = "secret-de-test"
 
 
 @pytest.fixture
 def client(clean_server):
-    return TestClient(app)
+    """Application démarrée (base en mémoire), avec un compte admin et un compte joueur."""
+    with TestClient(app) as client:
+        with get_session() as db:
+            ensure_admin(db, "Gardien", "mot-de-passe-admin")
+            register(db, "Vesper", "mot-de-passe-joueur", "vesper@exemple.fr").email_verified_at = utcnow()
+            db.commit()
+        yield client
 
 
-@pytest.fixture
-def admin_token(monkeypatch):
-    monkeypatch.setattr(admin, "ADMIN_SECRET_TOKEN", TOKEN)
-    return TOKEN
+def log_in(client, pseudo, password):
+    assert client.post("/api/auth/login", json={"login": pseudo, "password": password}).status_code == 200
 
 
-def test_admin_with_valid_token(client, admin_token):
-    assert client.get(ADMIN_URL, headers={"x-admin-token": admin_token}).status_code == 200
+def test_admin_routes_require_a_login(client):
+    for method, url in [("get", ADMIN_URL), ("get", "/admin/users"), ("post", "/admin/users/1/reset-password")]:
+        response = getattr(client, method)(url)
+        assert response.status_code == 401, url
+        assert response.json()["detail"] == "Vous n'êtes pas connecté."
 
 
-def test_admin_with_wrong_token_is_forbidden(client, admin_token):
-    response = client.get(ADMIN_URL, headers={"x-admin-token": "mauvais"})
-    assert response.status_code == 403
-    assert "Jeton admin invalide" in response.json()["detail"]
-
-
-def test_admin_without_header_is_forbidden(client, admin_token):
+def test_player_account_is_forbidden(client):
+    log_in(client, "Vesper", "mot-de-passe-joueur")
     response = client.get(ADMIN_URL)
-    assert response.status_code == 403  # même réponse qu'un jeton faux
-    assert "Jeton admin invalide ou manquant" in response.json()["detail"]
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Accès réservé à l'administrateur."
+    assert client.get("/admin/users").status_code == 403
 
 
-def test_admin_with_non_ascii_token_is_forbidden(client, admin_token):
-    """Un header avec accent ne doit pas faire planter le serveur (erreur 500)."""
-    headers = {"x-admin-token": "jeton-é".encode("latin-1")}
-    assert client.get(ADMIN_URL, headers=headers).status_code == 403
+def test_admin_account_has_access(client):
+    log_in(client, "Gardien", "mot-de-passe-admin")
+    assert client.get(ADMIN_URL).status_code == 200
 
 
-def test_admin_with_token_of_different_length_is_forbidden(client, admin_token):
-    assert client.get(ADMIN_URL, headers={"x-admin-token": admin_token + "x"}).status_code == 403
+def test_forged_cookie_is_refused(client):
+    client.cookies.set(COOKIE_NAME, "pas-un-jeton")
+    assert client.get(ADMIN_URL).status_code == 401
 
 
-def test_admin_is_closed_when_token_is_not_configured(client, monkeypatch):
-    monkeypatch.setattr(admin, "ADMIN_SECRET_TOKEN", None)
-    assert client.get(ADMIN_URL, headers={"x-admin-token": ""}).status_code == 403
+def test_admin_lists_accounts_without_password_hash(client):
+    log_in(client, "Gardien", "mot-de-passe-admin")
+    users = client.get("/admin/users").json()
+    assert [(u["pseudo"], u["is_admin"]) for u in users] == [("Gardien", True), ("Vesper", False)]
+    assert all(set(u) == {"id", "pseudo", "email", "email_verified", "is_admin", "created_at"} for u in users)
+    assert all(u["created_at"].endswith("+00:00") for u in users)  # fuseau explicite pour le navigateur
 
 
-def test_admin_is_closed_when_token_is_empty(client, monkeypatch):
-    """Un jeton vide (comme dans .env.example) ne doit pas ouvrir l'admin avec un header vide."""
-    monkeypatch.setattr(admin, "ADMIN_SECRET_TOKEN", "")
-    assert client.get(ADMIN_URL, headers={"x-admin-token": ""}).status_code == 403
+def test_admin_resets_a_player_password(client):
+    player = TestClient(app)
+    log_in(player, "Vesper", "mot-de-passe-joueur")
+    log_in(client, "Gardien", "mot-de-passe-admin")
+    vesper = next(u for u in client.get("/admin/users").json() if u["pseudo"] == "Vesper")
+
+    response = client.post(f"/admin/users/{vesper['id']}/reset-password")
+    assert response.status_code == 200
+    temporary = response.json()["temporary_password"]
+    assert response.json()["pseudo"] == "Vesper" and len(temporary) >= 8
+
+    assert player.get("/api/auth/me").status_code == 401  # le joueur est déconnecté
+    assert client.post("/api/auth/login", json={"login": "Vesper", "password": "mot-de-passe-joueur"}).status_code == 401
+    log_in(TestClient(app), "Vesper", temporary)
+
+
+def test_admin_password_cannot_be_reset_from_the_panel(client):
+    log_in(client, "Gardien", "mot-de-passe-admin")
+    admin_id = client.get("/api/auth/me").json()["id"]
+    response = client.post(f"/admin/users/{admin_id}/reset-password")
+    assert response.status_code == 400
+    assert "profil" in response.json()["detail"]
+
+
+def test_reset_unknown_account(client):
+    log_in(client, "Gardien", "mot-de-passe-admin")
+    assert client.post("/admin/users/999/reset-password").status_code == 404
 
 
 def test_unavailable_agents_listed_with_names(session):
@@ -149,3 +183,52 @@ def test_unavailable_agents_listed_with_names(session):
     view = admin.build_debug_state()
     assert view["agent_failures"] == [
         {"moment": "Nuit 2", "agent": "marIA", "step": "action de nuit (choix tiré au hasard)"}]
+
+
+# --- Suppression d'un compte ----------------------------------------------------------
+
+def test_delete_account_requires_admin(client):
+    vesper_id = _user_id("Vesper")
+    assert client.delete(f"/admin/users/{vesper_id}").status_code == 401
+    log_in(client, "Vesper", "mot-de-passe-joueur")
+    assert client.delete(f"/admin/users/{vesper_id}").status_code == 403
+
+
+def test_admin_deletes_a_player_account(client):
+    player = TestClient(app)
+    log_in(player, "Vesper", "mot-de-passe-joueur")
+    log_in(client, "Gardien", "mot-de-passe-admin")
+    vesper_id = _user_id("Vesper")
+
+    assert client.delete(f"/admin/users/{vesper_id}").status_code == 204
+    assert [u["pseudo"] for u in client.get("/admin/users").json()] == ["Gardien"]
+    assert player.get("/api/auth/me").status_code == 401  # son cookie ne vaut plus rien
+    assert client.delete(f"/admin/users/{vesper_id}").status_code == 404
+
+
+def test_admin_account_cannot_be_deleted_from_the_panel(client):
+    log_in(client, "Gardien", "mot-de-passe-admin")
+    response = client.delete(f"/admin/users/{_user_id('Gardien')}")
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Le compte administrateur ne peut pas être supprimé."
+
+
+def test_deleting_an_account_stops_its_running_game(client, monkeypatch):
+    log_in(client, "Gardien", "mot-de-passe-admin")
+    vesper_id = _user_id("Vesper")
+    state, agents, memory = setup_game(NAMES, "h", PERSONALITIES, random.Random(0))
+    session = GameSession(human_id="h", user_id=vesper_id, state=state, memory=memory, agents=agents)
+    monkeypatch.setattr(GameSession, "running", property(lambda self: self.outcome is None))
+    set_current_session(session)
+    game_records.open_record(session)
+
+    assert client.delete(f"/admin/users/{vesper_id}").status_code == 204
+    assert session.outcome is not None  # partie arrêtée
+    with get_session() as db:
+        game = db.query(GameRecord).one()  # gardée, anonyme, comptée comme abandonnée
+        assert game.user_id is None and game.status.value == "abandoned"
+
+
+def _user_id(pseudo):
+    with get_session() as db:
+        return find_by_pseudo(db, pseudo).id

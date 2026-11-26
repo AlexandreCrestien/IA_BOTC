@@ -41,18 +41,94 @@
                 </p>
             </div>
 
-            <!-- Formulaire : la touche Entrée rejoint la partie -->
-            <form id="welcome-form" class="w-full space-y-3">
+            <!-- Confirmation affichée à l'arrivée (compte supprimé) -->
+            <p id="welcome-notice" role="status" class="modal-notice notice-night hidden w-full text-center"></p>
+
+            <!-- Joueur connecté : connexion automatique à sa partie (lancée depuis le tableau de bord) -->
+            <div id="welcome-account" class="hidden w-full text-center space-y-3">
+                <p id="welcome-account-text" class="font-serif italic text-base"></p>
+                <p id="welcome-account-error" role="alert" class="welcome-error hidden text-sm"></p>
+                <a href="/dashboard.html" class="btn-ghost w-full">Tableau de bord</a>
+            </div>
+
+            <!-- Partie d'invité en cours (onglet fermé) : reprise avec le même pseudo -->
+            <div id="welcome-resume" class="modal-notice notice-night hidden w-full text-center">
+                <p id="welcome-resume-text" class="mb-3"></p>
+                <button type="button" data-action="resume-guest-game" class="btn-seal w-full">Reprendre la partie</button>
+            </div>
+
+            <!-- Trois façons d'entrer : invité, connexion, inscription -->
+            <div class="welcome-tabs w-full" role="tablist">
+                <button type="button" data-action="welcome-tab" data-tab="guest" id="welcome-tab-guest" class="welcome-tab is-active" role="tab" aria-selected="true">Invité</button>
+                <button type="button" data-action="welcome-tab" data-tab="login" id="welcome-tab-login" class="welcome-tab" role="tab" aria-selected="false">Connexion</button>
+                <button type="button" data-action="welcome-tab" data-tab="register" id="welcome-tab-register" class="welcome-tab" role="tab" aria-selected="false">Inscription</button>
+            </div>
+
+            <!-- Invité : la touche Entrée rejoint la partie -->
+            <form id="welcome-form" class="welcome-panel w-full space-y-3" data-panel="guest">
                 <label for="welcome-player-id" class="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Votre pseudo</label>
                 <input type="text" id="welcome-player-id" placeholder="ex : Sasha" autocomplete="nickname" maxlength="20" autofocus
-                    class="w-full bg-black/40 border border-[var(--gold)] rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[var(--gold)] text-center font-mono text-gray-200">
+                    class="welcome-input w-full font-mono">
 
                 <button type="submit" id="welcome-join-btn" class="w-full bg-seal text-white font-display tracking-wider py-3.5 rounded-xl transition shadow-seal uppercase text-sm font-bold disabled:opacity-60 disabled:cursor-progress">
                     Rejoindre la partie
                 </button>
+                <p class="text-xs text-gray-400 text-center">En invité, vos parties ne sont pas enregistrées.</p>
 
                 <!-- Erreur de connexion (serveur injoignable, pseudo vide…) -->
                 <p id="welcome-error" role="alert" class="welcome-error hidden text-sm text-center"></p>
+            </form>
+
+            <!-- Connexion : vers le tableau de bord -->
+            <form id="login-form" class="welcome-panel hidden w-full space-y-3" data-panel="login">
+                <label for="login-identifier" class="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Pseudo ou adresse e-mail</label>
+                <input type="text" id="login-identifier" autocomplete="username" maxlength="254" class="welcome-input w-full">
+                <label for="login-password" class="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Mot de passe</label>
+                <input type="password" id="login-password" autocomplete="current-password" class="welcome-input w-full font-mono">
+                <button type="submit" id="login-btn" class="w-full bg-seal text-white font-display tracking-wider py-3.5 rounded-xl transition shadow-seal uppercase text-sm font-bold disabled:opacity-60 disabled:cursor-progress">
+                    Se connecter
+                </button>
+                <p id="login-error" role="alert" class="welcome-error hidden text-sm text-center"></p>
+                <button type="button" data-action="welcome-tab" data-tab="forgot" id="forgot-link" class="w-full text-sm underline opacity-70 hover:opacity-100">
+                    Mot de passe oublié ?
+                </button>
+            </form>
+
+            <!-- Mot de passe oublié : un lien est envoyé par e-mail (même réponse que l'adresse existe ou non) -->
+            <form id="forgot-form" class="welcome-panel hidden w-full space-y-3" data-panel="forgot">
+                <p class="text-sm text-gray-300 text-center">Indiquez l'adresse e-mail de votre compte : vous recevrez un lien pour choisir un nouveau mot de passe.</p>
+                <label for="forgot-email" class="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Adresse e-mail</label>
+                <input type="email" id="forgot-email" autocomplete="email" maxlength="254" class="welcome-input w-full">
+                <button type="submit" id="forgot-btn" class="w-full bg-seal text-white font-display tracking-wider py-3.5 rounded-xl transition shadow-seal uppercase text-sm font-bold disabled:opacity-60 disabled:cursor-progress">
+                    Recevoir un lien
+                </button>
+                <p id="forgot-error" role="alert" class="welcome-error hidden text-sm text-center"></p>
+                <p id="forgot-message" role="status" class="modal-notice notice-night hidden text-sm text-center"></p>
+                <button type="button" data-action="welcome-tab" data-tab="login" class="w-full text-sm underline opacity-70 hover:opacity-100">
+                    Retour à la connexion
+                </button>
+            </form>
+
+            <!-- Inscription : crée le compte et ouvre le tableau de bord -->
+            <form id="register-form" class="welcome-panel hidden w-full space-y-3" data-panel="register">
+                <label for="register-pseudo" class="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Pseudo</label>
+                <input type="text" id="register-pseudo" autocomplete="username" maxlength="20" class="welcome-input w-full">
+                <div class="label-with-tip">
+                    <label for="register-email" class="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Adresse e-mail</label>
+                    <span class="info-tip">
+                        <button type="button" class="info-tip-icon" aria-label="Pourquoi votre adresse e-mail ?" aria-describedby="register-email-tip">?</button>
+                        <span id="register-email-tip" role="tooltip" class="info-tip-text">Votre adresse sert uniquement à vous connecter, à recevoir un lien si vous oubliez votre mot de passe, à être prévenu de tout changement de votre adresse ou de votre mot de passe, et un mois avant la suppression d'un compte inactif. Elle n'est jamais transmise à personne, ni utilisée pour de la publicité.</span>
+                    </span>
+                </div>
+                <input type="email" id="register-email" autocomplete="email" maxlength="254" class="welcome-input w-full" aria-describedby="register-email-tip">
+                <label for="register-password" class="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Mot de passe (8 caractères au moins)</label>
+                <input type="password" id="register-password" autocomplete="new-password" class="welcome-input w-full font-mono">
+                <label for="register-password-confirm" class="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Confirmer le mot de passe</label>
+                <input type="password" id="register-password-confirm" autocomplete="new-password" class="welcome-input w-full font-mono">
+                <button type="submit" id="register-btn" class="w-full bg-seal text-white font-display tracking-wider py-3.5 rounded-xl transition shadow-seal uppercase text-sm font-bold disabled:opacity-60 disabled:cursor-progress">
+                    Créer mon compte
+                </button>
+                <p id="register-error" role="alert" class="welcome-error hidden text-sm text-center"></p>
             </form>
         </div>
     </div>
@@ -63,7 +139,7 @@
         <!-- Top bar / Annonces & état du jeu -->
         <!-- Grille 3 colonnes : les côtés gardent leur largeur de contenu, l'annonce au centre
              rétrécit (et se tronque) au lieu de passer par-dessus l'encadré tour/phase. -->
-        <header class="panel border-b px-6 h-16 shrink-0 relative grid grid-cols-[minmax(max-content,1fr)_minmax(0,42rem)_minmax(max-content,1fr)] items-center gap-4 shadow-md z-10">
+        <header class="game-header panel border-b px-6 h-16 shrink-0 relative grid grid-cols-[minmax(max-content,1fr)_minmax(0,42rem)_minmax(max-content,1fr)] items-center gap-4 shadow-md z-10">
             <!-- Gauche : Titre -->
             <div class="flex items-center space-x-2 justify-self-start">
                 <span class="font-display font-bold tracking-wider text-gilt text-base uppercase">Lantern Hollow</span>
@@ -105,14 +181,26 @@
                 </div>
 
                 <!-- Badge de connexion -->
-                <!-- Abandonner la partie (confirmation demandée) : icône seule pour rester compact -->
-                <button type="button" id="abandon-btn" data-action="ask-abandon" class="header-icon-btn"
-                    title="Abandonner et lancer une nouvelle partie" aria-label="Abandonner et lancer une nouvelle partie">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
-                </button>
-
                 <div id="connection-status" class="connection-badge" data-state="online" role="status">
                     Connecté
+                </div>
+
+                <!-- Menu : tableau de bord, déconnexion ou compte (invité), abandon -->
+                <div class="game-menu-wrap">
+                    <button type="button" id="menu-btn" data-action="toggle-menu" class="header-icon-btn"
+                        title="Menu" aria-label="Menu" aria-haspopup="menu" aria-expanded="false" aria-controls="game-menu">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4" aria-hidden="true"><path d="M4 6h16"></path><path d="M4 12h16"></path><path d="M4 18h16"></path></svg>
+                    </button>
+                    <div id="game-menu" class="game-menu panel hidden" role="menu">
+                        <p id="menu-player" class="game-menu-label"></p>
+                        <!-- Joueur connecté -->
+                        <a href="/dashboard.html" target="_blank" rel="noopener" id="menu-dashboard" class="game-menu-item hidden" role="menuitem" data-action="close-menu">Tableau de bord</a>
+                        <button type="button" id="menu-logout" data-action="logout" class="game-menu-item hidden" role="menuitem">Déconnexion</button>
+                        <!-- Invité -->
+                        <button type="button" id="menu-register" data-action="open-account" data-mode="register" class="game-menu-item" role="menuitem">Créer un compte</button>
+                        <button type="button" id="menu-login" data-action="open-account" data-mode="login" class="game-menu-item" role="menuitem">Se connecter</button>
+                        <button type="button" id="abandon-btn" data-action="ask-abandon" class="game-menu-item is-danger" role="menuitem">Abandonner la partie</button>
+                    </div>
                 </div>
             </div>
         </header>
@@ -193,6 +281,7 @@
                             <textarea
                                 id="chat-input"
                                 rows="1"
+                                maxlength="500"
                                 placeholder="Parler au village…"
                                 aria-label="Votre message"
                                 class="max-h-32 min-h-9 flex-1 resize-none bg-transparent px-1 py-2 text-sm focus:outline-none disabled:cursor-not-allowed"
@@ -376,15 +465,29 @@
                             </article>
                             <article class="codex-card rounded-lg p-3">
                                 <h4 class="font-display text-lg text-gold mb-1">Ce qui est envoyé aux IA</h4>
-                                <p class="text-sm leading-relaxed opacity-85">Pour faire parler les personnages, le déroulé de la partie (messages publics et privés, votes, actions) et vos propres messages sont envoyés à des fournisseurs de modèles d'IA : Groq, Google (Gemini) et OpenRouter. Ces services peuvent être situés hors de l'Union européenne. N'écrivez pas d'informations personnelles dans le chat.</p>
+                                <p class="text-sm leading-relaxed opacity-85">Pour faire parler les personnages, le déroulé de la partie (messages publics et privés, votes, actions), vos propres messages et votre pseudo, qui est votre nom dans la partie, sont envoyés à des fournisseurs de modèles d'IA : Groq, Google (Gemini) et OpenRouter. Ces services peuvent être situés hors de l'Union européenne. N'écrivez pas d'informations personnelles dans le chat. Votre mot de passe, vos statistiques et vos succès ne leur sont jamais envoyés.</p>
                             </article>
                             <article class="codex-card rounded-lg p-3">
                                 <h4 class="font-display text-lg text-gold mb-1">Données collectées</h4>
-                                <p class="text-sm leading-relaxed opacity-85">Uniquement le pseudo que vous choisissez à l'accueil, qui sert de nom pendant la partie. Pas de compte, pas d'adresse e-mail, pas de cookie ni de traceur publicitaire.</p>
+                                <p class="text-sm leading-relaxed opacity-85"><strong>En invité :</strong> uniquement le pseudo choisi à l'accueil, qui sert de nom pendant la partie.</p>
+                                <p class="text-sm leading-relaxed opacity-85 mt-1"><strong>Avec un compte :</strong> votre pseudo, votre adresse e-mail, votre mot de passe (jamais stocké en clair : seule une empreinte chiffrée est gardée), et pour chaque partie jouée sa date, votre rôle, votre camp, son résultat et son nombre de tours, ainsi que les succès débloqués. Ces données servent uniquement à votre tableau de bord. Vous pouvez en télécharger une copie complète à tout moment depuis votre tableau de bord (section Profil, « Télécharger mes données »).</p>
+                                <p class="text-sm leading-relaxed opacity-85 mt-1">Votre adresse e-mail sert uniquement à vous connecter, à recevoir un lien si vous oubliez votre mot de passe, à être prévenu si l'adresse ou le mot de passe de votre compte change (pour réagir si ce n'est pas vous), et un mois avant la suppression de votre compte inactif. Elle doit être confirmée par le lien envoyé à l'inscription : tant qu'elle ne l'est pas, aucun autre e-mail ne lui est envoyé, et un compte non confirmé sous 72 heures est supprimé. Elle n'est jamais transmise aux IA ni à personne d'autre, et aucun e-mail publicitaire n'est envoyé. Un seul cookie, posé quand vous vous connectez, pour vous garder connecté pendant 7 jours : il est nécessaire au fonctionnement du compte et ne sert à aucun suivi ni à la publicité.</p>
                             </article>
                             <article class="codex-card rounded-lg p-3">
                                 <h4 class="font-display text-lg text-gold mb-1">Conservation</h4>
-                                <p class="text-sm leading-relaxed opacity-85">La partie est gardée en mémoire par le serveur tant qu'il tourne, pour pouvoir la reprendre après un rechargement de la page. Elle est effacée quand vous l'abandonnez, quand vous en lancez une nouvelle ou quand le serveur s'arrête : rien n'est enregistré dans une base de données.</p>
+                                <p class="text-sm leading-relaxed opacity-85">Pendant la partie, son déroulé (messages, votes, actions) est gardé en mémoire par le serveur, pour pouvoir la reprendre après un rechargement de la page. En invité, il n'est jamais enregistré.</p>
+                                <p class="text-sm leading-relaxed opacity-85 mt-1">Avec un compte, sont enregistrés dans la base de données du serveur : votre compte, le résumé de vos parties et vos succès ; le <strong>déroulé complet de chaque partie</strong>, gardé <strong>6 mois</strong> pour le service client (l'administrateur peut le consulter en cas de problème) ; et un <strong>registre des modifications de votre compte</strong> (type et date seulement : adresse ou mot de passe changés…), gardé <strong>un an</strong>. La partie d'un invité n'est pas enregistrée, sauf s'il crée un compte pendant la partie ou à sa fin.</p>
+                                <p class="text-sm leading-relaxed opacity-85 mt-1">Ces données sont gardées tant que le compte existe. Vous pouvez le supprimer à tout moment depuis votre tableau de bord (section Profil) : votre compte, vos succès, le déroulé de vos parties et le registre de votre compte sont effacés définitivement ; seul le résumé de vos parties est gardé de façon anonyme, détaché de votre compte, pour les statistiques du jeu.</p>
+                                <p class="text-sm leading-relaxed opacity-85 mt-1">Un compte sans connexion pendant un an est supprimé automatiquement, de la même façon, après un e-mail d'avertissement envoyé un mois avant.</p>
+                            </article>
+                            <article class="codex-card rounded-lg p-3">
+                                <h4 class="font-display text-lg text-gold mb-1">Signaler un message d'une IA</h4>
+                                <p class="text-sm leading-relaxed opacity-85">Avec un compte, vous pouvez signaler un message d'un personnage (drapeau au survol du message) : information qu'il ne devrait pas connaître, incohérence, sortie de son personnage, contenu inapproprié… Votre signalement aide l'équipe à améliorer les personnages ; il n'est jamais transmis aux IA. Il garde le message (votre pseudo y est remplacé par « [joueur] »), le personnage, le modèle d'IA qui l'a écrit, le problème choisi et votre commentaire éventuel.</p>
+                                <p class="text-sm leading-relaxed opacity-85 mt-1">Un signalement traité est supprimé 6 mois après son traitement. Si vous supprimez votre compte, vos signalements sont gardés sans lien avec vous et sans votre commentaire : ils ne concernent plus que l'IA. Les invités ne peuvent pas signaler de message : rien n'est collecté sur eux.</p>
+                            </article>
+                            <article class="codex-card rounded-lg p-3">
+                                <h4 class="font-display text-lg text-gold mb-1">Évaluer les personnages</h4>
+                                <p class="text-sm leading-relaxed opacity-85">Avec un compte, à la fin d'une partie gagnée ou perdue, vous pouvez noter chaque personnage de 1 à 5 et ajouter un commentaire. Comme les signalements, vos notes servent uniquement à améliorer les personnages et ne sont jamais transmises aux IA. Le commentaire (votre pseudo y est remplacé par « [joueur] ») est effacé au bout de 6 mois, ou à la suppression de votre compte ; la note est gardée, sans lien avec vous, pour les moyennes.</p>
                             </article>
                         </div>
                     </div>
@@ -552,7 +655,121 @@
             <h2 id="gameover-title" class="modal-title text-3xl my-2">Fin de la Partie</h2>
             <p id="gameover-outcome" class="gameover-outcome font-display text-xl hidden"></p>
             <p id="gameover-desc" class="font-serif text-base italic leading-relaxed opacity-90 mt-2">Le village a rendu son verdict.</p>
-            <button type="button" data-action="reload" class="btn-seal mt-6 w-full">Nouvelle partie</button>
+
+            <!-- Succès débloqués par la partie (joueur connecté, ou invité qui vient de s'inscrire) -->
+            <div id="gameover-achievements" class="hidden mt-4 text-left">
+                <p class="modal-kicker mb-2 text-center">Succès débloqués</p>
+                <ul id="gameover-achievements-list" class="achievement-unlocks"></ul>
+            </div>
+
+            <!-- Invité : s'inscrire pour garder la partie et ses succès -->
+            <div id="gameover-register" class="modal-notice notice-night hidden">
+                <p id="gameover-register-text" class="mb-3">Créez un compte pour enregistrer cette partie et débloquer vos succès.</p>
+                <button type="button" data-action="open-account" data-mode="register" class="btn-seal w-full">Créer un compte</button>
+                <button type="button" data-action="open-account" data-mode="login" class="btn-ghost w-full mt-2">J'ai déjà un compte</button>
+            </div>
+
+            <!-- Joueur connecté, partie terminée : évaluer les agents IA (une fois par partie) -->
+            <div id="gameover-rate" class="modal-notice notice-night hidden">
+                <p class="mb-3">Ces personnages vous ont-ils semblé crédibles ? Aidez-nous à les améliorer.</p>
+                <button type="button" data-action="open-rating" class="btn-seal w-full">Évaluer les agents IA</button>
+                <p class="text-xs italic opacity-70 mt-2">Ça ne prendra que 2 minutes.</p>
+            </div>
+
+            <div class="flex gap-2 mt-6">
+                <button type="button" data-action="new-game" class="btn-seal flex-1">Nouvelle partie</button>
+                <a href="/dashboard.html" id="gameover-dashboard" class="btn-ghost flex-1 hidden">Tableau de bord</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Évaluation des agents IA en fin de partie (joueur connecté) : une note et un commentaire par agent -->
+    <div id="modal-rating" class="modal-backdrop hidden">
+        <div class="modal-card w-[520px] max-h-[90vh] flex flex-col" data-tone="gold" role="dialog" aria-modal="true" aria-labelledby="rating-title">
+            <form id="rating-form" class="flex flex-col min-h-0">
+                <p class="modal-kicker ornament text-center">Évaluer les agents IA</p>
+                <h3 id="rating-title" class="modal-title my-2 text-center">Ces personnages étaient-ils crédibles ?</h3>
+                <p class="font-serif text-sm italic opacity-80 text-center">De 1 (pas du tout) à 5 (tout à fait). Notez ceux que vous voulez ; le commentaire est facultatif. Vos notes ne sont jamais transmises aux IA.</p>
+                <div id="rating-agents" class="flex flex-col gap-3 mt-4 overflow-y-auto min-h-0 pr-1"></div>
+                <p id="rating-error" role="alert" class="welcome-error hidden text-sm text-center mt-3"></p>
+                <div class="flex gap-2 pt-4 shrink-0">
+                    <button type="button" data-action="close-rating" class="btn-ghost flex-1">Retour</button>
+                    <button type="submit" id="rating-submit" class="btn-seal flex-1">Envoyer</button>
+                </div>
+            </form>
+            <div id="rating-thanks" class="hidden text-center">
+                <p class="modal-kicker ornament">Évaluation envoyée</p>
+                <h3 class="modal-title my-2">Merci !</h3>
+                <p class="font-serif text-base italic leading-relaxed opacity-90">Vos notes aident l'équipe à améliorer les personnages. Une nouvelle partie ?</p>
+                <div class="flex gap-2 mt-6">
+                    <button type="button" data-action="new-game" class="btn-seal flex-1">Nouvelle partie</button>
+                    <a href="/dashboard.html" class="btn-ghost flex-1">Tableau de bord</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Compte depuis la partie (invité) : inscription ou connexion ; la partie est rattachée au compte -->
+    <div id="modal-account" class="modal-backdrop hidden" data-action="close-account" data-backdrop>
+        <div class="modal-card w-[420px]" data-tone="gold" role="dialog" aria-modal="true" aria-labelledby="account-title">
+            <p class="modal-kicker ornament text-center">Rejoindre le registre du village</p>
+            <h3 id="account-title" class="modal-title my-2 text-center">Créer un compte</h3>
+            <p id="account-hint" class="font-serif text-base italic leading-relaxed opacity-90 text-center">
+                Cette partie sera enregistrée dans votre compte.
+            </p>
+            <form id="account-form" class="space-y-3 mt-4">
+                <label for="account-pseudo" id="account-pseudo-label" class="text-xs font-semibold uppercase tracking-wider block opacity-70">Pseudo</label>
+                <input type="text" id="account-pseudo" autocomplete="username" maxlength="254" class="welcome-input w-full">
+                <!-- Inscription seulement -->
+                <div id="account-email-row" class="space-y-3">
+                    <div class="label-with-tip">
+                        <label for="account-email" class="text-xs font-semibold uppercase tracking-wider block opacity-70">Adresse e-mail</label>
+                        <span class="info-tip">
+                            <button type="button" class="info-tip-icon" aria-label="Pourquoi votre adresse e-mail ?" aria-describedby="account-email-tip">?</button>
+                            <span id="account-email-tip" role="tooltip" class="info-tip-text">Votre adresse sert uniquement à vous connecter, à recevoir un lien si vous oubliez votre mot de passe, à être prévenu de tout changement de votre adresse ou de votre mot de passe, et un mois avant la suppression d'un compte inactif. Elle n'est jamais transmise à personne, ni utilisée pour de la publicité.</span>
+                        </span>
+                    </div>
+                    <input type="email" id="account-email" autocomplete="email" maxlength="254" class="welcome-input w-full" aria-describedby="account-email-tip">
+                </div>
+                <label for="account-password" class="text-xs font-semibold uppercase tracking-wider block opacity-70">Mot de passe</label>
+                <input type="password" id="account-password" class="welcome-input w-full font-mono">
+                <div id="account-confirm-row" class="space-y-3">
+                    <label for="account-password-confirm" class="text-xs font-semibold uppercase tracking-wider block opacity-70">Confirmer le mot de passe</label>
+                    <input type="password" id="account-password-confirm" autocomplete="new-password" class="welcome-input w-full font-mono">
+                </div>
+                <p id="account-error" role="alert" class="welcome-error hidden text-sm text-center"></p>
+                <div class="flex gap-2 pt-2">
+                    <button type="button" data-action="close-account" class="btn-ghost flex-1">Annuler</button>
+                    <button type="submit" id="account-submit" class="btn-seal flex-1">Créer mon compte</button>
+                </div>
+                <button type="button" id="account-switch" data-action="switch-account-mode" class="w-full text-sm underline opacity-70 hover:opacity-100">
+                    J'ai déjà un compte
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Signalement d'un message d'agent IA (joueur connecté) -->
+    <div id="modal-report" class="modal-backdrop hidden" data-action="close-report" data-backdrop>
+        <div class="modal-card w-[440px]" data-tone="blood" role="dialog" aria-modal="true" aria-labelledby="report-title">
+            <p class="modal-kicker ornament text-center">Signaler un message</p>
+            <h3 id="report-title" class="modal-title my-2 text-center">Quel est le problème ?</h3>
+            <blockquote id="report-quote" class="report-quote"></blockquote>
+            <form id="report-form" class="space-y-3 mt-4">
+                <fieldset class="report-categories">
+                    <legend class="text-xs font-semibold uppercase tracking-wider opacity-70 mb-2">Problème</legend>
+                    <div id="report-categories" class="space-y-1.5"></div>
+                </fieldset>
+                <label for="report-comment" id="report-comment-label" class="text-xs font-semibold uppercase tracking-wider block opacity-70">Commentaire (facultatif)</label>
+                <textarea id="report-comment" rows="3" maxlength="200" class="report-comment w-full"></textarea>
+                <p id="report-count" class="text-xs text-right opacity-60" aria-live="polite">0 / 200</p>
+                <p class="text-xs italic opacity-70">Votre signalement aide l'équipe à améliorer les personnages. Il n'est jamais transmis aux IA.</p>
+                <p id="report-error" role="alert" class="welcome-error hidden text-sm text-center"></p>
+                <div class="flex gap-2 pt-2">
+                    <button type="button" data-action="close-report" class="btn-ghost flex-1">Annuler</button>
+                    <button type="submit" id="report-submit" class="btn-seal btn-blood flex-1">Envoyer</button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -564,6 +781,7 @@
     <script src="/js/players.js"></script>
     <script src="/js/actions.js"></script>
     <script src="/js/modals.js"></script>
+    <script src="/js/account.js"></script>
     <script src="/js/main.js"></script>
 </body>
 </html>

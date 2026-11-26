@@ -16,6 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 os.environ["SIMULATE_LLM"] = "1"  # doit être défini avant l'import de llm_client
+os.environ["DATABASE_URL"] = "sqlite://"  # base en mémoire : la vraie base n'est pas touchée
 
 from fastapi.testclient import TestClient  # noqa: E402
 

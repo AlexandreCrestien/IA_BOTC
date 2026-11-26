@@ -33,6 +33,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 os.environ["SIMULATE_LLM"] = "1"  # doit être défini avant l'import de llm_client
+os.environ["DATABASE_URL"] = "sqlite://"  # base en mémoire : la vraie base n'est pas touchée
 
 from fastapi.testclient import TestClient  # noqa: E402
 
@@ -56,6 +57,7 @@ WINNERS = {"good", "evil"}
 # Champs obligatoires par type de message, d'après connection.js (handleServerMessage)
 REQUIRED = {
     "connected": (),
+    "guest_session": ("guest_token",),
     "role_assigned": ("role_name", "description"),
     "game_state": ("state",),
     "action_request": ("kind", "candidates"),

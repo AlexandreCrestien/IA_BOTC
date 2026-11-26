@@ -140,3 +140,7 @@ def test_night_and_vote_tabs_restored_after_reconnection(game, server):
     expect(game.locator("#tab-content-night")).to_contain_text("Personne n'est mort cette nuit.")
     game.click("#tab-btn-votes")
     expect(game.locator("#tab-content-votes")).to_contain_text("Lord Ashcombe a voté pour Mère Grimsby")
+
+
+def test_chat_message_is_limited_to_500_characters(game, server):
+    expect(game.locator("#chat-input")).to_have_attribute("maxlength", "500")  # même limite que le serveur

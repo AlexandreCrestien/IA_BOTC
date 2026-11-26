@@ -17,6 +17,9 @@ from server_helpers import waiting_session
 NAMES = {"h": "Alex", "imp": "Imp", "p1": "marIA", "moine": "Veilleur"}
 ROLES = {"h": "medium", "imp": "reaper", "p1": "apothecary", "moine": "watchman"}
 
+# Message du joueur ou du Codex : pas d'identifiant, il ne peut pas être signalé (seuls les messages des IA)
+NOT_REPORTABLE = {"message_id": None, "reported": False}
+
 
 def make_state(dead=()) -> GameState:
     return GameState(turn=2, phase=Phase.DISCUSSION, players=tuple(
@@ -32,7 +35,7 @@ def make_client() -> TestClient:
 @pytest.fixture(autouse=True)
 def no_real_game(monkeypatch, clean_server):
     """Se connecter ne doit pas lancer une vraie partie : la session est préparée par chaque test."""
-    monkeypatch.setattr(game_runner, "ensure_started", lambda player_id: None)
+    monkeypatch.setattr(game_runner, "ensure_started", lambda player_id, user=None: None)
 
 
 def waiting(kind=None, **request):
@@ -132,6 +135,18 @@ def test_unknown_field_refused():
     assert session.port.answers.empty()
 
 
+def test_logs_never_contain_what_the_player_wrote(caplog):
+    """Journal du serveur : le type d'action, jamais son contenu (messages, commentaires), même refusé."""
+    waiting("public_message")
+    secret = "Je m'appelle Jean Dupont"
+    with caplog.at_level("INFO"), make_client().websocket_connect("/ws/h") as conn:
+        connect(conn)
+        act(conn, "send_chat", channel_id="public", content=secret)
+        act(conn, "send_chat", channel_id="public", content=secret + "x" * 500)  # trop long : refusé
+    assert "send_chat" in caplog.text
+    assert "Jean Dupont" not in caplog.text
+
+
 def test_action_without_game_refused():
     with make_client().websocket_connect("/ws/h") as conn:
         connect(conn)
@@ -147,7 +162,7 @@ def test_whisper_opens_the_channel_and_answers_the_engine():
         opened = json.loads(conn.receive_text())
 
     assert announce == {"type": "chat", "channel_id": "public", "sender": "Codex",
-                        "content": "💬 Alex est entré en discussion privée avec Imp."}
+                        "content": "💬 Alex est entré en discussion privée avec Imp.", **NOT_REPORTABLE}
     assert opened == {"type": "private_channel_opened", "channel_id": "whisper_h_imp", "members": ["h", "imp"],
                       "text": "Salon privé ouvert avec Imp", "focus": True}
     assert session.whisper == "whisper_h_imp"
@@ -177,7 +192,8 @@ def test_reconnection_reopens_the_channel_and_resends_the_chat():
     assert messages[3] == {"type": "private_channel_opened", "channel_id": "whisper_h_imp",
                            "members": ["h", "imp"], "text": "", "focus": False}
     assert messages[4]["sender"] == "Codex"
-    assert messages[5] == {"type": "chat", "channel_id": "whisper_h_imp", "sender": "h", "content": "Psst"}
+    assert messages[5] == {"type": "chat", "channel_id": "whisper_h_imp", "sender": "h", "content": "Psst",
+                           **NOT_REPORTABLE}
 
 
 def test_revealed_allies_resent_with_the_role():
@@ -288,7 +304,7 @@ def test_turn_result_and_game_over_relayed_from_the_queue():
 
     assert sent == [
         {"type": "vote_result", "turn": 3, "executed": None, "votes": []},
-        {"type": "game_over", "winner": "good", "details": "Fin."},
+        {"type": "game_over", "winner": "good", "details": "Fin.", "achievements": []},
     ]
     assert session.vote_log == []  # aucun bulletin à retenir ce tour-là
 
@@ -352,7 +368,7 @@ def test_meeting_between_two_agents_announced_publicly():
     sent = relay(session, {"kind": "agent_meeting", "agents": ["imp", "moine"]})
 
     message = {"type": "chat", "channel_id": "public", "sender": "Codex",
-               "content": "💬 Imp et Veilleur se sont entretenus en privé."}
+               "content": "💬 Imp et Veilleur se sont entretenus en privé.", **NOT_REPORTABLE}
     assert sent == [message]
     assert [m.model_dump() for m in session.chat_log] == [message]  # renvoyé après une reconnexion
 
@@ -363,7 +379,7 @@ def test_unavailable_agent_in_public_discussion_announced_by_the_codex():
     session = waiting()
     sent = relay(session, {"kind": "agent_unavailable", "agent": "imp", "step": "public"})
     assert sent == [{"type": "chat", "channel_id": "public", "sender": "Codex",
-                     "content": "🕯️ Imp ne dit rien : son IA n'a pas répondu."}]
+                     "content": "🕯️ Imp ne dit rien : son IA n'a pas répondu.", **NOT_REPORTABLE}]
 
 
 def test_unavailable_agent_in_private_channel_announced_in_the_channel():

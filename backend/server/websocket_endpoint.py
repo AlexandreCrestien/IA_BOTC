@@ -2,11 +2,14 @@
 Ce que le serveur envoie au front est dans protocol.py ; la partie en cours dans session.py."""
 import json
 import logging
-from typing import Awaitable, Callable
+from typing import Awaitable, Callable, Optional
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
+from backend.accounts.service import user_from_token
+from backend.accounts.tokens import COOKIE_NAME
+from backend.db import User, get_session
 from backend.server import game_runner
 from backend.server.connection_manager import manager
 from backend.server.protocol import (
@@ -24,8 +27,13 @@ from backend.server.schemas import (
     Connected,
     Error,
     GameAbandoned,
+    GuestSession,
     NightActionAck,
+    RatingResult,
+    ReportResult,
 )
+from backend.server.ratings import save_ratings
+from backend.server.reports import save_report
 from backend.server.session import WHISPER_MESSAGES, GameSession, current_session
 
 logger = logging.getLogger(__name__)
@@ -171,6 +179,18 @@ async def on_abandon_game(session: GameSession, payload) -> None:
         await _error(session, "Aucune partie en cours à abandonner.")
 
 
+async def on_report_message(session: GameSession, payload) -> None:
+    """Signalement d'un message d'agent IA (joueur connecté), possible aussi sur l'écran de fin."""
+    error = save_report(session, payload.message_id, payload.category, payload.comment)
+    await send(session.human_id, ReportResult(message_id=payload.message_id, error=error))
+
+
+async def on_rate_agents(session: GameSession, payload) -> None:
+    """Évaluation des agents IA sur l'écran de fin (joueur connecté, partie terminée)."""
+    error = save_ratings(session, payload.ratings)
+    await send(session.human_id, RatingResult(error=error))
+
+
 ACTIONS: dict[str, Callable[[GameSession, BaseModel], Awaitable[None]]] = {
     "send_chat": on_send_chat,
     "request_whisper": on_request_whisper,
@@ -180,13 +200,27 @@ ACTIONS: dict[str, Callable[[GameSession, BaseModel], Awaitable[None]]] = {
     "submit_night_action": on_submit_night_action,
     "skip_turn": on_skip_turn,
     "abandon_game": on_abandon_game,
+    "report_message": on_report_message,
+    "rate_agents": on_rate_agents,
 }
 
 
 # --- Connexion --------------------------------------------------------------------------
 
+def _connected_user(websocket: WebSocket) -> Optional[User]:
+    """Compte du joueur, d'après le cookie de connexion envoyé à l'ouverture du WebSocket (None : invité)."""
+    token = websocket.cookies.get(COOKIE_NAME)
+    if not token:
+        return None
+    with get_session() as db:
+        return user_from_token(db, token)
+
+
 async def _resume(session: GameSession) -> None:
-    """Nouvelle connexion : rôle et état, chat, salons et historiques, puis la demande en attente."""
+    """Nouvelle connexion : rôle et état, chat, salons et historiques, puis la demande en attente.
+    Invité : jeton qui permet de rattacher la partie à un compte s'il s'inscrit."""
+    if session.guest_token is not None:
+        await send(session.human_id, GuestSession(guest_token=session.guest_token))
     session.role_sent = False  # le front repart d'une page vide
     await send_state(session)
     await restore(session)
@@ -203,11 +237,14 @@ async def _handle(player_id: str, raw_data: str) -> None:
         await manager.send_to_player(player_id, Error(data="Format JSON invalide.").model_dump())
         return
     except ValidationError as e:
-        logger.warning("Action non valide reçue de %s : %s", player_id, e.errors())
+        # Champ et type d'erreur seulement, sans la valeur reçue (contenu d'un message)
+        logger.warning("Action non valide reçue de %s : %s", player_id,
+                       [(err["loc"], err["type"]) for err in e.errors()])
         await manager.send_to_player(player_id, Error(data=f"Action non valide : {e.errors()}").model_dump())
         return
 
-    logger.info("Action reçue de %s -> %s | %s", player_id, packet.action, packet.payload)
+    # Seulement le type d'action : jamais son contenu (messages, commentaires), qui peut contenir des données personnelles
+    logger.info("Action reçue de %s -> %s", player_id, packet.action)
     session = current_session()
     if session is None or session.human_id != player_id:
         await manager.send_to_player(player_id, Error(data="Aucune partie en cours.").model_dump())
@@ -220,7 +257,8 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
     """Endpoint WebSocket du joueur. URL de connexion : ws://<serveur>/ws/<pseudo>"""
     # Refus (pseudo invalide, partie d'un autre joueur) : on accepte avant de refermer,
     # sinon le navigateur ne peut pas lire le motif du refus.
-    refusal = game_runner.can_join(player_id)
+    user = _connected_user(websocket)
+    refusal = game_runner.can_join(player_id, user)
     if refusal is not None:
         await websocket.accept()
         await websocket.close(code=CLOSE_REFUSED, reason=refusal)
@@ -232,7 +270,7 @@ async def websocket_endpoint(websocket: WebSocket, player_id: str):
     await manager.send_to_player(player_id, Connected().model_dump())
 
     # Nouvelle partie, ou reprise de la partie en cours
-    refusal = game_runner.ensure_started(player_id)
+    refusal = game_runner.ensure_started(player_id, user)
     if refusal is not None:  # cas limite : un autre joueur a lancé une partie entre-temps
         await websocket.close(code=CLOSE_REFUSED, reason=refusal)
         manager.disconnect(player_id, websocket)

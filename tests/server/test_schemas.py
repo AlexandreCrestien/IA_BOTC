@@ -71,6 +71,13 @@ def test_empty_chat_message_is_rejected():
         parse_action({"action": "send_chat", "payload": {"channel_id": "public", "content": ""}})
 
 
+def test_chat_message_is_limited_to_500_characters():
+    # Chaque message du joueur entre dans le contexte des agents : un message géant coûterait des tokens à chaque appel
+    parse_action({"action": "send_chat", "payload": {"channel_id": "public", "content": "a" * 500}})
+    with pytest.raises(ValidationError):
+        parse_action({"action": "send_chat", "payload": {"channel_id": "public", "content": "a" * 501}})
+
+
 @pytest.mark.parametrize("packet", [
     {"action": "voler_le_role", "payload": {}},   # action inconnue
     {"action": "send_chat"},                      # payload manquant

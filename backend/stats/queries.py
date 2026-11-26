@@ -1,0 +1,241 @@
+"""Lecture et écriture des statistiques et des succès d'un compte.
+
+Statistiques : parties gagnées, perdues et abandonnées (une partie abandonnée est une défaite).
+Les parties interrompues (serveur arrêté ou planté) apparaissent dans l'historique mais ne comptent pas.
+"""
+from datetime import datetime
+from typing import Optional
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from backend.db import (
+    COUNTED_STATUSES,
+    AccountEvent,
+    AgentRating,
+    AgentReport,
+    GameDetail,
+    GameRecord,
+    GameStatus,
+    UnlockedAchievement,
+    User,
+    iso_utc,
+)
+from backend.db.models import utcnow
+from backend.models import Alignment
+from backend.rules import get_role
+from backend.stats.achievements import ACHIEVEMENTS, BY_CODE, Achievement
+
+HIDDEN_TITLE = "???"
+HIDDEN_DESCRIPTION = "Succès caché."
+
+
+def unlock(db: Session, user_id: int, game_id: int, achievements: list[Achievement]) -> list[Achievement]:
+    """Enregistre les succès pas encore débloqués par ce compte ; renvoie ceux qui viennent de l'être.
+    L'appelant valide (commit)."""
+    owned = set(db.scalars(select(UnlockedAchievement.code).where(UnlockedAchievement.user_id == user_id)))
+    new = [a for a in achievements if a.code not in owned]
+    db.add_all(UnlockedAchievement(user_id=user_id, code=a.code, game_id=game_id) for a in new)
+    return new
+
+
+def _ratio(wins: int, played: int) -> Optional[float]:
+    """Part de victoires entre 0 et 1 (None sans partie jouée)."""
+    return round(wins / played, 3) if played else None
+
+
+def _summary(games: list[GameRecord]) -> dict:
+    wins = sum(1 for g in games if g.status == GameStatus.WON)
+    return {"played": len(games), "wins": wins, "win_rate": _ratio(wins, len(games))}
+
+
+def player_stats(db: Session, user_id: int) -> dict:
+    """Statistiques générales : parties jouées, victoires (au total, côté villageois, côté démons), tours moyens."""
+    games = list(db.scalars(select(GameRecord).where(
+        GameRecord.user_id == user_id, GameRecord.status.in_(COUNTED_STATUSES))))
+    return {
+        **_summary(games),
+        "good": _summary([g for g in games if g.alignment == Alignment.GOOD]),
+        "evil": _summary([g for g in games if g.alignment == Alignment.EVIL]),
+        "average_turns": round(sum(g.turns for g in games) / len(games), 1) if games else None,
+    }
+
+
+def game_history(db: Session, user_id: int) -> list[dict]:
+    """Parties terminées (ou interrompues), de la plus récente à la plus ancienne. La partie en cours n'y est pas."""
+    games = db.scalars(select(GameRecord)
+                       .where(GameRecord.user_id == user_id, GameRecord.status != GameStatus.IN_PROGRESS)
+                       .order_by(GameRecord.started_at.desc(), GameRecord.id.desc()))
+    return [
+        {
+            "id": g.id,
+            "date": iso_utc(g.started_at),
+            "role": g.role.value,
+            "role_name": get_role(g.role).name_FR,
+            "alignment": g.alignment.value,
+            "status": g.status.value,   # won | lost | abandoned | interrupted
+            "counted": g.status in COUNTED_STATUSES,
+            "turns": g.turns,
+        }
+        for g in games
+    ]
+
+
+def achievement_out(achievement: Achievement, unlocked_at: Optional[datetime] = None) -> dict:
+    """Succès pour le front. Caché et pas encore débloqué : ni titre, ni description, ni message."""
+    unlocked = unlocked_at is not None
+    secret = achievement.hidden and not unlocked
+    return {
+        "code": achievement.code,
+        "title": HIDDEN_TITLE if secret else achievement.title,
+        "description": HIDDEN_DESCRIPTION if secret else achievement.description,
+        "message": achievement.message if unlocked else None,
+        "hidden": achievement.hidden,
+        "unlocked": unlocked,
+        "unlocked_at": iso_utc(unlocked_at) if unlocked else None,
+    }
+
+
+def achievements_of(db: Session, user_id: int) -> list[dict]:
+    """Tous les succès, débloqués ou non, dans l'ordre de leur définition."""
+    unlocked = dict(db.execute(select(UnlockedAchievement.code, UnlockedAchievement.unlocked_at)
+                               .where(UnlockedAchievement.user_id == user_id)).all())
+    return [achievement_out(a, unlocked.get(a.code)) for a in ACHIEVEMENTS]
+
+
+STATUS_LABELS = {
+    GameStatus.IN_PROGRESS: "en cours",
+    GameStatus.WON: "victoire",
+    GameStatus.LOST: "défaite",
+    GameStatus.ABANDONED: "défaite (abandon)",
+    GameStatus.INTERRUPTED: "interrompue (non comptée)",
+}
+ALIGNMENT_LABELS = {Alignment.GOOD: "Villageois", Alignment.EVIL: "Démons"}
+
+
+def export_account(db: Session, user: User) -> dict:
+    """Copie de toutes les données du compte (droit d'accès du RGPD), lisible par une personne :
+    compte, registre de ses modifications, parties (partie en cours comprise, avec leur détail tant qu'il est
+    gardé), succès débloqués, statistiques, signalements de messages des IA et évaluations des agents.
+    Ni le mot de passe (seule son empreinte est stockée, jamais exportée) ni la version de jeton."""
+    from backend.accounts.service import ACCOUNT_EVENTS  # import local : le service des comptes importe ce module
+    from backend.server.reports import REPORT_CATEGORIES
+    games = list(db.scalars(select(GameRecord).where(GameRecord.user_id == user.id)
+                            .order_by(GameRecord.started_at, GameRecord.id)))
+    details = {d.game_id: d.data for d in db.scalars(
+        select(GameDetail).where(GameDetail.game_id.in_([g.id for g in games])))}
+    events = db.scalars(select(AccountEvent).where(AccountEvent.user_id == user.id)
+                        .order_by(AccountEvent.created_at, AccountEvent.id))
+    unlocked = db.scalars(select(UnlockedAchievement).where(UnlockedAchievement.user_id == user.id)
+                          .order_by(UnlockedAchievement.unlocked_at, UnlockedAchievement.id))
+    reports = db.scalars(select(AgentReport).where(AgentReport.user_id == user.id)
+                         .order_by(AgentReport.created_at, AgentReport.id))
+    ratings = db.scalars(select(AgentRating).where(AgentRating.user_id == user.id)
+                         .order_by(AgentRating.created_at, AgentRating.id))
+    return {
+        "export": {
+            "service": "Lantern Hollow",
+            "generated_at": iso_utc(utcnow()),
+            "contents": "Toutes les données enregistrées pour votre compte. Les dates sont en UTC.",
+            "retention": "Le détail de chaque partie (messages, votes, actions, mémoire des personnages) est gardé "
+                         "6 mois pour le service client ; le registre des modifications du compte, un an. Un signalement "
+                         "traité est supprimé 6 mois après son traitement, le commentaire d'une évaluation des personnages "
+                         "est effacé au bout de 6 mois ; si vous supprimez votre compte, vos signalements et vos "
+                         "évaluations sont gardés sans lien avec vous et sans votre commentaire. Votre mot "
+                         "de passe n'est pas stocké : seule une empreinte chiffrée l'est, et elle n'est pas exportée.",
+        },
+        "account": {
+            "pseudo": user.pseudo,
+            "email": user.email,
+            "email_verified_at": iso_utc(user.email_verified_at) if user.email_verified_at else None,
+            "type": "administrateur" if user.is_admin else "joueur",
+            "created_at": iso_utc(user.created_at),
+            "last_activity_at": iso_utc(user.last_seen_at),
+        },
+        "account_history": [
+            {"event": ACCOUNT_EVENTS.get(e.kind, e.kind), "date": iso_utc(e.created_at)} for e in events
+        ],
+        "games": [
+            {
+                "started_at": iso_utc(g.started_at),
+                "ended_at": iso_utc(g.ended_at) if g.ended_at else None,
+                "role": get_role(g.role).name_FR,
+                "side": ALIGNMENT_LABELS[g.alignment],
+                "result": STATUS_LABELS[g.status],
+                "turns": g.turns,
+                "detail": details.get(g.id),  # déroulé complet, tant qu'il est gardé (6 mois)
+            }
+            for g in games
+        ],
+        "achievements": [
+            {
+                "title": BY_CODE[a.code].title if a.code in BY_CODE else a.code,
+                "description": BY_CODE[a.code].description if a.code in BY_CODE else None,
+                "unlocked_at": iso_utc(a.unlocked_at),
+            }
+            for a in unlocked
+        ],
+        "statistics": player_stats(db, user.id),
+        "reports": [
+            {
+                "date": iso_utc(r.created_at),
+                "agent": r.agent,
+                "moment": r.moment,
+                "message": r.message,
+                "problem": REPORT_CATEGORIES.get(r.category, r.category),
+                "comment": r.comment,
+                "handled": r.handled_at is not None,
+            }
+            for r in reports
+        ],
+        "agent_ratings": [
+            {"date": iso_utc(r.created_at), "agent": r.agent, "score": r.score, "comment": r.comment}
+            for r in ratings
+        ],
+    }
+
+
+
+# --- Comparaison aux autres joueurs ---------------------------------------------------------------------
+
+# En dessous, pas de comparaison : avec trop peu de joueurs, une moyenne ou un pourcentage désigne presque
+# quelqu'un (avec 3 joueurs, « 33 % ont débloqué ce succès » revient à montrer qui l'a fait).
+MIN_PLAYERS_FOR_COMPARISON = 10
+
+
+def community_comparison(db: Session) -> dict:
+    """Moyennes de tous les joueurs, à comparer à ses propres statistiques, et part des joueurs qui ont
+    débloqué chaque succès. Joueurs comptés : comptes (hors admin) ayant au moins une partie comptée.
+    - moyennes calculées par partie, sur toutes les parties comptées (y compris celles, anonymisées, des comptes
+      supprimés) ; « parties jouées » : moyenne par joueur ;
+    - rien n'est renvoyé sous MIN_PLAYERS_FOR_COMPARISON joueurs."""
+    admins = select(User.id).where(User.is_admin.is_(True))
+    player_ids = set(db.scalars(select(GameRecord.user_id).where(
+        GameRecord.status.in_(COUNTED_STATUSES), GameRecord.user_id.is_not(None),
+        GameRecord.user_id.not_in(admins)).distinct()))
+    players = len(player_ids)
+    if players < MIN_PLAYERS_FOR_COMPARISON:
+        return {"available": False, "players": players, "min_players": MIN_PLAYERS_FOR_COMPARISON}
+
+    games = list(db.scalars(select(GameRecord).where(
+        GameRecord.status.in_(COUNTED_STATUSES),
+        GameRecord.user_id.is_(None) | GameRecord.user_id.not_in(admins))))
+    account_games = sum(1 for g in games if g.user_id is not None)
+    holders: dict[str, set[int]] = {}
+    for code, user_id in db.execute(select(UnlockedAchievement.code, UnlockedAchievement.user_id)
+                                    .where(UnlockedAchievement.user_id.in_(player_ids))):
+        holders.setdefault(code, set()).add(user_id)
+    return {
+        "available": True,
+        "players": players,
+        "min_players": MIN_PLAYERS_FOR_COMPARISON,
+        "averages": {
+            "played": round(account_games / players, 1),
+            "win_rate": _summary(games)["win_rate"],
+            "good_win_rate": _summary([g for g in games if g.alignment == Alignment.GOOD])["win_rate"],
+            "evil_win_rate": _summary([g for g in games if g.alignment == Alignment.EVIL])["win_rate"],
+            "average_turns": round(sum(g.turns for g in games) / len(games), 1) if games else None,
+        },
+        # Part des joueurs (en %) qui ont débloqué chaque succès, caché compris (sans en révéler le titre)
+        "achievements": {a.code: round(100 * len(holders.get(a.code, ())) / players) for a in ACHIEVEMENTS},
+    }
